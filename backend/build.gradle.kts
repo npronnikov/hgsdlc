@@ -38,6 +38,7 @@ dependencies {
     // Jackson
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.1")
 
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.42")
