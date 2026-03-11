@@ -1,37 +1,62 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "project": "human-guided-sdlc",
-  "model": "opusplan",
-  "effortLevel": "high",
-  "enabledPlugins": {
-    "jdtls-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
-  },
+  "cleanupPeriodDays": 20,
   "permissions": {
     "allow": [
+      "Edit(/backend/**)",
+      "Edit(/frontend/**)",
+      "Edit(/infra/**)",
+      "Edit(/scripts/**)",
+      "Edit(/examples/**)",
+      "Edit(/.claude/**)",
+      "Edit(/.gitignore)",
+      "Edit(/.editorconfig)",
+      "Edit(/README.md)",
       "Bash(cd backend && ./gradlew test)",
       "Bash(cd backend && ./gradlew build)",
       "Bash(cd backend && ./gradlew check)",
+      "Bash(cd backend && ./gradlew bootRun)",
+      "Bash(cd backend && ./gradlew clean build)",
       "Bash(cd frontend && npm install)",
       "Bash(cd frontend && npm run lint)",
       "Bash(cd frontend && npm run typecheck)",
       "Bash(cd frontend && npm test)",
       "Bash(cd frontend && npm run build)",
+      "Bash(cd frontend && npm run dev)",
       "Bash(git status)",
       "Bash(git diff *)",
       "Bash(git checkout -b *)",
-      "Bash(mkdir *)"
+      "Bash(git add *)",
+      "Bash(git restore *)",
+      "Bash(git branch)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(gradle wrapper:*)"
     ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./secrets/**)",
+      "Read(/backend/src/main/resources/application-prod.yml)",
+      "Read(/backend/src/main/resources/application-secret*.yml)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Edit(./secrets/**)",
       "Bash(curl *)",
       "Bash(wget *)",
       "Bash(psql *)",
       "Bash(dropdb *)",
+      "Bash(git push *)",
       "Bash(rm -rf *)"
     ]
   },
-  "cleanupPeriodDays": 20
+  "model": "opusplan",
+  "enabledPlugins": {
+    "jdtls-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "high",
+  "project": "human-guided-sdlc",
+  "defaultMode": "acceptEdits"
 }

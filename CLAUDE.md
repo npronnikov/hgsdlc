@@ -95,7 +95,7 @@ human-guided-sdlc/
 │   │   └── wrapper/
 │   │
 │   └── src/
-│       ├── main/java/com/example/sdlc/
+│       ├── main/java/ru/hgd/sdlc/
 │       │
 │       │   SdlcApplication.java
 │       │
@@ -300,7 +300,34 @@ Java:
 * Java 21
 * Prefer immutable objects
 * Use records where appropriate
+* Use Lombok for builders and getters
 * Avoid reflection-heavy frameworks
+
+### Lombok Usage
+
+Use Lombok 1.18.42+ to reduce boilerplate:
+
+* `@Getter(fluent = true)` — fluent accessors (`obj.field()` instead of `obj.getField()`)
+* `@Builder` — builder pattern for complex objects
+* `@With` — immutable "with" methods for modifications
+* `@Jacksonized` — Jackson serialization support on `@Builder`
+* `@Singular` — for collection fields in builders
+
+**Don't use:**
+* `@Data` — use records instead
+* `@Value` — use records instead
+* `@Setter` — keep immutability, use `@With` if needed
+
+**Example:**
+```java
+@Getter(fluent = true)
+@Builder(toBuilder = true)
+@Jacksonized
+public class FlowDocument {
+    private final FlowId id;
+    @Builder.Default private final List<PhaseId> phaseOrder = List.of();
+}
+```
 
 Spring:
 
