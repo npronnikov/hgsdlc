@@ -25,6 +25,13 @@ secrets/
 *.swo
 *~
 
+# Eclipse
+.project
+.classpath
+.factorypath
+.settings/
+bin/
+
 # OS
 .DS_Store
 Thumbs.db
