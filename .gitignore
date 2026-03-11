@@ -1,0 +1,117 @@
+# ============================================
+# Root Level
+# ============================================
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets (never commit)
+secrets/
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# ============================================
+# Backend (Python)
+# ============================================
+
+# Byte-compiled / optimized / DLL files
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/*$py.class
+backend/**/*.so
+
+# Virtual environment
+backend/.venv/
+backend/venv/
+backend/ENV/
+backend/env/
+
+# Package builds
+backend/build/
+backend/dist/
+backend/*.egg-info/
+backend/.eggs/
+backend/wheels/
+
+# Pytest
+backend/.pytest_cache/
+backend/.coverage
+backend/.coverage.*
+backend/htmlcov/
+backend/.tox/
+backend/.nox/
+
+# Type checking
+backend/.pytype/
+backend/.mypy_cache/
+backend/.pyre/
+
+# Ruff
+backend/.ruff_cache/
+
+# Database files (local dev)
+backend/*.db
+backend/*.sqlite3
+
+# ============================================
+# Frontend (Node.js)
+# ============================================
+
+# Dependencies
+frontend/node_modules/
+
+# Build outputs
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# Testing
+frontend/.nyc_output/
+frontend/coverage/
+
+# Cache
+frontend/.cache/
+frontend/.parcel-cache/
+
+# TypeScript
+frontend/*.tsbuildinfo
+
+# ============================================
+# Docker
+# ============================================
+
+docker-compose.override.yml
+
+# ============================================
+# .claude (Claude Code)
+# ============================================
+
+# Worktrees (temporary)
+.claude/worktrees/
+
+# Memory can be kept or ignored depending on preference
+# .claude/memory/
