@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
 import lombok.extern.jackson.Jacksonized;
+import ru.hgd.sdlc.compiler.domain.compiler.CompiledIR;
 import ru.hgd.sdlc.compiler.domain.model.authored.ArtifactTemplateId;
 import ru.hgd.sdlc.compiler.domain.model.authored.FlowId;
 import ru.hgd.sdlc.compiler.domain.model.authored.MarkdownBody;
@@ -34,7 +35,7 @@ import java.util.Set;
 @Builder(toBuilder = true)
 @Jacksonized
 @EqualsAndHashCode
-public class FlowIr {
+public final class FlowIr implements CompiledIR {
 
     /**
      * Identity of the source flow.
@@ -146,5 +147,22 @@ public class FlowIr {
      */
     public int totalPhases() {
         return phases.size();
+    }
+
+    // CompiledIR interface implementation
+
+    @Override
+    public String irId() {
+        return flowId.value();
+    }
+
+    @Override
+    public String sourceVersion() {
+        return flowVersion.toString();
+    }
+
+    @Override
+    public String checksum() {
+        return metadata.irChecksum().hexValue();
     }
 }

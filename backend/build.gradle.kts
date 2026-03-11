@@ -40,6 +40,9 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.1")
 
+    // Spring Shell for CLI
+    implementation("org.springframework.shell:spring-shell-starter:3.2.0")
+
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")

@@ -29,6 +29,14 @@ management:
     health:
       show-details: when_authorized
 
+sdlc:
+  compiler:
+    strict-mode: false
+    default-serialization-format: json
+    cache-enabled: true
+    max-file-size: 10MB
+    pretty-print: false
+
 logging:
   level:
     root: INFO
