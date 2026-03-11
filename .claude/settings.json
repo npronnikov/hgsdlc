@@ -4,22 +4,23 @@
   "model": "opusplan",
   "effortLevel": "high",
   "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
   "permissions": {
     "allow": [
-      "Bash(cd backend && pytest)",
-      "Bash(cd backend && ruff check .)",
-      "Bash(cd backend && ruff format .)",
-      "Bash(cd backend && pyright)",
+      "Bash(cd backend && ./gradlew test)",
+      "Bash(cd backend && ./gradlew build)",
+      "Bash(cd backend && ./gradlew check)",
+      "Bash(cd frontend && npm install)",
       "Bash(cd frontend && npm run lint)",
       "Bash(cd frontend && npm run typecheck)",
       "Bash(cd frontend && npm test)",
       "Bash(cd frontend && npm run build)",
       "Bash(git status)",
       "Bash(git diff *)",
-      "Bash(git checkout -b *)"
+      "Bash(git checkout -b *)",
+      "Bash(mkdir *)"
     ],
     "deny": [
       "Read(./.env)",

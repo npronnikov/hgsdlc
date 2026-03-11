@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: human-guided-sdlc
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sdlc}
+    username: ${DB_USER:sdlc}
+    password: ${DB_PASSWORD:sdlc}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+
+  liquibase:
+    change-log: classpath:db/migration/changelog.yml
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+logging:
+  level:
+    root: INFO
+    com.example.sdlc: DEBUG
+    org.hibernate.SQL: WARN

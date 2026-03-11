@@ -2,6 +2,11 @@
 # Root Level
 # ============================================
 
+# Build outputs
+/build/
+/dist/
+/out/
+
 # Environment files
 .env
 .env.*
@@ -15,6 +20,7 @@ secrets/
 # IDE
 .idea/
 .vscode/
+*.iml
 *.swp
 *.swo
 *~
@@ -28,47 +34,38 @@ logs/
 *.log
 
 # ============================================
-# Backend (Python)
+# Backend (Java/Gradle)
 # ============================================
 
-# Byte-compiled / optimized / DLL files
-backend/**/__pycache__/
-backend/**/*.py[cod]
-backend/**/*$py.class
-backend/**/*.so
-
-# Virtual environment
-backend/.venv/
-backend/venv/
-backend/ENV/
-backend/env/
-
-# Package builds
+# Gradle
+backend/.gradle/
 backend/build/
-backend/dist/
-backend/*.egg-info/
-backend/.eggs/
-backend/wheels/
+backend/out/
+backend/.cxx/
+.gradle/
+build/
 
-# Pytest
-backend/.pytest_cache/
-backend/.coverage
-backend/.coverage.*
-backend/htmlcov/
-backend/.tox/
-backend/.nox/
+# Compiled class files
+backend/**/*.class
+*.class
 
-# Type checking
-backend/.pytype/
-backend/.mypy_cache/
-backend/.pyre/
+# JAR files
+backend/**/*.jar
+*.jar
+!backend/gradle/wrapper/*.jar
 
-# Ruff
-backend/.ruff_cache/
+# War files
+*.war
 
-# Database files (local dev)
-backend/*.db
-backend/*.sqlite3
+# Package Files
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual machine crash logs
+hs_err_pid*
+replay_pid*
 
 # ============================================
 # Frontend (Node.js)
@@ -78,10 +75,10 @@ backend/*.sqlite3
 frontend/node_modules/
 
 # Build outputs
+frontend/dist/
+frontend/build/
 frontend/.next/
 frontend/out/
-frontend/build/
-frontend/dist/
 
 # Logs
 frontend/npm-debug.log*
@@ -96,6 +93,7 @@ frontend/coverage/
 # Cache
 frontend/.cache/
 frontend/.parcel-cache/
+frontend/.vite/
 
 # TypeScript
 frontend/*.tsbuildinfo
