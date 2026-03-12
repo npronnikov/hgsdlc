@@ -32,7 +32,10 @@
       "Bash(mkdir *)",
       "Bash(ls *)",
       "Bash(find *)",
-      "Bash(gradle wrapper:*)"
+      "Bash(gradle wrapper:*)",
+      "Bash(./gradlew check:*)",
+      "Bash(./gradlew *)",
+      "Bash(./sed *)"
     ],
     "deny": [
       "Read(./.env)",
@@ -49,6 +52,9 @@
       "Bash(dropdb *)",
       "Bash(git push *)",
       "Bash(rm -rf *)"
+    ],
+    "additionalDirectories": [
+      "/Users/nick/IdeaProjects/human-guided-development/backend/src/test/java/ru/hgd/sdlc/registry/integration"
     ]
   },
   "model": "opusplan",
