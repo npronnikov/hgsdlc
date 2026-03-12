@@ -1,5 +1,8 @@
 package ru.hgd.sdlc.compiler.domain.model.authored;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -17,6 +20,7 @@ public final class SchemaId {
         this.value = value;
     }
 
+    @JsonCreator
     public static SchemaId of(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("SchemaId cannot be null or blank");
@@ -28,6 +32,7 @@ public final class SchemaId {
         return new SchemaId(value);
     }
 
+    @JsonValue
     public String value() {
         return value;
     }

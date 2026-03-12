@@ -1,5 +1,8 @@
 package ru.hgd.sdlc.compiler.domain.model.authored;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -27,6 +30,7 @@ public final class HandlerRef {
      * @param value the handler reference (e.g., "skill://my-skill", "builtin://validate")
      * @return a new HandlerRef instance
      */
+    @JsonCreator
     public static HandlerRef of(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("HandlerRef cannot be null or blank");
@@ -101,6 +105,12 @@ public final class HandlerRef {
         return null;
     }
 
+    @JsonValue
+    @Override
+    public String toString() {
+        return formatted;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -112,10 +122,5 @@ public final class HandlerRef {
     @Override
     public int hashCode() {
         return Objects.hash(kind, reference);
-    }
-
-    @Override
-    public String toString() {
-        return formatted;
     }
 }

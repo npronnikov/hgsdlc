@@ -49,6 +49,9 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok:1.18.42")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
 
+    // Cryptography (optional, for enhanced Ed25519 support)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.testcontainers:junit-jupiter")

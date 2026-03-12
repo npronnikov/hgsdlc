@@ -1,5 +1,8 @@
 package ru.hgd.sdlc.shared.hashing;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,6 +18,9 @@ public final class Sha256 {
         this.hexValue = hexValue;
     }
 
+    /**
+     * Creates a Sha256 by computing the hash of the given bytes.
+     */
     public static Sha256 of(byte[] data) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -25,10 +31,25 @@ public final class Sha256 {
         }
     }
 
+    /**
+     * Creates a Sha256 by computing the hash of the given string content.
+     */
     public static Sha256 of(String content) {
         return of(content.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * Creates a Sha256 from an existing hex string (for deserialization).
+     */
+    @JsonCreator
+    public static Sha256 fromHex(String hexValue) {
+        if (hexValue == null || hexValue.isBlank()) {
+            throw new IllegalArgumentException("Hash value cannot be null or blank");
+        }
+        return new Sha256(hexValue);
+    }
+
+    @JsonValue
     public String hexValue() {
         return hexValue;
     }

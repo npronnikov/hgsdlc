@@ -1,5 +1,8 @@
 package ru.hgd.sdlc.compiler.domain.model.authored;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,6 +39,7 @@ public final class SemanticVersion implements Comparable<SemanticVersion> {
      * @return a new SemanticVersion instance
      * @throws IllegalArgumentException if the version string is invalid
      */
+    @JsonCreator
     public static SemanticVersion of(String version) {
         if (version == null || version.isBlank()) {
             throw new IllegalArgumentException("Version string cannot be null or blank");
@@ -188,6 +192,7 @@ public final class SemanticVersion implements Comparable<SemanticVersion> {
     }
 
     @Override
+    @JsonValue
     public String toString() {
         return formatted;
     }
