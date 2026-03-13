@@ -201,6 +201,17 @@ body {
   justify-content: center;
 }
 
+.login-card .brand {
+  display: grid;
+  gap: 8px;
+}
+
+.login-card .brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .login-bg {
   position: relative;
   background: radial-gradient(circle at 20% 20%, #eef2ff, transparent 50%),

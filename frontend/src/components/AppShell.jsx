@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Input, Space, Tag, Avatar, Typography } from 'antd';
+import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -12,6 +12,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -55,9 +56,11 @@ const routeMeta = {
 export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const meta = routeMeta[location.pathname] || { title: 'Overview', menuKey: '/overview' };
   const selectedKey = meta.menuKey;
   const title = meta.title;
+  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : 'HG';
 
   return (
     <Layout className="hg-layout">
@@ -90,8 +93,9 @@ export default function AppShell() {
           <Space size="middle">
             <Input placeholder="Search" allowClear />
             <Tag color="#2563eb">STAGING</Tag>
-            <Tag color="#4f46e5">FLOW_CONFIGURATOR</Tag>
-            <Avatar style={{ backgroundColor: '#4f46e5' }}>NC</Avatar>
+            {user?.role && <Tag color="#4f46e5">{user.role}</Tag>}
+            <Avatar style={{ backgroundColor: '#4f46e5' }}>{initials}</Avatar>
+            <Button onClick={logout}>Logout</Button>
           </Space>
         </Header>
         <Content className="hg-content">
