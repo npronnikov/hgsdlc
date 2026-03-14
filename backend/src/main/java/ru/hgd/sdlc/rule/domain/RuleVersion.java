@@ -1,6 +1,5 @@
 package ru.hgd.sdlc.rule.domain;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -15,8 +14,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -43,15 +40,18 @@ public class RuleVersion {
     @Column(nullable = false, length = 32)
     private RuleStatus status;
 
+    @Column(nullable = false, length = 255)
+    private String title;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 64)
+    private RuleProvider provider;
+
     @Column(name = "rule_markdown", nullable = false, columnDefinition = "TEXT")
     private String ruleMarkdown;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "rule_model_json", columnDefinition = "jsonb")
-    private JsonNode ruleModelJson;
-
-    @Column(name = "rule_checksum", length = 128)
-    private String ruleChecksum;
+    @Column(name = "checksum", length = 128)
+    private String checksum;
 
     @Column(name = "saved_by", nullable = false, length = 128)
     private String savedBy;

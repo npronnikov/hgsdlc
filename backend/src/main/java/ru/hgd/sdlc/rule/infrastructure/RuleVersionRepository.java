@@ -10,6 +10,8 @@ import ru.hgd.sdlc.rule.domain.RuleVersion;
 public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> {
     Optional<RuleVersion> findFirstByRuleIdAndStatusOrderBySavedAtDesc(String ruleId, RuleStatus status);
 
+    Optional<RuleVersion> findFirstByRuleIdAndVersionOrderBySavedAtDesc(String ruleId, String version);
+
     List<RuleVersion> findByRuleIdOrderBySavedAtDesc(String ruleId);
 
     List<RuleVersion> findAllByOrderBySavedAtDesc();

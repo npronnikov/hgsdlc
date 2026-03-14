@@ -1,6 +1,6 @@
 package ru.hgd.sdlc.rule.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -8,56 +8,66 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
-import ru.hgd.sdlc.common.JsonSchemaValidator;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
-import ru.hgd.sdlc.common.SemverUtil;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.rule.api.RuleSaveRequest;
+import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 
 @Service
 public class RuleService {
-    private static final String SCHEMA_PATH = "schemas/rule.schema.json";
-    private static final String DRAFT_VERSION = "0.0.0";
+    private static final String INITIAL_VERSION = "0.1";
+    private static final Pattern RULE_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
 
     private final RuleVersionRepository repository;
-    private final JsonSchemaValidator schemaValidator;
     private final MarkdownFrontmatterParser frontmatterParser;
-    private final ObjectMapper objectMapper;
+    private final RuleTemplateService templateService;
 
     public RuleService(
             RuleVersionRepository repository,
-            JsonSchemaValidator schemaValidator,
-            ObjectMapper objectMapper
+            RuleTemplateService templateService
     ) {
         this.repository = repository;
-        this.schemaValidator = schemaValidator;
         this.frontmatterParser = new MarkdownFrontmatterParser();
-        this.objectMapper = objectMapper;
+        this.templateService = templateService;
     }
 
     @Transactional(readOnly = true)
     public List<RuleVersion> listLatest() {
         List<RuleVersion> all = repository.findAllByOrderBySavedAtDesc();
+        Map<String, RuleVersion> latestPublished = new LinkedHashMap<>();
+        Map<String, RuleVersion> latestDraft = new LinkedHashMap<>();
+        for (RuleVersion version : all) {
+            if (version.getStatus() == RuleStatus.PUBLISHED) {
+                latestPublished.putIfAbsent(version.getRuleId(), version);
+            } else {
+                latestDraft.putIfAbsent(version.getRuleId(), version);
+            }
+        }
         Map<String, RuleVersion> latestByRule = new LinkedHashMap<>();
         for (RuleVersion version : all) {
-            latestByRule.putIfAbsent(version.getRuleId(), version);
+            if (latestByRule.containsKey(version.getRuleId())) {
+                continue;
+            }
+            RuleVersion published = latestPublished.get(version.getRuleId());
+            latestByRule.put(version.getRuleId(), published != null ? published : latestDraft.get(version.getRuleId()));
         }
         return new ArrayList<>(latestByRule.values());
     }
 
     @Transactional(readOnly = true)
     public RuleVersion getLatest(String ruleId) {
-        return repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.DRAFT)
-                .or(() -> repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.PUBLISHED))
+        return repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.PUBLISHED)
+                .or(() -> repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.DRAFT))
                 .orElseThrow(() -> new NotFoundException("Rule not found: " + ruleId));
     }
 
@@ -70,23 +80,45 @@ public class RuleService {
         return versions;
     }
 
+    @Transactional(readOnly = true)
+    public RuleVersion getVersion(String ruleId, String version) {
+        return repository.findFirstByRuleIdAndVersionOrderBySavedAtDesc(ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Rule version not found: " + ruleId + "@" + version));
+    }
+
     @Transactional
     public RuleVersion save(String ruleId, RuleSaveRequest request, User user) {
-        if (request == null || request.ruleMarkdown() == null) {
+        if (request == null) {
+            throw new ValidationException("Request body is required");
+        }
+        if (request.ruleMarkdown() == null || request.ruleMarkdown().isBlank()) {
             throw new ValidationException("rule_markdown is required");
         }
         if (request.resourceVersion() == null) {
             throw new ValidationException("resource_version is required");
         }
-        boolean publish = Boolean.TRUE.equals(request.publish());
-        MarkdownFrontmatterParser.ParsedMarkdown parsed = frontmatterParser.parse(request.ruleMarkdown());
-        ObjectNode frontmatter = parsed.frontmatter();
-        String id = textValue(frontmatter, "id");
-        if (id == null || id.isBlank()) {
-            throw new ValidationException("Frontmatter id is required");
+        if (request.title() == null || request.title().isBlank()) {
+            throw new ValidationException("title is required");
         }
-        if (!ruleId.equals(id)) {
-            throw new ValidationException("Path ruleId does not match frontmatter id");
+        if (request.ruleId() == null || request.ruleId().isBlank()) {
+            throw new ValidationException("rule_id is required");
+        }
+        if (!RULE_ID_PATTERN.matcher(request.ruleId()).matches()) {
+            throw new ValidationException("rule_id has invalid format");
+        }
+        if (!ruleId.equals(request.ruleId())) {
+            throw new ValidationException("Path ruleId does not match request rule_id");
+        }
+        RuleProvider provider = parseProvider(request.provider());
+        boolean publish = Boolean.TRUE.equals(request.publish());
+        boolean release = Boolean.TRUE.equals(request.release());
+        if (provider == null) {
+            throw new ValidationException("provider is required");
+        }
+        MarkdownFrontmatterParser.ParsedMarkdown parsed = null;
+        if (publish) {
+            parsed = frontmatterParser.parse(request.ruleMarkdown());
+            validateProviderFrontmatter(provider, parsed.frontmatter());
         }
 
         RuleVersion existingDraft = repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.DRAFT)
@@ -97,11 +129,10 @@ public class RuleService {
         if (publish) {
             RuleVersion base = existingDraft != null ? existingDraft : latestPublished;
             if (base != null) {
-                if (base.getResourceVersion() != request.resourceVersion()) {
+                if (base.getStatus() == RuleStatus.PUBLISHED
+                        && base.getResourceVersion() != request.resourceVersion()) {
                     throw new ConflictException("resource_version mismatch for publish");
                 }
-            } else if (request.resourceVersion() != 0L) {
-                throw new ConflictException("resource_version mismatch for publish");
             }
         } else {
             if (existingDraft != null) {
@@ -113,18 +144,11 @@ public class RuleService {
             }
         }
 
-        String version = publish ? nextPublishedVersion(ruleId) : DRAFT_VERSION;
+        String version = publish
+                ? resolvePublishVersion(existingDraft, latestPublished, release)
+                : resolveDraftVersion(existingDraft, latestPublished);
         String canonicalName = ruleId + "@" + version;
-        frontmatter.put("id", ruleId);
-        frontmatter.put("version", version);
-        frontmatter.put("canonical_name", canonicalName);
-
-        schemaValidator.validate(frontmatter, SCHEMA_PATH);
-
-        String updatedMarkdown = frontmatterParser.render(frontmatter, parsed.body());
-        ObjectNode modelJson = objectMapper.createObjectNode();
-        modelJson.set("frontmatter", frontmatter);
-        modelJson.put("body", parsed.body() == null ? "" : parsed.body());
+        String updatedMarkdown = request.ruleMarkdown();
 
         RuleVersion entity;
         if (!publish && existingDraft != null) {
@@ -139,23 +163,44 @@ public class RuleService {
         entity.setVersion(version);
         entity.setCanonicalName(canonicalName);
         entity.setStatus(publish ? RuleStatus.PUBLISHED : RuleStatus.DRAFT);
+        entity.setTitle(request.title().trim());
+        entity.setProvider(provider);
         entity.setRuleMarkdown(updatedMarkdown);
-        entity.setRuleModelJson(modelJson);
-        entity.setRuleChecksum(ChecksumUtil.sha256(updatedMarkdown));
+        entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(Instant.now());
 
-        return repository.save(entity);
+        RuleVersion saved = repository.save(entity);
+
+        if (publish && existingDraft != null) {
+            bumpDraftVersion(existingDraft, version);
+        }
+
+        return saved;
     }
 
-    private String nextPublishedVersion(String ruleId) {
-        RuleVersion latestPublished = repository
-                .findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.PUBLISHED)
-                .orElse(null);
-        if (latestPublished == null) {
-            return SemverUtil.initial();
+    private String resolveDraftVersion(RuleVersion existingDraft, RuleVersion latestPublished) {
+        if (existingDraft != null) {
+            return existingDraft.getVersion();
         }
-        return SemverUtil.incrementPatch(latestPublished.getVersion());
+        if (latestPublished == null) {
+            return INITIAL_VERSION;
+        }
+        return nextMinor(latestPublished.getVersion());
+    }
+
+    private String resolvePublishVersion(RuleVersion existingDraft, RuleVersion latestPublished, boolean release) {
+        String baseVersion = existingDraft != null ? existingDraft.getVersion()
+                : (latestPublished == null ? INITIAL_VERSION : nextMinor(latestPublished.getVersion()));
+        return release ? releaseVersion(baseVersion) : baseVersion;
+    }
+
+    private void bumpDraftVersion(RuleVersion draft, String publishedVersion) {
+        String nextDraftVersion = nextMinor(publishedVersion);
+        draft.setVersion(nextDraftVersion);
+        draft.setCanonicalName(draft.getRuleId() + "@" + nextDraftVersion);
+        draft.setChecksum(null);
+        repository.save(draft);
     }
 
     private String resolveSavedBy(User user) {
@@ -165,10 +210,51 @@ public class RuleService {
         return user.getUsername();
     }
 
-    private String textValue(ObjectNode node, String field) {
-        if (node == null || !node.hasNonNull(field)) {
+    private RuleProvider parseProvider(String provider) {
+        if (provider == null || provider.isBlank()) {
             return null;
         }
-        return node.get(field).asText();
+        try {
+            return RuleProvider.from(provider);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported provider: " + provider);
+        }
+    }
+
+    private void validateProviderFrontmatter(RuleProvider provider, ObjectNode frontmatter) {
+        if (frontmatter == null) {
+            throw new ValidationException("Frontmatter is required for publish");
+        }
+        List<String> required = templateService.requiredFrontmatter(provider);
+        for (String field : required) {
+            if (!frontmatter.hasNonNull(field)) {
+                throw new ValidationException("Frontmatter field '" + field + "' is required for provider " + provider.name().toLowerCase());
+            }
+            JsonNode value = frontmatter.get(field);
+            if (value.isTextual() && value.asText().isBlank()) {
+                throw new ValidationException("Frontmatter field '" + field + "' must not be blank");
+            }
+            if (value.isArray() && value.size() == 0) {
+                throw new ValidationException("Frontmatter field '" + field + "' must not be empty");
+            }
+        }
+    }
+
+    private int[] parseVersion(String version) {
+        if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
+            throw new ValidationException("Invalid version: " + version);
+        }
+        String[] parts = version.split("\\.");
+        return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+    }
+
+    private String nextMinor(String version) {
+        int[] parts = parseVersion(version);
+        return parts[0] + "." + (parts[1] + 1);
+    }
+
+    private String releaseVersion(String version) {
+        int[] parts = parseVersion(version);
+        return (parts[0] + 1) + ".0";
     }
 }

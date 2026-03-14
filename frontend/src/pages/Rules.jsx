@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Space, Table, Typography, message } from 'antd';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
@@ -9,6 +9,7 @@ const { Title, Text } = Typography;
 export default function Rules() {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const loadRules = async () => {
     setLoading(true);
@@ -16,8 +17,9 @@ export default function Rules() {
       const data = await apiRequest('/rules');
       const mapped = data.map((rule) => ({
         key: rule.rule_id,
-        name: rule.rule_id,
-        description: '',
+        name: rule.title || rule.rule_id,
+        ruleId: rule.rule_id,
+        provider: rule.provider,
         status: rule.status,
         version: rule.version,
         canonical: rule.canonical_name,
@@ -41,7 +43,8 @@ export default function Rules() {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.name}</Text>
-          <Text type="secondary">{record.description}</Text>
+          <Text type="secondary">{record.ruleId}</Text>
+          {record.provider && <Text type="secondary">provider: {record.provider}</Text>}
         </Space>
       ),
     },
@@ -70,14 +73,21 @@ export default function Rules() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Rules</Title>
         <Space>
-          <Link to="/rule-editor">
-            <Button>Open editor</Button>
-          </Link>
-          <Button type="primary">New rule</Button>
+          <Button type="primary" onClick={() => navigate('/rules/create')}>New rule</Button>
         </Space>
       </div>
       <Card>
-        <Table columns={columns} dataSource={rules} pagination={false} rowKey="key" loading={loading} />
+        <Table
+          columns={columns}
+          dataSource={rules}
+          pagination={false}
+          rowKey="key"
+          loading={loading}
+          onRow={(record) => ({
+            onClick: () => navigate(`/rules/${record.ruleId}`),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
     </div>
   );

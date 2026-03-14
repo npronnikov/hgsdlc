@@ -61,10 +61,15 @@ export default function AppShell() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const meta = routeMeta[location.pathname] || { title: 'Overview', menuKey: '/overview' };
+  const ruleIdFromPath = location.pathname.startsWith('/rules/') ? location.pathname.split('/')[2] : null;
+  const isRuleEditorRoute = location.pathname.startsWith('/rules/');
+  const meta = routeMeta[location.pathname]
+    || (isRuleEditorRoute ? { title: 'Rules', menuKey: '/rules' } : null)
+    || { title: 'Overview', menuKey: '/overview' };
   const selectedKey = meta.menuKey;
   const title = meta.title;
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : 'HG';
+  const showRuleIdCrumb = isRuleEditorRoute && ruleIdFromPath && ruleIdFromPath !== 'create';
 
   return (
     <Layout className="hg-layout">
@@ -115,9 +120,17 @@ export default function AppShell() {
             >
               {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             </button>
-            <Text type="secondary">SDLC</Text>
-            <Text type="secondary">/</Text>
-            <Text strong>{title}</Text>
+            <div className="hg-breadcrumbs">
+              <button type="button" onClick={() => navigate('/overview')}>SDLC</button>
+              <span>/</span>
+              <button type="button" onClick={() => navigate(selectedKey)}>{title}</button>
+              {showRuleIdCrumb && (
+                <>
+                  <span>/</span>
+                  <button type="button" onClick={() => navigate(location.pathname)}>{ruleIdFromPath}</button>
+                </>
+              )}
+            </div>
           </Space>
           <Space size="middle">
             <Input placeholder="Search" allowClear />

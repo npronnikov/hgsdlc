@@ -6,6 +6,8 @@ import ru.hgd.sdlc.rule.domain.RuleVersion;
 
 public record RuleResponse(
         @JsonProperty("rule_id") String ruleId,
+        @JsonProperty("title") String title,
+        @JsonProperty("provider") String provider,
         @JsonProperty("version") String version,
         @JsonProperty("canonical_name") String canonicalName,
         @JsonProperty("status") String status,
@@ -17,6 +19,8 @@ public record RuleResponse(
     public static RuleResponse from(RuleVersion version) {
         return new RuleResponse(
                 version.getRuleId(),
+                version.getTitle(),
+                version.getProvider() == null ? null : version.getProvider().name().toLowerCase().replace('_', '-'),
                 version.getVersion(),
                 version.getCanonicalName(),
                 version.getStatus().name().toLowerCase(),

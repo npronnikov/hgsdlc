@@ -47,6 +47,11 @@ public class RuleController {
         return ruleService.getVersions(ruleId).stream().map(RuleSummaryResponse::from).toList();
     }
 
+    @GetMapping("/{ruleId}/versions/{version}")
+    public RuleResponse getVersion(@PathVariable String ruleId, @PathVariable String version) {
+        return RuleResponse.from(ruleService.getVersion(ruleId, version));
+    }
+
     @PostMapping("/{ruleId}/save")
     public RuleResponse save(
             @PathVariable String ruleId,

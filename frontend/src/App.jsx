@@ -60,6 +60,8 @@ export default function App() {
             <Route path="flows" element={<Flows />} />
             <Route path="flow-editor" element={<FlowEditor />} />
             <Route path="rules" element={<Rules />} />
+            <Route path="rules/create" element={<RuleEditor />} />
+            <Route path="rules/:ruleId" element={<RuleEditor />} />
             <Route path="rule-editor" element={<RuleEditor />} />
             <Route path="skills" element={<Skills />} />
             <Route path="skill-editor" element={<SkillEditor />} />
