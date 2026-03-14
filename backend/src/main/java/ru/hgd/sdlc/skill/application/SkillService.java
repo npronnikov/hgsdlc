@@ -1,6 +1,6 @@
 package ru.hgd.sdlc.skill.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -8,56 +8,66 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
-import ru.hgd.sdlc.common.JsonSchemaValidator;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
-import ru.hgd.sdlc.common.SemverUtil;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.skill.api.SkillSaveRequest;
+import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Service
 public class SkillService {
-    private static final String SCHEMA_PATH = "schemas/skill.schema.json";
-    private static final String DRAFT_VERSION = "0.0.0";
+    private static final String INITIAL_VERSION = "0.1";
+    private static final Pattern SKILL_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
 
     private final SkillVersionRepository repository;
-    private final JsonSchemaValidator schemaValidator;
     private final MarkdownFrontmatterParser frontmatterParser;
-    private final ObjectMapper objectMapper;
+    private final SkillTemplateService templateService;
 
     public SkillService(
             SkillVersionRepository repository,
-            JsonSchemaValidator schemaValidator,
-            ObjectMapper objectMapper
+            SkillTemplateService templateService
     ) {
         this.repository = repository;
-        this.schemaValidator = schemaValidator;
         this.frontmatterParser = new MarkdownFrontmatterParser();
-        this.objectMapper = objectMapper;
+        this.templateService = templateService;
     }
 
     @Transactional(readOnly = true)
     public List<SkillVersion> listLatest() {
         List<SkillVersion> all = repository.findAllByOrderBySavedAtDesc();
+        Map<String, SkillVersion> latestPublished = new LinkedHashMap<>();
+        Map<String, SkillVersion> latestDraft = new LinkedHashMap<>();
+        for (SkillVersion version : all) {
+            if (version.getStatus() == SkillStatus.PUBLISHED) {
+                latestPublished.putIfAbsent(version.getSkillId(), version);
+            } else {
+                latestDraft.putIfAbsent(version.getSkillId(), version);
+            }
+        }
         Map<String, SkillVersion> latestBySkill = new LinkedHashMap<>();
         for (SkillVersion version : all) {
-            latestBySkill.putIfAbsent(version.getSkillId(), version);
+            if (latestBySkill.containsKey(version.getSkillId())) {
+                continue;
+            }
+            SkillVersion published = latestPublished.get(version.getSkillId());
+            latestBySkill.put(version.getSkillId(), published != null ? published : latestDraft.get(version.getSkillId()));
         }
         return new ArrayList<>(latestBySkill.values());
     }
 
     @Transactional(readOnly = true)
     public SkillVersion getLatest(String skillId) {
-        return repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.DRAFT)
-                .or(() -> repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.PUBLISHED))
+        return repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.PUBLISHED)
+                .or(() -> repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.DRAFT))
                 .orElseThrow(() -> new NotFoundException("Skill not found: " + skillId));
     }
 
@@ -70,23 +80,48 @@ public class SkillService {
         return versions;
     }
 
+    @Transactional(readOnly = true)
+    public SkillVersion getVersion(String skillId, String version) {
+        return repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
+                .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
+    }
+
     @Transactional
     public SkillVersion save(String skillId, SkillSaveRequest request, User user) {
-        if (request == null || request.skillMarkdown() == null) {
+        if (request == null) {
+            throw new ValidationException("Request body is required");
+        }
+        if (request.skillMarkdown() == null || request.skillMarkdown().isBlank()) {
             throw new ValidationException("skill_markdown is required");
         }
         if (request.resourceVersion() == null) {
             throw new ValidationException("resource_version is required");
         }
-        boolean publish = Boolean.TRUE.equals(request.publish());
-        MarkdownFrontmatterParser.ParsedMarkdown parsed = frontmatterParser.parse(request.skillMarkdown());
-        ObjectNode frontmatter = parsed.frontmatter();
-        String id = textValue(frontmatter, "id");
-        if (id == null || id.isBlank()) {
-            throw new ValidationException("Frontmatter id is required");
+        if (request.name() == null || request.name().isBlank()) {
+            throw new ValidationException("name is required");
         }
-        if (!skillId.equals(id)) {
-            throw new ValidationException("Path skillId does not match frontmatter id");
+        if (request.description() == null || request.description().isBlank()) {
+            throw new ValidationException("description is required");
+        }
+        if (request.skillId() == null || request.skillId().isBlank()) {
+            throw new ValidationException("skill_id is required");
+        }
+        if (!SKILL_ID_PATTERN.matcher(request.skillId()).matches()) {
+            throw new ValidationException("skill_id has invalid format");
+        }
+        if (!skillId.equals(request.skillId())) {
+            throw new ValidationException("Path skillId does not match request skill_id");
+        }
+        SkillProvider provider = parseProvider(request.provider());
+        boolean publish = Boolean.TRUE.equals(request.publish());
+        boolean release = Boolean.TRUE.equals(request.release());
+        if (provider == null) {
+            throw new ValidationException("provider is required");
+        }
+        MarkdownFrontmatterParser.ParsedMarkdown parsed = null;
+        if (publish) {
+            parsed = frontmatterParser.parse(request.skillMarkdown());
+            validateProviderFrontmatter(provider, parsed.frontmatter());
         }
 
         SkillVersion existingDraft = repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.DRAFT)
@@ -97,11 +132,10 @@ public class SkillService {
         if (publish) {
             SkillVersion base = existingDraft != null ? existingDraft : latestPublished;
             if (base != null) {
-                if (base.getResourceVersion() != request.resourceVersion()) {
+                if (base.getStatus() == SkillStatus.PUBLISHED
+                        && base.getResourceVersion() != request.resourceVersion()) {
                     throw new ConflictException("resource_version mismatch for publish");
                 }
-            } else if (request.resourceVersion() != 0L) {
-                throw new ConflictException("resource_version mismatch for publish");
             }
         } else {
             if (existingDraft != null) {
@@ -113,18 +147,18 @@ public class SkillService {
             }
         }
 
-        String version = publish ? nextPublishedVersion(skillId) : DRAFT_VERSION;
+        String version = publish
+                ? resolvePublishVersion(existingDraft, latestPublished, release)
+                : resolveDraftVersion(existingDraft, latestPublished);
         String canonicalName = skillId + "@" + version;
-        frontmatter.put("id", skillId);
-        frontmatter.put("version", version);
-        frontmatter.put("canonical_name", canonicalName);
+        String updatedMarkdown = request.skillMarkdown();
 
-        schemaValidator.validate(frontmatter, SCHEMA_PATH);
-
-        String updatedMarkdown = frontmatterParser.render(frontmatter, parsed.body());
-        ObjectNode modelJson = objectMapper.createObjectNode();
-        modelJson.set("frontmatter", frontmatter);
-        modelJson.put("body", parsed.body() == null ? "" : parsed.body());
+        boolean bumpDraftBeforeInsert = publish
+                && existingDraft != null
+                && existingDraft.getVersion().equals(version);
+        if (bumpDraftBeforeInsert) {
+            bumpDraftVersion(existingDraft, version);
+        }
 
         SkillVersion entity;
         if (!publish && existingDraft != null) {
@@ -139,23 +173,45 @@ public class SkillService {
         entity.setVersion(version);
         entity.setCanonicalName(canonicalName);
         entity.setStatus(publish ? SkillStatus.PUBLISHED : SkillStatus.DRAFT);
+        entity.setName(request.name().trim());
+        entity.setDescription(request.description().trim());
+        entity.setProvider(provider);
         entity.setSkillMarkdown(updatedMarkdown);
-        entity.setSkillModelJson(modelJson);
-        entity.setSkillChecksum(ChecksumUtil.sha256(updatedMarkdown));
+        entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(Instant.now());
 
-        return repository.save(entity);
+        SkillVersion saved = repository.save(entity);
+
+        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
+            bumpDraftVersion(existingDraft, version);
+        }
+
+        return saved;
     }
 
-    private String nextPublishedVersion(String skillId) {
-        SkillVersion latestPublished = repository
-                .findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.PUBLISHED)
-                .orElse(null);
-        if (latestPublished == null) {
-            return SemverUtil.initial();
+    private String resolveDraftVersion(SkillVersion existingDraft, SkillVersion latestPublished) {
+        if (existingDraft != null) {
+            return existingDraft.getVersion();
         }
-        return SemverUtil.incrementPatch(latestPublished.getVersion());
+        if (latestPublished == null) {
+            return INITIAL_VERSION;
+        }
+        return nextMinor(latestPublished.getVersion());
+    }
+
+    private String resolvePublishVersion(SkillVersion existingDraft, SkillVersion latestPublished, boolean release) {
+        String baseVersion = existingDraft != null ? existingDraft.getVersion()
+                : (latestPublished == null ? INITIAL_VERSION : nextMinor(latestPublished.getVersion()));
+        return release ? releaseVersion(baseVersion) : baseVersion;
+    }
+
+    private void bumpDraftVersion(SkillVersion draft, String publishedVersion) {
+        String nextDraftVersion = nextMinor(publishedVersion);
+        draft.setVersion(nextDraftVersion);
+        draft.setCanonicalName(draft.getSkillId() + "@" + nextDraftVersion);
+        draft.setChecksum(null);
+        repository.save(draft);
     }
 
     private String resolveSavedBy(User user) {
@@ -165,10 +221,51 @@ public class SkillService {
         return user.getUsername();
     }
 
-    private String textValue(ObjectNode node, String field) {
-        if (node == null || !node.hasNonNull(field)) {
+    private SkillProvider parseProvider(String provider) {
+        if (provider == null || provider.isBlank()) {
             return null;
         }
-        return node.get(field).asText();
+        try {
+            return SkillProvider.from(provider);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported provider: " + provider);
+        }
+    }
+
+    private void validateProviderFrontmatter(SkillProvider provider, ObjectNode frontmatter) {
+        if (frontmatter == null) {
+            throw new ValidationException("Frontmatter is required for publish");
+        }
+        List<String> required = templateService.requiredFrontmatter(provider);
+        for (String field : required) {
+            if (!frontmatter.hasNonNull(field)) {
+                throw new ValidationException("Frontmatter field '" + field + "' is required for provider " + provider.name().toLowerCase());
+            }
+            JsonNode value = frontmatter.get(field);
+            if (value.isTextual() && value.asText().isBlank()) {
+                throw new ValidationException("Frontmatter field '" + field + "' must not be blank");
+            }
+            if (value.isArray() && value.size() == 0) {
+                throw new ValidationException("Frontmatter field '" + field + "' must not be empty");
+            }
+        }
+    }
+
+    private int[] parseVersion(String version) {
+        if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
+            throw new ValidationException("Invalid version: " + version);
+        }
+        String[] parts = version.split("\\.");
+        return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+    }
+
+    private String nextMinor(String version) {
+        int[] parts = parseVersion(version);
+        return parts[0] + "." + (parts[1] + 1);
+    }
+
+    private String releaseVersion(String version) {
+        int[] parts = parseVersion(version);
+        return (parts[0] + 1) + ".0";
     }
 }

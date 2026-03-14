@@ -64,6 +64,8 @@ export default function App() {
             <Route path="rules/:ruleId" element={<RuleEditor />} />
             <Route path="rule-editor" element={<RuleEditor />} />
             <Route path="skills" element={<Skills />} />
+            <Route path="skills/create" element={<SkillEditor />} />
+            <Route path="skills/:skillId" element={<SkillEditor />} />
             <Route path="skill-editor" element={<SkillEditor />} />
             <Route path="run-launch" element={<RunLaunch />} />
             <Route path="run-console" element={<RunConsole />} />

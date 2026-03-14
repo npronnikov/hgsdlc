@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Space, Table, Typography, message } from 'antd';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
@@ -9,6 +9,7 @@ const { Title, Text } = Typography;
 export default function Skills() {
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const loadSkills = async () => {
     setLoading(true);
@@ -16,8 +17,10 @@ export default function Skills() {
       const data = await apiRequest('/skills');
       const mapped = data.map((skill) => ({
         key: skill.skill_id,
-        name: skill.skill_id,
-        description: '',
+        name: skill.name || skill.skill_id,
+        skillId: skill.skill_id,
+        description: skill.description || '',
+        provider: skill.provider,
         status: skill.status,
         version: skill.version,
         canonical: skill.canonical_name,
@@ -41,7 +44,9 @@ export default function Skills() {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.name}</Text>
-          <Text type="secondary">{record.description}</Text>
+          <Text type="secondary">{record.skillId}</Text>
+          {record.description && <Text type="secondary">{record.description}</Text>}
+          {record.provider && <Text type="secondary">provider: {record.provider}</Text>}
         </Space>
       ),
     },
@@ -70,14 +75,21 @@ export default function Skills() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Skills</Title>
         <Space>
-          <Link to="/skill-editor">
-            <Button>Open editor</Button>
-          </Link>
-          <Button type="primary">New skill</Button>
+          <Button type="primary" onClick={() => navigate('/skills/create')}>New skill</Button>
         </Space>
       </div>
       <Card>
-        <Table columns={columns} dataSource={skills} pagination={false} rowKey="key" loading={loading} />
+        <Table
+          columns={columns}
+          dataSource={skills}
+          pagination={false}
+          rowKey="key"
+          loading={loading}
+          onRow={(record) => ({
+            onClick: () => navigate(`/skills/${record.skillId}`),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
     </div>
   );

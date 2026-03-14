@@ -10,6 +10,8 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID> {
     Optional<SkillVersion> findFirstBySkillIdAndStatusOrderBySavedAtDesc(String skillId, SkillStatus status);
 
+    Optional<SkillVersion> findFirstBySkillIdAndVersionOrderBySavedAtDesc(String skillId, String version);
+
     List<SkillVersion> findBySkillIdOrderBySavedAtDesc(String skillId);
 
     List<SkillVersion> findAllByOrderBySavedAtDesc();

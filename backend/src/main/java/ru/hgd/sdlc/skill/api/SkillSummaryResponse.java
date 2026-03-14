@@ -6,6 +6,9 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 
 public record SkillSummaryResponse(
         @JsonProperty("skill_id") String skillId,
+        @JsonProperty("name") String name,
+        @JsonProperty("description") String description,
+        @JsonProperty("provider") String provider,
         @JsonProperty("version") String version,
         @JsonProperty("canonical_name") String canonicalName,
         @JsonProperty("status") String status,
@@ -16,6 +19,9 @@ public record SkillSummaryResponse(
     public static SkillSummaryResponse from(SkillVersion version) {
         return new SkillSummaryResponse(
                 version.getSkillId(),
+                version.getName(),
+                version.getDescription(),
+                version.getProvider() == null ? null : version.getProvider().name().toLowerCase().replace('_', '-'),
                 version.getVersion(),
                 version.getCanonicalName(),
                 version.getStatus().name().toLowerCase(),

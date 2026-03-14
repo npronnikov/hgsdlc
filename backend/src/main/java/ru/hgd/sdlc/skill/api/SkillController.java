@@ -47,6 +47,11 @@ public class SkillController {
         return skillService.getVersions(skillId).stream().map(SkillSummaryResponse::from).toList();
     }
 
+    @GetMapping("/{skillId}/versions/{version}")
+    public SkillResponse getVersion(@PathVariable String skillId, @PathVariable String version) {
+        return SkillResponse.from(skillService.getVersion(skillId, version));
+    }
+
     @PostMapping("/{skillId}/save")
     public SkillResponse save(
             @PathVariable String skillId,
