@@ -46,9 +46,14 @@ export default function Skills() {
           <Text strong>{record.name}</Text>
           <Text type="secondary">{record.skillId}</Text>
           {record.description && <Text type="secondary">{record.description}</Text>}
-          {record.provider && <Text type="secondary">провайдер: {record.provider}</Text>}
         </Space>
       ),
+    },
+    {
+      title: 'Провайдер',
+      dataIndex: 'provider',
+      key: 'provider',
+      render: (value) => <span className="mono">{value || '-'}</span>,
     },
     {
       title: 'Статус',

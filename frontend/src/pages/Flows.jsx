@@ -1,13 +1,40 @@
-import React from 'react';
-import { Button, Card, Space, Table, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Space, Table, Typography, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
-import { flows } from '../data/mock.js';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
 export default function Flows() {
   const navigate = useNavigate();
+  const [flows, setFlows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadFlows = async () => {
+    setLoading(true);
+    try {
+      const data = await apiRequest('/flows');
+      const mapped = data.map((flow) => ({
+        key: flow.flow_id,
+        name: flow.title || flow.flow_id,
+        flowId: flow.flow_id,
+        description: flow.description || '',
+        status: flow.status,
+        version: flow.version,
+        canonical: flow.canonical_name,
+      }));
+      setFlows(mapped);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить Flows');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFlows();
+  }, []);
   const columns = [
     {
       title: 'Flow',
@@ -54,8 +81,9 @@ export default function Flows() {
           dataSource={flows}
           pagination={false}
           rowKey="key"
+          loading={loading}
           onRow={(record) => ({
-            onClick: () => navigate(`/flows/${record.name}`),
+            onClick: () => navigate(`/flows/${record.flowId}`),
             style: { cursor: 'pointer' },
           })}
         />

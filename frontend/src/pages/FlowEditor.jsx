@@ -12,12 +12,14 @@ import 'reactflow/dist/style.css';
 import {
   Button,
   Card,
+  Dropdown,
   Divider,
   Input,
   List,
   Select,
   Space,
   Typography,
+  message,
 } from 'antd';
 import {
   ArrowDownOutlined,
@@ -26,8 +28,9 @@ import {
   MoreOutlined,
 } from '@ant-design/icons';
 import StatusTag from '../components/StatusTag.jsx';
-import { flows, rules, skills } from '../data/mock.js';
+import { rules, skills } from '../data/mock.js';
 import { useParams } from 'react-router-dom';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
@@ -333,14 +336,15 @@ function validateFlow(nodes, meta) {
 export default function FlowEditor() {
   const { flowId } = useParams();
   const [flowMeta, setFlowMeta] = useState(initialFlow);
+  const [resourceVersion, setResourceVersion] = useState(0);
+  const [flowVersion, setFlowVersion] = useState('0.1');
+  const [currentStatus, setCurrentStatus] = useState('');
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState(initialNodes[0].id);
-  const selectedFlow = useMemo(
-    () => flows.find((flow) => flow.name === flowId) || null,
-    [flowId]
-  );
   const isCreateMode = flowId === 'create';
-  const flowVersion = isCreateMode ? 'черновик' : (selectedFlow?.version || flows[0]?.version || '0.0.0');
+  const flowVersionLabel = currentStatus === 'draft' || isCreateMode
+    ? 'черновик'
+    : (flowVersion || '0.0.0');
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
@@ -375,6 +379,161 @@ export default function FlowEditor() {
     setFlowMeta((prev) => ({ ...prev, ...updates }));
   };
 
+  const loadFlow = async (id) => {
+    try {
+      const data = await apiRequest(`/flows/${id}`);
+      setFlowMeta((prev) => ({
+        ...prev,
+        flowId: data.flow_id || id,
+        title: data.title || prev.title,
+        description: data.description || prev.description,
+        startRole: data.start_role || prev.startRole,
+        approverRole: data.approver_role || prev.approverRole,
+        startNodeId: data.start_node_id || prev.startNodeId,
+        ruleRefs: data.rule_refs || [],
+      }));
+      setFlowVersion(data.version || flowVersion);
+      setCurrentStatus(data.status || '');
+      setResourceVersion(data.resource_version ?? 0);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить Flow');
+    }
+  };
+
+  const buildFlowYaml = () => {
+    const version = flowVersion || '0.1';
+    const canonicalName = `${flowMeta.flowId}@${version}`;
+    const lines = [
+      `id: ${flowMeta.flowId}`,
+      `version: ${version}`,
+      `canonical_name: ${canonicalName}`,
+      `title: ${flowMeta.title}`,
+      `description: ${flowMeta.description || ''}`,
+      `start_role: ${flowMeta.startRole}`,
+      `approver_role: ${flowMeta.approverRole}`,
+      `start_node_id: ${flowMeta.startNodeId}`,
+    ];
+    if (flowMeta.ruleRefs.length === 0) {
+      lines.push('rule_refs: []');
+    } else {
+      lines.push('rule_refs:');
+      flowMeta.ruleRefs.forEach((ref) => lines.push(`  - ${ref}`));
+    }
+    lines.push('');
+    lines.push('nodes:');
+    nodes.forEach((node) => {
+      const data = node.data || {};
+      lines.push(`  - id: ${node.id}`);
+      lines.push(`    type: ${data.nodeType || 'executor'}`);
+      if (data.executorKind) {
+        lines.push(`    executor_kind: ${data.executorKind}`);
+      }
+      if (data.gateKind) {
+        lines.push(`    gate_kind: ${data.gateKind}`);
+      }
+      if (data.skillRefs && data.skillRefs.length > 0) {
+        lines.push('    skill_refs:');
+        data.skillRefs.forEach((ref) => lines.push(`      - ${ref}`));
+      }
+      if (data.instruction) {
+        lines.push('    instruction: |');
+        data.instruction.split('\n').forEach((line) => lines.push(`      ${line}`));
+      }
+      if (data.inputs && data.inputs.length > 0) {
+        lines.push('    inputs:');
+        data.inputs.forEach((input) => lines.push(`      - ${input}`));
+      }
+      if (data.outputs && data.outputs.length > 0) {
+        lines.push('    outputs:');
+        data.outputs.forEach((output) => lines.push(`      - ${output}`));
+      }
+      if (data.onSuccess) {
+        lines.push(`    on_success: ${data.onSuccess}`);
+      }
+      if (data.allowedOutcomes && data.allowedOutcomes.length > 0) {
+        lines.push('    allowed_outcomes:');
+        data.allowedOutcomes.forEach((outcome) => lines.push(`      - ${outcome}`));
+      }
+      if (data.outcomeRoutes && Object.keys(data.outcomeRoutes).length > 0) {
+        lines.push('    outcome_routes:');
+        Object.entries(data.outcomeRoutes).forEach(([key, value]) => {
+          lines.push(`      ${key}: ${value}`);
+        });
+      }
+      if (data.onSubmit) {
+        lines.push(`    on_submit: ${data.onSubmit}`);
+      }
+      if (data.onApprove) {
+        lines.push(`    on_approve: ${data.onApprove}`);
+      }
+      if (data.onReject) {
+        lines.push(`    on_reject: ${data.onReject}`);
+      }
+      if (data.onReworkRoutes && Object.keys(data.onReworkRoutes).length > 0) {
+        lines.push('    on_rework_routes:');
+        Object.entries(data.onReworkRoutes).forEach(([key, value]) => {
+          lines.push(`      ${key}: ${value}`);
+        });
+      }
+    });
+    return lines.join('\n');
+  };
+
+  const saveFlow = async ({ publish, release = false }) => {
+    if (!flowMeta.flowId) {
+      message.error('Нужен ID Flow');
+      return;
+    }
+    if (!flowMeta.title.trim()) {
+      message.error('Нужно название');
+      return;
+    }
+    if (!flowMeta.startRole.trim()) {
+      message.error('Нужна стартовая роль');
+      return;
+    }
+    if (!flowMeta.approverRole.trim()) {
+      message.error('Нужна роль согласования');
+      return;
+    }
+    if (!flowMeta.startNodeId.trim()) {
+      message.error('Нужна стартовая нода');
+      return;
+    }
+    const flowYaml = buildFlowYaml();
+    try {
+      const response = await apiRequest(`/flows/${flowMeta.flowId}/save`, {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          flow_id: flowMeta.flowId,
+          flow_yaml: flowYaml,
+          publish,
+          release,
+          resource_version: resourceVersion,
+        }),
+      });
+      setFlowMeta((prev) => ({
+        ...prev,
+        flowId: response.flow_id || prev.flowId,
+        title: response.title || prev.title,
+        description: response.description || prev.description,
+        startRole: response.start_role || prev.startRole,
+        approverRole: response.approver_role || prev.approverRole,
+        startNodeId: response.start_node_id || prev.startNodeId,
+        ruleRefs: response.rule_refs || prev.ruleRefs,
+      }));
+      setFlowVersion(response.version || flowVersion);
+      setCurrentStatus(response.status || currentStatus);
+      setResourceVersion(response.resource_version ?? resourceVersion);
+      message.success(publish ? 'Flow опубликован' : 'Черновик сохранён');
+    } catch (err) {
+      message.error(err.message || 'Не удалось сохранить Flow');
+    }
+  };
+
   useEffect(() => {
     if (!flowId) {
       return;
@@ -383,17 +542,15 @@ export default function FlowEditor() {
       setFlowMeta(emptyFlow);
       setNodes([]);
       setSelectedNodeId(null);
+      setFlowVersion('0.1');
+      setCurrentStatus('draft');
+      setResourceVersion(0);
       return;
     }
-    setFlowMeta((prev) => ({
-      ...prev,
-      flowId,
-      title: selectedFlow?.name || prev.title,
-      description: selectedFlow?.description || prev.description,
-    }));
     setNodes(initialNodes);
     setSelectedNodeId(initialNodes[0]?.id || null);
-  }, [flowId, isCreateMode, selectedFlow, setNodes]);
+    loadFlow(flowId);
+  }, [flowId, isCreateMode, setNodes]);
 
   const handleStartNodeChange = (value) => {
     updateFlowMeta({ startNodeId: value });
@@ -410,7 +567,19 @@ export default function FlowEditor() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Редактор Flow</Title>
         <Space>
-          <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'publish', label: 'Опубликовать версию' },
+                { key: 'release', label: 'Выпустить релиз' },
+              ],
+              onClick: ({ key }) => {
+                saveFlow({ publish: true, release: key === 'release' });
+              },
+            }}
+          >
+            <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
+          </Dropdown>
         </Space>
       </div>
 
@@ -419,11 +588,11 @@ export default function FlowEditor() {
           <div className="flow-canvas-header">
             <div>
               <Text className="muted">Канвас</Text>
-              <div className="mono">{flowMeta.flowId || 'new-flow'}@{flowVersion}</div>
+              <div className="mono">{flowMeta.flowId || 'new-flow'}@{flowVersionLabel}</div>
             </div>
             <Space>
               <Button type="default">Вписать</Button>
-              <Button type="default">Сохранить черновик</Button>
+              <Button type="default" onClick={() => saveFlow({ publish: false })}>Сохранить черновик</Button>
             </Space>
           </div>
           <div className="flow-canvas">

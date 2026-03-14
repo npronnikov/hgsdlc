@@ -44,9 +44,14 @@ export default function Rules() {
         <Space direction="vertical" size={0}>
           <Text strong>{record.name}</Text>
           <Text type="secondary">{record.ruleId}</Text>
-          {record.provider && <Text type="secondary">провайдер: {record.provider}</Text>}
         </Space>
       ),
+    },
+    {
+      title: 'Провайдер',
+      dataIndex: 'provider',
+      key: 'provider',
+      render: (value) => <span className="mono">{value || '-'}</span>,
     },
     {
       title: 'Статус',
