@@ -1,12 +1,13 @@
 import React from 'react';
 import { Button, Card, Space, Table, Typography } from 'antd';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { flows } from '../data/mock.js';
 
 const { Title, Text } = Typography;
 
 export default function Flows() {
+  const navigate = useNavigate();
   const columns = [
     {
       title: 'Flow',
@@ -20,19 +21,19 @@ export default function Flows() {
       ),
     },
     {
-      title: 'Status',
+      title: 'Статус',
       dataIndex: 'status',
       key: 'status',
       render: (value) => <StatusTag value={value} />,
     },
     {
-      title: 'Latest Version',
+      title: 'Последняя версия',
       dataIndex: 'version',
       key: 'version',
       render: (value) => <span className="mono">{value}</span>,
     },
     {
-      title: 'Canonical Name',
+      title: 'Каноническое имя',
       dataIndex: 'canonical',
       key: 'canonical',
       render: (value) => <span className="mono">{value}</span>,
@@ -44,14 +45,20 @@ export default function Flows() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Flows</Title>
         <Space>
-          <Link to="/flow-editor">
-            <Button>Open editor</Button>
-          </Link>
-          <Button type="primary">New flow</Button>
+          <Button type="default" onClick={() => navigate('/flows/create')}>Новый Flow</Button>
         </Space>
       </div>
       <Card>
-        <Table columns={columns} dataSource={flows} pagination={false} rowKey="key" />
+        <Table
+          columns={columns}
+          dataSource={flows}
+          pagination={false}
+          rowKey="key"
+          onRow={(record) => ({
+            onClick: () => navigate(`/flows/${record.name}`),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
     </div>
   );

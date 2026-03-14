@@ -58,6 +58,8 @@ export default function App() {
             <Route path="overview" element={<Overview />} />
             <Route path="projects" element={<Projects />} />
             <Route path="flows" element={<Flows />} />
+            <Route path="flows/create" element={<FlowEditor />} />
+            <Route path="flows/:flowId" element={<FlowEditor />} />
             <Route path="flow-editor" element={<FlowEditor />} />
             <Route path="rules" element={<Rules />} />
             <Route path="rules/create" element={<RuleEditor />} />

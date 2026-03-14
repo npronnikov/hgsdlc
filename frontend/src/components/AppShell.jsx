@@ -63,17 +63,21 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(true);
   const ruleIdFromPath = location.pathname.startsWith('/rules/') ? location.pathname.split('/')[2] : null;
   const skillIdFromPath = location.pathname.startsWith('/skills/') ? location.pathname.split('/')[2] : null;
+  const flowIdFromPath = location.pathname.startsWith('/flows/') ? location.pathname.split('/')[2] : null;
   const isRuleEditorRoute = location.pathname.startsWith('/rules/');
   const isSkillEditorRoute = location.pathname.startsWith('/skills/');
+  const isFlowEditorRoute = location.pathname.startsWith('/flows/');
   const meta = routeMeta[location.pathname]
     || (isRuleEditorRoute ? { title: 'Rules', menuKey: '/rules' } : null)
     || (isSkillEditorRoute ? { title: 'Skills', menuKey: '/skills' } : null)
+    || (isFlowEditorRoute ? { title: 'Flows', menuKey: '/flows' } : null)
     || { title: 'Overview', menuKey: '/overview' };
   const selectedKey = meta.menuKey;
   const title = meta.title;
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : 'HG';
   const showRuleIdCrumb = isRuleEditorRoute && ruleIdFromPath && ruleIdFromPath !== 'create';
   const showSkillIdCrumb = isSkillEditorRoute && skillIdFromPath && skillIdFromPath !== 'create';
+  const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
 
   return (
     <Layout className="hg-layout">
@@ -138,6 +142,12 @@ export default function AppShell() {
                 <>
                   <span>/</span>
                   <button type="button" onClick={() => navigate(location.pathname)}>{skillIdFromPath}</button>
+                </>
+              )}
+              {showFlowIdCrumb && (
+                <>
+                  <span>/</span>
+                  <button type="button" onClick={() => navigate(location.pathname)}>{flowIdFromPath}</button>
                 </>
               )}
             </div>

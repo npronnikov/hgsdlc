@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "node-human-input-gate-schema",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "gate_kind"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string" },
+    "gate_kind": { "type": "string" },
+    "input_artifact": { "type": "string" },
+    "output_artifact": { "type": "string" },
+    "allowed_roles": { "type": "array" },
+    "completion_policy": { "type": "object" },
+    "on_submit": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Card, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { MoreOutlined } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -56,7 +57,7 @@ export default function RuleEditor() {
         setFrontmatterSummary([]);
       }
     } catch (err) {
-      message.error(err.message || 'Failed to load rule');
+      message.error(err.message || 'Не удалось загрузить Rule');
     }
   };
 
@@ -64,7 +65,7 @@ export default function RuleEditor() {
     try {
       const versions = await apiRequest(`/rules/${ruleId}/versions`);
       const mapped = versions.map((item) => ({
-        label: `v${item.version} · ${item.status}`,
+        label: `v${item.version} · ${item.status === 'draft' ? 'черновик' : item.status === 'published' ? 'опубликовано' : item.status}`,
         value: item.version,
         canonical: item.canonical_name,
         ruleId: item.rule_id,
@@ -76,7 +77,7 @@ export default function RuleEditor() {
         setRuleVersion(currentVersion);
       }
     } catch (err) {
-      message.error(err.message || 'Failed to load rule versions');
+      message.error(err.message || 'Не удалось загрузить версии Rule');
     }
   };
 
@@ -102,7 +103,7 @@ export default function RuleEditor() {
         setFrontmatterSummary([]);
       }
     } catch (err) {
-      message.error(err.message || 'Failed to load selected version');
+      message.error(err.message || 'Не удалось загрузить выбранную версию');
     }
   };
 
@@ -128,7 +129,7 @@ export default function RuleEditor() {
         setEditorValue(template.template || '');
       }
     } catch (err) {
-      message.error(err.message || 'Failed to load rule template');
+      message.error(err.message || 'Не удалось загрузить шаблон Rule');
       setFrontmatterSummary([]);
     }
   };
@@ -142,10 +143,10 @@ export default function RuleEditor() {
     };
     if (hasContent && isChange) {
       Modal.confirm({
-        title: 'Change provider?',
-        content: 'Template/frontmatter expectations will change. Replace markdown with the new template?',
-        okText: 'Replace template',
-        cancelText: 'Keep current markdown',
+        title: 'Сменить провайдера?',
+        content: 'Требования к шаблону и frontmatter изменятся. Заменить markdown новым шаблоном?',
+        okText: 'Заменить шаблон',
+        cancelText: 'Оставить текущий markdown',
         onOk: () => applyChange(true),
         onCancel: () => applyChange(false),
       });
@@ -156,15 +157,15 @@ export default function RuleEditor() {
 
   const saveRule = async ({ publish, release = false }) => {
     if (!ruleId) {
-      message.error('Rule ID is required');
+      message.error('Нужен ID Rule');
       return;
     }
     if (!title.trim()) {
-      message.error('Title is required');
+      message.error('Нужно название');
       return;
     }
     if (!provider) {
-      message.error('Provider is required');
+      message.error('Нужен провайдер');
       return;
     }
     const effectiveVersion = ruleId === selectedRuleId ? (resourceVersion ?? 0) : 0;
@@ -192,9 +193,9 @@ export default function RuleEditor() {
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(response.rule_id || ruleId, response.version || ruleVersion);
-      message.success(publish ? 'Rule published' : 'Draft saved');
+      message.success(publish ? 'Rule опубликован' : 'Черновик сохранён');
     } catch (err) {
-      message.error(err.message || 'Failed to save rule');
+      message.error(err.message || 'Не удалось сохранить Rule');
     }
   };
 
@@ -227,45 +228,45 @@ export default function RuleEditor() {
   return (
     <div className="rule-editor-page">
       <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Rule Editor</Title>
+        <Title level={3} style={{ margin: 0 }}>Редактор Rule</Title>
         <Space>
           {!isEditing && (
             currentStatus === 'draft' ? (
               <>
-                <Button onClick={beginEdit}>Edit</Button>
+                <Button type="default" onClick={beginEdit}>Редактировать</Button>
                 <Dropdown
                   menu={{
                     items: [
-                      { key: 'publish', label: 'Publish version' },
-                      { key: 'release', label: 'Release version' },
+                      { key: 'publish', label: 'Опубликовать версию' },
+                      { key: 'release', label: 'Выпустить релиз' },
                     ],
                     onClick: ({ key }) => {
                       saveRule({ publish: true, release: key === 'release' });
                     },
                   }}
                 >
-                  <Button type="primary">Publish</Button>
+                  <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
                 </Dropdown>
               </>
             ) : (
-              <Button type="primary" onClick={beginEdit}>Edit</Button>
+              <Button type="default" onClick={beginEdit}>Редактировать</Button>
             )
           )}
           {isEditing && (
             <>
-              <Button onClick={() => saveRule({ publish: false })}>Save</Button>
+              <Button type="default" onClick={() => saveRule({ publish: false })}>Сохранить</Button>
               <Dropdown
                 menu={{
                   items: [
-                    { key: 'publish', label: 'Publish version' },
-                    { key: 'release', label: 'Release version' },
+                    { key: 'publish', label: 'Опубликовать версию' },
+                    { key: 'release', label: 'Выпустить релиз' },
                   ],
                   onClick: ({ key }) => {
                     saveRule({ publish: true, release: key === 'release' });
                   },
                 }}
               >
-                <Button type="primary">Publish</Button>
+                <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
               </Dropdown>
             </>
           )}
@@ -283,8 +284,47 @@ export default function RuleEditor() {
                     defaultLanguage="markdown"
                     value={editorValue}
                     onChange={(value) => setEditorValue(value ?? '')}
-                    onMount={(editor) => {
+                    onMount={(editor, monaco) => {
                       editorRef.current = editor;
+                      if (monaco) {
+                        monaco.editor.defineTheme('hg-light', {
+                          base: 'vs',
+                          inherit: true,
+                          rules: [
+                            { token: 'comment', foreground: '6e7781' },
+                            { token: 'string', foreground: '0a3069' },
+                            { token: 'keyword', foreground: '8250df' },
+                          ],
+                          colors: {
+                            'editor.background': '#ffffff',
+                            'editor.foreground': '#333333',
+                            'editorCursor.foreground': '#000000',
+                            'editorLineNumber.foreground': '#8c959f',
+                            'editorLineNumber.activeForeground': '#1677ff',
+                            'editorLineNumber.dimmedForeground': '#b0b7c3',
+                            'editor.selectionBackground': '#cfe3ff',
+                            'editor.inactiveSelectionBackground': '#e8f0ff',
+                            'editor.lineHighlightBackground': '#f5f7fa',
+                            'editorGutter.background': '#ffffff',
+                            'editorIndentGuide.background': '#e6e8eb',
+                            'editorIndentGuide.activeBackground': '#d0d7de',
+                            'editorWhitespace.foreground': '#d0d7de',
+                            'editor.wordHighlightBorder': '#00000000',
+                            'editor.wordHighlightStrongBorder': '#00000000',
+                            'editor.wordHighlightBackground': '#00000000',
+                            'editor.wordHighlightStrongBackground': '#00000000',
+                            'editor.selectionHighlightBorder': '#00000000',
+                            'editor.selectionHighlightBackground': '#00000000',
+                            'editor.findMatchBorder': '#00000000',
+                            'editor.findMatchHighlightBorder': '#00000000',
+                            'editor.findMatchHighlightBackground': '#00000000',
+                            'scrollbarSlider.background': '#c1c1c1',
+                            'scrollbarSlider.hoverBackground': '#a8a8a8',
+                            'scrollbarSlider.activeBackground': '#909090',
+                          },
+                        });
+                        monaco.editor.setTheme('hg-light');
+                      }
                       editor.onDidScrollChange(() => {
                         if (isSyncingScroll.current) return;
                         const previewEl = previewRef.current;
@@ -304,15 +344,23 @@ export default function RuleEditor() {
                     }}
                     options={{
                       minimap: { enabled: false },
-                      fontSize: 13,
+                      selectionHighlight: false,
+                      occurrencesHighlight: 'off',
+                      wordHighlight: 'off',
+                      wordHighlightDelay: 0,
+                      renderLineHighlight: 'none',
+                      fontFamily: "'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace",
+                      fontSize: 14,
+                      lineHeight: 25,
                       wordWrap: 'on',
                       scrollBeyondLastLine: false,
                     }}
+                    theme="hg-light"
                   />
                 </div>
               </div>
               <div className="editor-pane">
-                <Text className="muted">Preview</Text>
+                <Text className="muted">Предпросмотр</Text>
                 <div
                   className="editor-pane-body markdown-preview"
                   ref={previewRef}
@@ -341,7 +389,7 @@ export default function RuleEditor() {
             </div>
           ) : (
             <div className="editor-pane">
-              <Text className="muted">Preview</Text>
+              <Text className="muted">Предпросмотр</Text>
               <div className="editor-pane-body markdown-preview">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {editorValue || ''}
@@ -352,32 +400,32 @@ export default function RuleEditor() {
         </Card>
         <Card>
           <div className="rule-fields-header">
-            <Title level={5} style={{ margin: 0 }}>Rule Fields</Title>
+            <Title level={5} style={{ margin: 0 }}>Поля Rule</Title>
             {selectedRuleId ? (
               <Select
                 value={ruleVersion || undefined}
                 options={versionOptions}
                 onChange={(value) => handleVersionSelect(value)}
                 className="rule-version-select"
-                placeholder="Version"
+                placeholder="Версия"
                 disabled={isEditing}
               />
             ) : (
-              <span className="rule-version-pill">new</span>
+              <span className="rule-version-pill">новый</span>
             )}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Text className="muted">Title</Text>
+            <Text className="muted">Название</Text>
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Project rule"
+              placeholder="Rule проекта"
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Rule ID</Text>
+            <Text className="muted">ID Rule</Text>
             <Input
               value={ruleId}
               onChange={(event) => setRuleId(event.target.value)}
@@ -387,20 +435,20 @@ export default function RuleEditor() {
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Provider</Text>
+            <Text className="muted">Провайдер</Text>
             <Select
               value={provider || undefined}
               onChange={handleProviderChange}
               options={providerOptions}
-              placeholder="Select provider"
+              placeholder="Выберите провайдера"
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 16 }}>
-            <Title level={5}>Frontmatter Help</Title>
+            <Title level={5}>Подсказка по frontmatter</Title>
             {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Select a provider to see expected frontmatter fields.</Text>
+              <Text type="secondary">Выберите провайдера, чтобы увидеть ожидаемые поля frontmatter.</Text>
             ) : (
               <Space direction="vertical" size={8}>
                 {frontmatterSummary.map((item) => (

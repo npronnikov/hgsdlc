@@ -26,7 +26,7 @@ export default function Rules() {
       }));
       setRules(mapped);
     } catch (err) {
-      message.error(err.message || 'Failed to load rules');
+      message.error(err.message || 'Не удалось загрузить Rules');
     } finally {
       setLoading(false);
     }
@@ -44,24 +44,24 @@ export default function Rules() {
         <Space direction="vertical" size={0}>
           <Text strong>{record.name}</Text>
           <Text type="secondary">{record.ruleId}</Text>
-          {record.provider && <Text type="secondary">provider: {record.provider}</Text>}
+          {record.provider && <Text type="secondary">провайдер: {record.provider}</Text>}
         </Space>
       ),
     },
     {
-      title: 'Status',
+      title: 'Статус',
       dataIndex: 'status',
       key: 'status',
       render: (value) => <StatusTag value={value} />,
     },
     {
-      title: 'Latest Version',
+      title: 'Последняя версия',
       dataIndex: 'version',
       key: 'version',
       render: (value) => <span className="mono">{value}</span>,
     },
     {
-      title: 'Canonical Name',
+      title: 'Каноническое имя',
       dataIndex: 'canonical',
       key: 'canonical',
       render: (value) => <span className="mono">{value}</span>,
@@ -73,7 +73,7 @@ export default function Rules() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Rules</Title>
         <Space>
-          <Button type="primary" onClick={() => navigate('/rules/create')}>New rule</Button>
+          <Button type="default" onClick={() => navigate('/rules/create')}>Новый Rule</Button>
         </Space>
       </div>
       <Card>

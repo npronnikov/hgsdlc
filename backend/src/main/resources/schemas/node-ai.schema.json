@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "node-ai-schema",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "executor_kind"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string" },
+    "executor_kind": { "type": "string" },
+    "skill_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "inputs": { "type": "array" },
+    "outputs": { "type": "array" },
+    "instruction": { "type": "string" },
+    "on_success": { "type": "string" },
+    "allowed_outcomes": { "type": "array" },
+    "outcome_routes": { "type": "object" }
+  },
+  "additionalProperties": true
+}

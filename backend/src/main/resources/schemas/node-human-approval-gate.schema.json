@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "node-human-approval-gate-schema",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "gate_kind"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string" },
+    "gate_kind": { "type": "string" },
+    "review_artifacts": { "type": "array" },
+    "allowed_actions": { "type": "array" },
+    "allowed_roles": { "type": "array" },
+    "on_approve": { "type": "string" },
+    "on_reject": { "type": "string" },
+    "on_rework_routes": { "type": "object" }
+  },
+  "additionalProperties": true
+}

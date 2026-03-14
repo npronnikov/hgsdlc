@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "node-command-schema",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "executor_kind"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string" },
+    "executor_kind": { "type": "string" },
+    "command_engine": { "type": "string" },
+    "command_spec": { "type": "object" },
+    "success_exit_codes": { "type": "array" },
+    "on_success": { "type": "string" },
+    "retry_policy": { "type": "object" },
+    "idempotent": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}
