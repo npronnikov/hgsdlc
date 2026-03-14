@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   Controls,
@@ -16,6 +16,7 @@ import {
   Divider,
   Input,
   List,
+  Modal,
   Select,
   Space,
   Typography,
@@ -341,6 +342,11 @@ export default function FlowEditor() {
   const [currentStatus, setCurrentStatus] = useState('');
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState(initialNodes[0].id);
+  const [flowInstance, setFlowInstance] = useState(null);
+  const flowWrapperRef = useRef(null);
+  const [pendingConnection, setPendingConnection] = useState(null);
+  const [routeOptions, setRouteOptions] = useState([]);
+  const [routeChoice, setRouteChoice] = useState(null);
   const isCreateMode = flowId === 'create';
   const flowVersionLabel = currentStatus === 'draft' || isCreateMode
     ? 'черновик'
@@ -377,6 +383,215 @@ export default function FlowEditor() {
 
   const updateFlowMeta = (updates) => {
     setFlowMeta((prev) => ({ ...prev, ...updates }));
+  };
+
+  const getRouteOptions = (node) => {
+    const data = node?.data || {};
+    if (data.executorKind === 'AI') {
+      const outcomes = data.allowedOutcomes || [];
+      const outcomeOptions = outcomes.map((outcome) => ({
+        value: `outcome:${outcome}`,
+        label: `outcome: ${outcome}`,
+      }));
+      return [
+        { value: 'on_success', label: 'on_success' },
+        ...outcomeOptions,
+      ];
+    }
+    if (data.executorKind === 'External Command') {
+      return [{ value: 'on_success', label: 'on_success' }];
+    }
+    if (data.gateKind === 'human_input') {
+      return [{ value: 'on_submit', label: 'on_submit' }];
+    }
+    if (data.gateKind === 'human_approval') {
+      return [
+        { value: 'on_approve', label: 'on_approve' },
+        { value: 'on_reject', label: 'on_reject' },
+        { value: 'rework:keep_workspace', label: 'rework: keep_workspace' },
+        { value: 'rework:discard_uncommitted', label: 'rework: discard_uncommitted' },
+      ];
+    }
+    return [{ value: 'on_success', label: 'on_success' }];
+  };
+
+  const applyConnection = (sourceId, targetId, routeKey) => {
+    if (!sourceId || !targetId || !routeKey) {
+      return;
+    }
+    setNodes((prev) =>
+      prev.map((node) => {
+        if (node.id !== sourceId) {
+          return node;
+        }
+        const data = { ...node.data };
+        if (routeKey === 'on_success') {
+          data.onSuccess = targetId;
+        } else if (routeKey === 'on_submit') {
+          data.onSubmit = targetId;
+        } else if (routeKey === 'on_approve') {
+          data.onApprove = targetId;
+        } else if (routeKey === 'on_reject') {
+          data.onReject = targetId;
+        } else if (routeKey.startsWith('outcome:')) {
+          const outcome = routeKey.split(':')[1];
+          data.outcomeRoutes = { ...(data.outcomeRoutes || {}) };
+          data.outcomeRoutes[outcome] = targetId;
+          const allowed = new Set(data.allowedOutcomes || []);
+          allowed.add(outcome);
+          data.allowedOutcomes = Array.from(allowed);
+        } else if (routeKey.startsWith('rework:')) {
+          const mode = routeKey.split(':')[1];
+          data.onReworkRoutes = { ...(data.onReworkRoutes || {}) };
+          data.onReworkRoutes[mode] = targetId;
+        }
+        return { ...node, data };
+      })
+    );
+  };
+
+  const removeConnection = (edge) => {
+    if (!edge?.source || !edge?.label) {
+      return;
+    }
+    const label = edge.label;
+    setNodes((prev) =>
+      prev.map((node) => {
+        if (node.id !== edge.source) {
+          return node;
+        }
+        const data = { ...node.data };
+        if (label === 'on_success') {
+          data.onSuccess = null;
+        } else if (label === 'on_submit') {
+          data.onSubmit = null;
+        } else if (label === 'on_approve') {
+          data.onApprove = null;
+        } else if (label === 'on_reject') {
+          data.onReject = null;
+        } else if (label.startsWith('outcome:')) {
+          const outcome = label.split(':')[1].trim();
+          if (data.outcomeRoutes) {
+            const nextRoutes = { ...data.outcomeRoutes };
+            delete nextRoutes[outcome];
+            data.outcomeRoutes = nextRoutes;
+          }
+          if (data.allowedOutcomes) {
+            data.allowedOutcomes = data.allowedOutcomes.filter((item) => item !== outcome);
+          }
+        } else if (label.startsWith('rework:')) {
+          const mode = label.split(':')[1].trim();
+          if (data.onReworkRoutes) {
+            const nextRoutes = { ...data.onReworkRoutes };
+            delete nextRoutes[mode];
+            data.onReworkRoutes = nextRoutes;
+          }
+        }
+        return { ...node, data };
+      })
+    );
+  };
+
+  const buildNodeData = (kind, id) => {
+    switch (kind) {
+      case 'ai':
+        return {
+          id,
+          title: 'Новая AI нода',
+          typeLabel: 'AI-исполнитель',
+          variant: 'executor ai',
+          nodeType: 'executor',
+          executorKind: 'AI',
+          instruction: '',
+          inputs: [],
+          outputs: [],
+          allowedOutcomes: [],
+          outcomeRoutes: {},
+          skillRefs: [],
+        };
+      case 'command':
+        return {
+          id,
+          title: 'Новая Command нода',
+          typeLabel: 'Внешняя команда',
+          variant: 'executor command',
+          nodeType: 'executor',
+          executorKind: 'External Command',
+          commandSpec: '',
+          onSuccess: '',
+        };
+      case 'human_input':
+        return {
+          id,
+          title: 'Новая Human Input нода',
+          typeLabel: 'Гейт ввода',
+          variant: 'gate input',
+          nodeType: 'gate',
+          gateKind: 'human_input',
+          onSubmit: '',
+          inputs: [],
+          outputs: [],
+        };
+      case 'human_approval':
+        return {
+          id,
+          title: 'Новая Human Approval нода',
+          typeLabel: 'Гейт согласования',
+          variant: 'gate approval',
+          nodeType: 'gate',
+          gateKind: 'human_approval',
+          onApprove: '',
+          onReject: '',
+          onReworkRoutes: {},
+          inputs: [],
+          outputs: [],
+        };
+      default:
+        return {
+          id,
+          title: 'Новая нода',
+          typeLabel: 'Нода',
+          variant: 'executor',
+          nodeType: 'executor',
+          executorKind: 'AI',
+        };
+    }
+  };
+
+  const addNode = (kind) => {
+    setNodes((prev) => {
+      const base = kind === 'ai'
+        ? 'ai'
+        : kind === 'command'
+          ? 'command'
+          : kind === 'human_input'
+            ? 'input'
+            : 'approval';
+      let index = prev.length + 1;
+      let id = `${base}-${index}`;
+      const existing = new Set(prev.map((node) => node.id));
+      while (existing.has(id)) {
+        index += 1;
+        id = `${base}-${index}`;
+      }
+      let position = { x: 120, y: 120 };
+      if (flowInstance && flowWrapperRef.current) {
+        const bounds = flowWrapperRef.current.getBoundingClientRect();
+        const center = {
+          x: bounds.left + bounds.width / 2,
+          y: bounds.top + bounds.height / 2,
+        };
+        position = flowInstance.project(center);
+      }
+      const nextNode = {
+        id,
+        type: 'flowNode',
+        position,
+        data: buildNodeData(kind, id),
+      };
+      setSelectedNodeId(id);
+      return [...prev, nextNode];
+    });
   };
 
   const loadFlow = async (id) => {
@@ -591,17 +806,56 @@ export default function FlowEditor() {
               <div className="mono">{flowMeta.flowId || 'new-flow'}@{flowVersionLabel}</div>
             </div>
             <Space>
-              <Button type="default">Вписать</Button>
-              <Button type="default" onClick={() => saveFlow({ publish: false })}>Сохранить черновик</Button>
+              <Dropdown
+                menu={{
+                  items: [
+                    { key: 'ai', label: 'AI' },
+                    { key: 'command', label: 'Command' },
+                    { key: 'human_input', label: 'Human Input' },
+                    { key: 'human_approval', label: 'Human Approval' },
+                  ],
+                  onClick: ({ key }) => addNode(key),
+                }}
+              >
+                <Button type="default" icon={<MoreOutlined />}>Добавить ноду</Button>
+              </Dropdown>
             </Space>
           </div>
-          <div className="flow-canvas">
+          <div className="flow-canvas" ref={flowWrapperRef}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}
+              onEdgesChange={(changes) => {
+                changes
+                  .filter((change) => change.type === 'remove')
+                  .forEach((change) => {
+                    const removedEdge = edges.find((edge) => edge.id === change.id);
+                    if (removedEdge) {
+                      removeConnection(removedEdge);
+                    }
+                  });
+              }}
+              onConnect={(connection) => {
+                if (!connection.source || !connection.target) {
+                  return;
+                }
+                const sourceNode = nodes.find((node) => node.id === connection.source);
+                const options = getRouteOptions(sourceNode);
+                if (options.length === 1) {
+                  applyConnection(connection.source, connection.target, options[0].value);
+                  return;
+                }
+                setPendingConnection({
+                  source: connection.source,
+                  target: connection.target,
+                });
+                setRouteOptions(options);
+                setRouteChoice(options[0]?.value || null);
+              }}
               nodeTypes={nodeTypes}
               fitView
+              onInit={setFlowInstance}
               onNodeClick={(_, node) => setSelectedNodeId(node.id)}
               onPaneClick={() => setSelectedNodeId(null)}
               proOptions={{ hideAttribution: true }}
@@ -702,7 +956,7 @@ export default function FlowEditor() {
                         description={
                           <div className="linked-meta">
                             <span className="mono">{ref}</span>
-                            <span>{rule?.provider || 'неизвестно'}</span>
+                            <span>{rule?.codingAgent || 'неизвестно'}</span>
                           </div>
                         }
                       />
@@ -928,7 +1182,7 @@ export default function FlowEditor() {
                                 description={
                                   <div className="linked-meta">
                                     <span className="mono">{ref}</span>
-                                    <span>{skill?.provider || 'неизвестно'}</span>
+                                    <span>{skill?.codingAgent || 'неизвестно'}</span>
                                   </div>
                                 }
                               />
@@ -957,6 +1211,26 @@ export default function FlowEditor() {
           </Card>
         </div>
       </div>
+      <Modal
+        open={!!pendingConnection}
+        title="Выберите тип связи"
+        okText="Применить"
+        cancelText="Отмена"
+        onCancel={() => setPendingConnection(null)}
+        onOk={() => {
+          if (pendingConnection?.source && pendingConnection?.target && routeChoice) {
+            applyConnection(pendingConnection.source, pendingConnection.target, routeChoice);
+          }
+          setPendingConnection(null);
+        }}
+      >
+        <Select
+          value={routeChoice}
+          onChange={(value) => setRouteChoice(value)}
+          options={routeOptions}
+          style={{ width: '100%' }}
+        />
+      </Modal>
     </div>
   );
 }

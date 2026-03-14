@@ -7,7 +7,7 @@ import ru.hgd.sdlc.rule.domain.RuleVersion;
 public record RuleResponse(
         @JsonProperty("rule_id") String ruleId,
         @JsonProperty("title") String title,
-        @JsonProperty("provider") String provider,
+        @JsonProperty("coding_agent") String codingAgent,
         @JsonProperty("version") String version,
         @JsonProperty("canonical_name") String canonicalName,
         @JsonProperty("status") String status,
@@ -20,7 +20,7 @@ public record RuleResponse(
         return new RuleResponse(
                 version.getRuleId(),
                 version.getTitle(),
-                version.getProvider() == null ? null : version.getProvider().name().toLowerCase().replace('_', '-'),
+                version.getCodingAgent() == null ? null : version.getCodingAgent().name().toLowerCase().replace('_', '-'),
                 version.getVersion(),
                 version.getCanonicalName(),
                 version.getStatus().name().toLowerCase(),

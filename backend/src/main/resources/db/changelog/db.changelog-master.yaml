@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/011-skills-simplify.sql
   - include:
       file: db/changelog/012-flows.sql
+  - include:
+      file: db/changelog/013-coding-agent.sql

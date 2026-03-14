@@ -6,7 +6,7 @@ public record SkillSaveRequest(
         @JsonProperty("name") String name,
         @JsonProperty("description") String description,
         @JsonProperty("skill_id") String skillId,
-        @JsonProperty("provider") String provider,
+        @JsonProperty("coding_agent") String codingAgent,
         @JsonProperty("skill_markdown") String skillMarkdown,
         @JsonProperty("publish") Boolean publish,
         @JsonProperty("release") Boolean release,

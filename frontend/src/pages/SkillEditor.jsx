@@ -9,7 +9,7 @@ import { useLocation, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
-const providerOptions = [
+const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
   { value: 'claude', label: 'claude' },
   { value: 'cursor', label: 'cursor' },
@@ -30,7 +30,7 @@ export default function SkillEditor() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [skillId, setSkillId] = useState('');
-  const [provider, setProvider] = useState('');
+  const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -49,12 +49,12 @@ export default function SkillEditor() {
       setName(data.name || '');
       setDescription(data.description || '');
       setSkillId(data.skill_id || '');
-      setProvider(data.provider || '');
+      setCodingAgent(data.coding_agent || '');
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(skillId, data.version);
-      if (data.provider) {
-        await loadTemplate(data.provider, { replaceMarkdown: false });
+      if (data.coding_agent) {
+        await loadTemplate(data.coding_agent, { replaceMarkdown: false });
       } else {
         setFrontmatterSummary([]);
       }
@@ -97,11 +97,11 @@ export default function SkillEditor() {
       setName(data.name || '');
       setDescription(data.description || '');
       setSkillId(data.skill_id || '');
-      setProvider(data.provider || '');
+      setCodingAgent(data.coding_agent || '');
       setIsNewSkill(false);
       setIsEditing(keepEditing);
-      if (data.provider) {
-        await loadTemplate(data.provider, { replaceMarkdown: false });
+      if (data.coding_agent) {
+        await loadTemplate(data.coding_agent, { replaceMarkdown: false });
       } else {
         setFrontmatterSummary([]);
       }
@@ -120,13 +120,13 @@ export default function SkillEditor() {
     setIsEditing(true);
   };
 
-  const loadTemplate = async (providerValue, { replaceMarkdown }) => {
-    if (!providerValue) {
+  const loadTemplate = async (codingAgentValue, { replaceMarkdown }) => {
+    if (!codingAgentValue) {
       setFrontmatterSummary([]);
       return;
     }
     try {
-      const template = await apiRequest(`/skill-templates/${providerValue}`);
+      const template = await apiRequest(`/skill-templates/${codingAgentValue}`);
       setFrontmatterSummary(template.frontmatterSummary || []);
       if (replaceMarkdown) {
         setEditorValue(template.template || '');
@@ -137,16 +137,16 @@ export default function SkillEditor() {
     }
   };
 
-  const handleProviderChange = async (nextProvider) => {
+  const handleCodingAgentChange = async (nextAgent) => {
     const hasContent = editorValue.trim().length > 0;
-    const isChange = provider && provider !== nextProvider;
+    const isChange = codingAgent && codingAgent !== nextAgent;
     const applyChange = async (replaceMarkdown) => {
-      setProvider(nextProvider);
-      await loadTemplate(nextProvider, { replaceMarkdown });
+      setCodingAgent(nextAgent);
+      await loadTemplate(nextAgent, { replaceMarkdown });
     };
     if (hasContent && isChange) {
       Modal.confirm({
-        title: 'Сменить провайдера?',
+        title: 'Сменить кодинг-агент?',
         content: 'Требования к шаблону и frontmatter изменятся. Заменить markdown новым шаблоном?',
         okText: 'Заменить шаблон',
         cancelText: 'Оставить текущий markdown',
@@ -171,8 +171,8 @@ export default function SkillEditor() {
       message.error('Нужно описание');
       return;
     }
-    if (!provider) {
-      message.error('Нужен провайдер');
+    if (!codingAgent) {
+      message.error('Нужен Кодинг-агент');
       return;
     }
     const effectiveVersion = skillId === selectedSkillId ? (resourceVersion ?? 0) : 0;
@@ -186,7 +186,7 @@ export default function SkillEditor() {
           name: name.trim(),
           description: description.trim(),
           skill_id: skillId.trim(),
-          provider,
+          coding_agent: codingAgent,
           skill_markdown: editorValue,
           publish,
           release,
@@ -212,7 +212,7 @@ export default function SkillEditor() {
     setName('');
     setDescription('');
     setSkillId('');
-    setProvider('');
+    setCodingAgent('');
     setEditorValue('');
     setResourceVersion(0);
     setSkillVersion('');
@@ -455,12 +455,12 @@ export default function SkillEditor() {
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Провайдер</Text>
+            <Text className="muted">Кодинг-агент</Text>
             <Select
-              value={provider || undefined}
-              onChange={handleProviderChange}
-              options={providerOptions}
-              placeholder="Выберите провайдера"
+              value={codingAgent || undefined}
+              onChange={handleCodingAgentChange}
+              options={codingAgentOptions}
+              placeholder="Выберите кодинг-агент"
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -468,7 +468,7 @@ export default function SkillEditor() {
           <div style={{ marginTop: 16 }}>
             <Title level={5}>Подсказка по frontmatter</Title>
             {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Выберите провайдера, чтобы увидеть ожидаемые поля frontmatter.</Text>
+              <Text type="secondary">Выберите кодинг-агент, чтобы увидеть ожидаемые поля frontmatter.</Text>
             ) : (
               <Space direction="vertical" size={8}>
                 {frontmatterSummary.map((item) => (

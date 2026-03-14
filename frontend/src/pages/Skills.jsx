@@ -20,7 +20,7 @@ export default function Skills() {
         name: skill.name || skill.skill_id,
         skillId: skill.skill_id,
         description: skill.description || '',
-        provider: skill.provider,
+        codingAgent: skill.coding_agent,
         status: skill.status,
         version: skill.version,
         canonical: skill.canonical_name,
@@ -50,9 +50,9 @@ export default function Skills() {
       ),
     },
     {
-      title: 'Провайдер',
-      dataIndex: 'provider',
-      key: 'provider',
+      title: 'Кодинг-агент',
+      dataIndex: 'codingAgent',
+      key: 'codingAgent',
       render: (value) => <span className="mono">{value || '-'}</span>,
     },
     {

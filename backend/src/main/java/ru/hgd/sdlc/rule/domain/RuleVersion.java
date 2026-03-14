@@ -44,8 +44,8 @@ public class RuleVersion {
     private String title;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 64)
-    private RuleProvider provider;
+    @Column(name = "coding_agent", nullable = false, length = 64)
+    private RuleProvider codingAgent;
 
     @Column(name = "rule_markdown", nullable = false, columnDefinition = "TEXT")
     private String ruleMarkdown;

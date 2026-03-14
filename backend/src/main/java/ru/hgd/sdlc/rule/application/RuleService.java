@@ -109,16 +109,16 @@ public class RuleService {
         if (!ruleId.equals(request.ruleId())) {
             throw new ValidationException("Path ruleId does not match request rule_id");
         }
-        RuleProvider provider = parseProvider(request.provider());
+        RuleProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
-        if (provider == null) {
-            throw new ValidationException("provider is required");
+        if (codingAgent == null) {
+            throw new ValidationException("coding_agent is required");
         }
         MarkdownFrontmatterParser.ParsedMarkdown parsed = null;
         if (publish) {
             parsed = frontmatterParser.parse(request.ruleMarkdown());
-            validateProviderFrontmatter(provider, parsed.frontmatter());
+            validateCodingAgentFrontmatter(codingAgent, parsed.frontmatter());
         }
 
         RuleVersion existingDraft = repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.DRAFT)
@@ -164,7 +164,7 @@ public class RuleService {
         entity.setCanonicalName(canonicalName);
         entity.setStatus(publish ? RuleStatus.PUBLISHED : RuleStatus.DRAFT);
         entity.setTitle(request.title().trim());
-        entity.setProvider(provider);
+        entity.setCodingAgent(codingAgent);
         entity.setRuleMarkdown(updatedMarkdown);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
@@ -210,25 +210,25 @@ public class RuleService {
         return user.getUsername();
     }
 
-    private RuleProvider parseProvider(String provider) {
-        if (provider == null || provider.isBlank()) {
+    private RuleProvider parseCodingAgent(String codingAgent) {
+        if (codingAgent == null || codingAgent.isBlank()) {
             return null;
         }
         try {
-            return RuleProvider.from(provider);
+            return RuleProvider.from(codingAgent);
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported provider: " + provider);
+            throw new ValidationException("Unsupported coding_agent: " + codingAgent);
         }
     }
 
-    private void validateProviderFrontmatter(RuleProvider provider, ObjectNode frontmatter) {
+    private void validateCodingAgentFrontmatter(RuleProvider codingAgent, ObjectNode frontmatter) {
         if (frontmatter == null) {
             throw new ValidationException("Frontmatter is required for publish");
         }
-        List<String> required = templateService.requiredFrontmatter(provider);
+        List<String> required = templateService.requiredFrontmatter(codingAgent);
         for (String field : required) {
             if (!frontmatter.hasNonNull(field)) {
-                throw new ValidationException("Frontmatter field '" + field + "' is required for provider " + provider.name().toLowerCase());
+                throw new ValidationException("Frontmatter field '" + field + "' is required for coding_agent " + codingAgent.name().toLowerCase());
             }
             JsonNode value = frontmatter.get(field);
             if (value.isTextual() && value.asText().isBlank()) {

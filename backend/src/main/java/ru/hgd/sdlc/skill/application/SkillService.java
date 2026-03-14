@@ -112,16 +112,16 @@ public class SkillService {
         if (!skillId.equals(request.skillId())) {
             throw new ValidationException("Path skillId does not match request skill_id");
         }
-        SkillProvider provider = parseProvider(request.provider());
+        SkillProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
-        if (provider == null) {
-            throw new ValidationException("provider is required");
+        if (codingAgent == null) {
+            throw new ValidationException("coding_agent is required");
         }
         MarkdownFrontmatterParser.ParsedMarkdown parsed = null;
         if (publish) {
             parsed = frontmatterParser.parse(request.skillMarkdown());
-            validateProviderFrontmatter(provider, parsed.frontmatter());
+            validateCodingAgentFrontmatter(codingAgent, parsed.frontmatter());
         }
 
         SkillVersion existingDraft = repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.DRAFT)
@@ -175,7 +175,7 @@ public class SkillService {
         entity.setStatus(publish ? SkillStatus.PUBLISHED : SkillStatus.DRAFT);
         entity.setName(request.name().trim());
         entity.setDescription(request.description().trim());
-        entity.setProvider(provider);
+        entity.setCodingAgent(codingAgent);
         entity.setSkillMarkdown(updatedMarkdown);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
@@ -221,25 +221,25 @@ public class SkillService {
         return user.getUsername();
     }
 
-    private SkillProvider parseProvider(String provider) {
-        if (provider == null || provider.isBlank()) {
+    private SkillProvider parseCodingAgent(String codingAgent) {
+        if (codingAgent == null || codingAgent.isBlank()) {
             return null;
         }
         try {
-            return SkillProvider.from(provider);
+            return SkillProvider.from(codingAgent);
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported provider: " + provider);
+            throw new ValidationException("Unsupported coding_agent: " + codingAgent);
         }
     }
 
-    private void validateProviderFrontmatter(SkillProvider provider, ObjectNode frontmatter) {
+    private void validateCodingAgentFrontmatter(SkillProvider codingAgent, ObjectNode frontmatter) {
         if (frontmatter == null) {
             throw new ValidationException("Frontmatter is required for publish");
         }
-        List<String> required = templateService.requiredFrontmatter(provider);
+        List<String> required = templateService.requiredFrontmatter(codingAgent);
         for (String field : required) {
             if (!frontmatter.hasNonNull(field)) {
-                throw new ValidationException("Frontmatter field '" + field + "' is required for provider " + provider.name().toLowerCase());
+                throw new ValidationException("Frontmatter field '" + field + "' is required for coding_agent " + codingAgent.name().toLowerCase());
             }
             JsonNode value = frontmatter.get(field);
             if (value.isTextual() && value.asText().isBlank()) {

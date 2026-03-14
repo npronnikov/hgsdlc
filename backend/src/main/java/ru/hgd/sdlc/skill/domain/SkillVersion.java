@@ -47,8 +47,8 @@ public class SkillVersion {
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 64)
-    private SkillProvider provider;
+    @Column(name = "coding_agent", nullable = false, length = 64)
+    private SkillProvider codingAgent;
 
     @Column(name = "skill_markdown", nullable = false, columnDefinition = "TEXT")
     private String skillMarkdown;

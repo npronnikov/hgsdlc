@@ -338,7 +338,7 @@ nodes:
         entity.setCanonicalName(canonicalName);
         entity.setStatus(status);
         entity.setTitle(title);
-        entity.setProvider(provider);
+        entity.setCodingAgent(provider);
         entity.setRuleMarkdown(markdown.trim());
         entity.setChecksum(status == RuleStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);
         entity.setSavedBy("seed");
@@ -368,7 +368,7 @@ nodes:
         entity.setStatus(status);
         entity.setName(name);
         entity.setDescription(description);
-        entity.setProvider(provider);
+        entity.setCodingAgent(provider);
         entity.setSkillMarkdown(markdown.trim());
         entity.setChecksum(status == SkillStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);
         entity.setSavedBy("seed");

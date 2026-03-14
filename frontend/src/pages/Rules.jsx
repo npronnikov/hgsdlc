@@ -19,7 +19,7 @@ export default function Rules() {
         key: rule.rule_id,
         name: rule.title || rule.rule_id,
         ruleId: rule.rule_id,
-        provider: rule.provider,
+        codingAgent: rule.coding_agent,
         status: rule.status,
         version: rule.version,
         canonical: rule.canonical_name,
@@ -48,9 +48,9 @@ export default function Rules() {
       ),
     },
     {
-      title: 'Провайдер',
-      dataIndex: 'provider',
-      key: 'provider',
+      title: 'Кодинг-агент',
+      dataIndex: 'codingAgent',
+      key: 'codingAgent',
       render: (value) => <span className="mono">{value || '-'}</span>,
     },
     {
