@@ -1,12 +1,38 @@
-import React from 'react';
-import { Button, Card, Space, Table, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Space, Table, Typography, message } from 'antd';
 import { Link } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
-import { rules } from '../data/mock.js';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
 export default function Rules() {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadRules = async () => {
+    setLoading(true);
+    try {
+      const data = await apiRequest('/rules');
+      const mapped = data.map((rule) => ({
+        key: rule.rule_id,
+        name: rule.rule_id,
+        description: '',
+        status: rule.status,
+        version: rule.version,
+        canonical: rule.canonical_name,
+      }));
+      setRules(mapped);
+    } catch (err) {
+      message.error(err.message || 'Failed to load rules');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRules();
+  }, []);
   const columns = [
     {
       title: 'Rule',
@@ -51,7 +77,7 @@ export default function Rules() {
         </Space>
       </div>
       <Card>
-        <Table columns={columns} dataSource={rules} pagination={false} rowKey="key" />
+        <Table columns={columns} dataSource={rules} pagination={false} rowKey="key" loading={loading} />
       </Card>
     </div>
   );

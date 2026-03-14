@@ -46,25 +46,56 @@ body {
 .hg-sider {
   background: var(--surface) !important;
   border-right: 1px solid var(--border);
-  padding: 16px 12px;
+  padding: 12px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.hg-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .hg-sider .ant-menu {
   background: transparent;
   border-inline-end: none;
+  flex: 1 1 auto;
+  border-right: none !important;
+}
+
+.hg-sider .ant-menu-root,
+.hg-sider .ant-menu-inline,
+.hg-sider .ant-menu-light {
+  border-right: none !important;
+}
+
+.hg-sider .ant-menu-inline .ant-menu-item::after,
+.hg-sider .ant-menu-inline .ant-menu-submenu::after {
+  border-inline-end: none !important;
+  display: none !important;
+}
+
+.hg-sider .ant-menu-inline .ant-menu-item-selected::after {
+  display: none !important;
 }
 
 .hg-sider .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  justify-content: space-between;
 }
 
 .brand-mark {
   width: 40px;
   height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  aspect-ratio: 1 / 1;
   border-radius: 12px;
   background: var(--indigo);
   color: #fff;
@@ -72,6 +103,66 @@ body {
   place-items: center;
   font-weight: 700;
   letter-spacing: 0.5px;
+  flex: 0 0 40px;
+}
+
+.brand-collapsed {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sider-brand-link {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brand-collapsed .sider-brand-link {
+  justify-content: center;
+  width: 100%;
+}
+
+.sider-brand-link:hover {
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+}
+
+.header-drawer-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.header-drawer-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sider-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sider-footer-collapsed {
+  justify-content: center;
+}
+
+.sider-footer-collapsed .muted {
+  display: none;
 }
 
 .hg-header {
@@ -85,6 +176,7 @@ body {
   top: 0;
   z-index: 10;
 }
+
 
 .hg-content {
   padding: 24px;

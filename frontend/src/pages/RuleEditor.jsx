@@ -1,14 +1,15 @@
-import React from 'react';
-import { Button, Card, Input, List, Space, Tabs, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Input, List, Space, Tabs, Typography, message } from 'antd';
 import StatusTag from '../components/StatusTag.jsx';
-import { rules } from '../data/mock.js';
+import { apiRequest } from '../api/request.js';
+import { extractFrontmatterId } from '../utils/frontmatter.js';
 
 const { Title, Text } = Typography;
 
 const ruleSample = `---
 id: project-rule
-version: 1.0.2
-canonical_name: project-rule@1.0.2
+version: 1.0.0
+canonical_name: project-rule@1.0.0
 response_schema_id: agent-response-v1
 allowed_paths:
   - src/main/java/**
@@ -25,13 +26,87 @@ allowed_commands:
 - Tests under src/test/java`;
 
 export default function RuleEditor() {
+  const [rules, setRules] = useState([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+  const [selectedRuleId, setSelectedRuleId] = useState(null);
+  const [editorValue, setEditorValue] = useState(ruleSample);
+  const [resourceVersion, setResourceVersion] = useState(0);
+
+  const loadRules = async () => {
+    setLoadingRules(true);
+    try {
+      const data = await apiRequest('/rules');
+      const mapped = data.map((rule) => ({
+        key: rule.rule_id,
+        ruleId: rule.rule_id,
+        name: rule.rule_id,
+        description: '',
+        status: rule.status,
+        version: rule.version,
+        canonical: rule.canonical_name,
+      }));
+      setRules(mapped);
+      if (mapped.length > 0 && !selectedRuleId) {
+        await loadRule(mapped[0].ruleId);
+      }
+    } catch (err) {
+      message.error(err.message || 'Failed to load rules');
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
+  const loadRule = async (ruleId) => {
+    try {
+      const data = await apiRequest(`/rules/${ruleId}`);
+      setSelectedRuleId(ruleId);
+      setEditorValue(data.rule_markdown || '');
+      setResourceVersion(data.resource_version ?? 0);
+    } catch (err) {
+      message.error(err.message || 'Failed to load rule');
+    }
+  };
+
+  const saveRule = async (publish) => {
+    const ruleId = extractFrontmatterId(editorValue);
+    if (!ruleId) {
+      message.error('Frontmatter id is required');
+      return;
+    }
+    const effectiveVersion = ruleId === selectedRuleId ? (resourceVersion ?? 0) : 0;
+    try {
+      const response = await apiRequest(`/rules/${ruleId}/save`, {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          rule_markdown: editorValue,
+          publish,
+          resource_version: effectiveVersion,
+        }),
+      });
+      setEditorValue(response.rule_markdown || editorValue);
+      setResourceVersion(response.resource_version ?? resourceVersion);
+      setSelectedRuleId(ruleId);
+      await loadRules();
+      message.success(publish ? 'Rule published' : 'Draft saved');
+    } catch (err) {
+      message.error(err.message || 'Failed to save rule');
+    }
+  };
+
+  useEffect(() => {
+    loadRules();
+  }, []);
+
   return (
     <div>
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Rule Editor</Title>
         <Space>
           <Button>Compare versions</Button>
-          <Button type="primary">Publish version</Button>
+          <Button type="primary" onClick={() => saveRule(true)}>Publish version</Button>
         </Space>
       </div>
       <div className="split-layout">
@@ -39,8 +114,13 @@ export default function RuleEditor() {
           <Input placeholder="Search rules" style={{ marginBottom: 12 }} />
           <List
             dataSource={rules}
-            renderItem={(item, index) => (
-              <List.Item className={index === 0 ? 'card-muted' : ''}>
+            loading={loadingRules}
+            renderItem={(item) => (
+              <List.Item
+                className={item.ruleId === selectedRuleId ? 'card-muted' : ''}
+                onClick={() => loadRule(item.ruleId)}
+                style={{ cursor: 'pointer' }}
+              >
                 <Space direction="vertical" size={0}>
                   <Text strong>{item.name}</Text>
                   <Text type="secondary">{item.version} · {item.status}</Text>
@@ -54,25 +134,30 @@ export default function RuleEditor() {
           <Tabs
             defaultActiveKey="markdown"
             items={[
-              { key: 'markdown', label: 'Markdown', children: <pre className="code-block">{ruleSample}</pre> },
+              {
+                key: 'markdown',
+                label: 'Markdown',
+                children: (
+                  <Input.TextArea
+                    value={editorValue}
+                    onChange={(event) => setEditorValue(event.target.value)}
+                    rows={20}
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+                  />
+                ),
+              },
               {
                 key: 'preview',
                 label: 'Preview',
                 children: (
-                  <div>
-                    <Title level={5}>Project structure</Title>
-                    <ul>
-                      <li>Main code under src/main/java</li>
-                      <li>Tests under src/test/java</li>
-                    </ul>
-                  </div>
+                  <pre className="code-block">{editorValue}</pre>
                 ),
               },
             ]}
             tabBarExtraContent={
               <Space>
-                <Button>Save draft</Button>
-                <Button type="primary">Publish</Button>
+                <Button onClick={() => saveRule(false)}>Save draft</Button>
+                <Button type="primary" onClick={() => saveRule(true)}>Publish</Button>
               </Space>
             }
           />

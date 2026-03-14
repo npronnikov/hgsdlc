@@ -1,3 +1,9 @@
 databaseChangeLog:
   - include:
       file: db/changelog/001-auth-tables.sql
+  - include:
+      file: db/changelog/003-rules.sql
+  - include:
+      file: db/changelog/004-skills.sql
+  - include:
+      file: db/changelog/009-idempotency.sql

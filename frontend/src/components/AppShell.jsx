@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  LogoutOutlined,
   NodeIndexOutlined,
   PlayCircleOutlined,
   ProjectOutlined,
@@ -57,6 +60,7 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
   const meta = routeMeta[location.pathname] || { title: 'Overview', menuKey: '/overview' };
   const selectedKey = meta.menuKey;
   const title = meta.title;
@@ -64,38 +68,66 @@ export default function AppShell() {
 
   return (
     <Layout className="hg-layout">
-      <Sider width={240} className="hg-sider">
-        <div className="brand">
-          <div className="brand-mark">HG</div>
-          <div>
-            <Text strong>HGSDLC</Text>
-            <div className="muted">Control Tower</div>
-          </div>
+      <Sider
+        width={240}
+        collapsedWidth={72}
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        trigger={null}
+        className="hg-sider"
+      >
+        <div className={`brand ${collapsed ? 'brand-collapsed' : ''}`}>
+          <button
+            className="sider-brand-link"
+            type="button"
+            onClick={() => navigate('/overview')}
+          >
+            <div className="brand-mark">HG</div>
+            {!collapsed && (
+            <div>
+              <Text strong>SDLC</Text>
+              <div className="muted">Control Tower</div>
+            </div>
+            )}
+          </button>
         </div>
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
           items={navItems}
           onClick={({ key }) => navigate(key)}
+          inlineCollapsed={collapsed}
         />
-        <div className="card-muted" style={{ marginTop: 'auto' }}>
+        <div className={`card-muted sider-footer ${collapsed ? 'sider-footer-collapsed' : ''}`}>
           <Tag color="#94a3b8">v0.1</Tag>
-          <Text className="muted">staging</Text>
+          {!collapsed && <Text className="muted">staging</Text>}
         </div>
       </Sider>
       <Layout>
         <Header className="hg-header">
           <Space size="middle">
-            <Text type="secondary">HGSDLC</Text>
+            <button
+              className="header-drawer-toggle"
+              type="button"
+              onClick={() => setCollapsed((value) => !value)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </button>
+            <Text type="secondary">SDLC</Text>
             <Text type="secondary">/</Text>
             <Text strong>{title}</Text>
           </Space>
           <Space size="middle">
             <Input placeholder="Search" allowClear />
-            <Tag color="#2563eb">STAGING</Tag>
-            {user?.role && <Tag color="#4f46e5">{user.role}</Tag>}
             <Avatar style={{ backgroundColor: '#4f46e5' }}>{initials}</Avatar>
-            <Button onClick={logout}>Logout</Button>
+            <Button
+              type="text"
+              icon={<LogoutOutlined />}
+              onClick={logout}
+              aria-label="Logout"
+            />
           </Space>
         </Header>
         <Content className="hg-content">
