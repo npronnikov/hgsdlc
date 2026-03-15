@@ -17,6 +17,46 @@ const codingAgentOptions = [
   { value: 'platform-native', label: 'platform-native' },
 ];
 
+const DEFAULT_VERSION = '0.1';
+const parseMajorMinor = (version) => {
+  const normalized = (version || '').trim() || DEFAULT_VERSION;
+  const match = normalized.match(/^(\d+)\.(\d+)(?:\.\d+)?$/);
+  if (!match) {
+    return { major: 0, minor: 0, valid: false };
+  }
+  return { major: Number(match[1]), minor: Number(match[2]), valid: true };
+};
+const compareVersions = (a, b) => {
+  if (a.major !== b.major) return a.major - b.major;
+  return a.minor - b.minor;
+};
+const nextMajorVersion = (version) => {
+  const parsed = parseMajorMinor(version);
+  const major = parsed.valid ? parsed.major : 0;
+  return `${major + 1}.0`;
+};
+const nextMinorVersion = (version) => {
+  const parsed = parseMajorMinor(version);
+  if (!parsed.valid) {
+    return DEFAULT_VERSION;
+  }
+  return `${parsed.major}.${parsed.minor + 1}`;
+};
+const getLatestVersion = (versions, status) => {
+  const candidates = versions.filter((item) => !status || item.status === status);
+  let best = null;
+  candidates.forEach((item) => {
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid) {
+      return;
+    }
+    if (!best || compareVersions(parsed, best.parsed) > 0) {
+      best = { value: item.value, parsed };
+    }
+  });
+  return best ? best.value : '';
+};
+
 export default function RuleEditor() {
   const { ruleId: ruleIdParam } = useParams();
   const location = useLocation();
@@ -235,6 +275,13 @@ export default function RuleEditor() {
     }
   }, [ruleIdParam, isCreateRoute]);
 
+  const latestDraftVersion = getLatestVersion(versionOptions, 'draft');
+  const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
+  const publishVersion = latestDraftVersion
+    || (latestPublishedVersion ? nextMinorVersion(latestPublishedVersion) : (ruleVersion || DEFAULT_VERSION));
+  const publishLabel = `Опубликовать версию → ${publishVersion}`;
+  const releaseLabel = `Несовместимое обновление (major) → ${nextMajorVersion(publishVersion)}`;
+
   return (
     <div className="rule-editor-page">
       <div className="page-header">
@@ -247,11 +294,21 @@ export default function RuleEditor() {
                 <Dropdown
                   menu={{
                     items: [
-                      { key: 'publish', label: 'Опубликовать версию' },
-                      { key: 'release', label: 'Выпустить релиз' },
+                      { key: 'publish', label: publishLabel },
+                      { key: 'release', label: releaseLabel },
                     ],
                     onClick: ({ key }) => {
-                      saveRule({ publish: true, release: key === 'release' });
+                      if (key === 'release') {
+                        Modal.confirm({
+                          title: 'Подтвердить major-обновление?',
+                          content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                          okText: 'Выпустить',
+                          cancelText: 'Отмена',
+                          onOk: () => saveRule({ publish: true, release: true }),
+                        });
+                        return;
+                      }
+                      saveRule({ publish: true, release: false });
                     },
                   }}
                 >
@@ -268,11 +325,21 @@ export default function RuleEditor() {
               <Dropdown
                 menu={{
                   items: [
-                    { key: 'publish', label: 'Опубликовать версию' },
-                    { key: 'release', label: 'Выпустить релиз' },
+                    { key: 'publish', label: publishLabel },
+                    { key: 'release', label: releaseLabel },
                   ],
                   onClick: ({ key }) => {
-                    saveRule({ publish: true, release: key === 'release' });
+                    if (key === 'release') {
+                      Modal.confirm({
+                        title: 'Подтвердить major-обновление?',
+                        content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                        okText: 'Выпустить',
+                        cancelText: 'Отмена',
+                        onOk: () => saveRule({ publish: true, release: true }),
+                      });
+                      return;
+                    }
+                    saveRule({ publish: true, release: false });
                   },
                 }}
               >

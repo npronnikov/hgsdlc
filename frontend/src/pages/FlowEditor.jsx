@@ -59,6 +59,28 @@ const NODE_KIND_META = {
   },
 };
 
+const DEFAULT_VERSION = '0.1';
+const parseMajorMinor = (version) => {
+  const normalized = (version || '').trim() || DEFAULT_VERSION;
+  const match = normalized.match(/^(\d+)\.(\d+)(?:\.\d+)?$/);
+  if (!match) {
+    return { major: 0, minor: 0, valid: false };
+  }
+  return { major: Number(match[1]), minor: Number(match[2]), valid: true };
+};
+const nextMajorVersion = (version) => {
+  const parsed = parseMajorMinor(version);
+  const major = parsed.valid ? parsed.major : 0;
+  return `${major + 1}.0`;
+};
+const nextMinorVersion = (version) => {
+  const parsed = parseMajorMinor(version);
+  if (!parsed.valid) {
+    return DEFAULT_VERSION;
+  }
+  return `${parsed.major}.${parsed.minor + 1}`;
+};
+
 const EXECUTION_CONTEXT_TYPES = [
   { value: 'user_request', label: 'user_request' },
   { value: 'directory_ref', label: 'directory_ref' },
@@ -100,7 +122,6 @@ const initialFlow = {
   title: 'Flow изменений',
   flowId: 'feature-change-flow',
   description: 'Flow реализации изменений с этапом согласования.',
-  status: 'draft',
   startNodeId: 'intake-analysis',
   codingAgent: 'qwen',
   ruleRefs: ['project-rule@1.0.2'],
@@ -113,7 +134,6 @@ const emptyFlow = {
   title: '',
   flowId: '',
   description: '',
-  status: 'draft',
   startNodeId: '',
   codingAgent: '',
   ruleRefs: [],
@@ -511,6 +531,11 @@ export default function FlowEditor() {
   const flowVersionLabel = currentStatus === 'draft' || isCreateMode
     ? 'черновик'
     : (flowVersion || '0.0.0');
+  const publishVersion = currentStatus === 'draft' || isCreateMode
+    ? (flowVersion || DEFAULT_VERSION)
+    : nextMinorVersion(flowVersion || DEFAULT_VERSION);
+  const publishLabel = `Опубликовать версию → ${publishVersion}`;
+  const releaseLabel = `Несовместимое обновление (major) → ${nextMajorVersion(publishVersion)}`;
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
   const nodeIdOptions = useMemo(
     () => nodes.map((node) => ({ value: node.id, label: node.id })),
@@ -519,7 +544,7 @@ export default function FlowEditor() {
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const validationErrors = validateFlow(nodes, flowMeta);
   const isReadOnly = !isEditing;
-  const canEditNodeId = flowMeta.status === 'draft' && isEditing;
+  const canEditNodeId = currentStatus === 'draft' && isEditing;
 
   const filteredRules = rules.filter(
     (rule) => !flowMeta.codingAgent || rule.codingAgent === flowMeta.codingAgent
@@ -842,7 +867,6 @@ export default function FlowEditor() {
       `canonical_name: ${canonicalName}`,
       `title: ${flowMeta.title}`,
       `description: ${flowMeta.description || ''}`,
-      `status: ${flowMeta.status || 'draft'}`,
       `start_node_id: ${flowMeta.startNodeId}`,
       `coding_agent: ${flowMeta.codingAgent || ''}`,
     ];
@@ -950,14 +974,6 @@ export default function FlowEditor() {
     }
     if (!flowMeta.codingAgent.trim()) {
       message.error('Нужен coding_agent');
-      return false;
-    }
-    if (publish && flowMeta.status !== 'published') {
-      message.error('Для публикации нужен status=published');
-      return false;
-    }
-    if (!publish && flowMeta.status !== 'draft') {
-      message.error('Для сохранения нужен status=draft');
       return false;
     }
     const flowYaml = buildFlowYaml();
@@ -1094,11 +1110,21 @@ export default function FlowEditor() {
           <Dropdown
             menu={{
               items: [
-                { key: 'publish', label: 'Опубликовать версию' },
-                { key: 'release', label: 'Выпустить релиз' },
+                { key: 'publish', label: publishLabel },
+                { key: 'release', label: releaseLabel },
               ],
               onClick: ({ key }) => {
-                saveFlow({ publish: true, release: key === 'release' });
+                if (key === 'release') {
+                  Modal.confirm({
+                    title: 'Подтвердить major-обновление?',
+                    content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                    okText: 'Выпустить',
+                    cancelText: 'Отмена',
+                    onOk: () => saveFlow({ publish: true, release: true }),
+                  });
+                  return;
+                }
+                saveFlow({ publish: true, release: false });
               },
             }}
           >
@@ -1303,20 +1329,6 @@ export default function FlowEditor() {
                     value={flowMeta.description}
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ description: event.target.value })}
-                  />
-                </div>
-              </div>
-              <div>
-                <Text className="muted">Статус</Text>
-                <div className="field-control">
-                  <Select
-                    value={flowMeta.status}
-                    disabled={isReadOnly}
-                    onChange={(value) => updateFlowMeta({ status: value })}
-                    options={[
-                      { value: 'draft', label: 'draft' },
-                      { value: 'published', label: 'published' },
-                    ]}
                   />
                 </div>
               </div>

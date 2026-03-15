@@ -126,9 +126,6 @@ public class FlowService {
         if (model.getTitle() == null || model.getTitle().isBlank()) {
             throw new ValidationException("title is required in flow_yaml");
         }
-        if (model.getStatus() == null || model.getStatus().isBlank()) {
-            throw new ValidationException("status is required in flow_yaml");
-        }
         if (model.getStartNodeId() == null || model.getStartNodeId().isBlank()) {
             throw new ValidationException("start_node_id is required in flow_yaml");
         }
@@ -138,13 +135,6 @@ public class FlowService {
 
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
-        String normalizedStatus = model.getStatus().trim().toLowerCase();
-        if (publish && !"published".equals(normalizedStatus)) {
-            throw new ValidationException("flow_yaml status must be published for publish");
-        }
-        if (!publish && !"draft".equals(normalizedStatus)) {
-            throw new ValidationException("flow_yaml status must be draft for save");
-        }
 
         List<String> validationErrors = flowValidator.validate(model);
         if (!validationErrors.isEmpty()) {

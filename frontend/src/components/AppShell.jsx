@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button } from 'antd';
+import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   AppstoreOutlined,
   BranchesOutlined,
@@ -78,6 +78,11 @@ export default function AppShell() {
   const showRuleIdCrumb = isRuleEditorRoute && ruleIdFromPath && ruleIdFromPath !== 'create';
   const showSkillIdCrumb = isSkillEditorRoute && skillIdFromPath && skillIdFromPath !== 'create';
   const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
+  const displayName = user?.username || 'Пользователь';
+  const userMenuItems = [
+    { key: 'settings', icon: <SettingOutlined />, label: 'Настройки' },
+    { key: 'logout', icon: <LogoutOutlined />, label: 'Выход' },
+  ];
 
   return (
     <Layout className="hg-layout">
@@ -155,12 +160,21 @@ export default function AppShell() {
           <Space size="middle">
             <Input placeholder="Search" allowClear />
             <Avatar style={{ backgroundColor: '#4f46e5' }}>{initials}</Avatar>
-            <Button
-              type="text"
-              icon={<LogoutOutlined />}
-              onClick={logout}
-              aria-label="Logout"
-            />
+            <Dropdown
+              trigger={['hover']}
+              menu={{
+                items: userMenuItems,
+                onClick: ({ key }) => {
+                  if (key === 'logout') {
+                    logout();
+                  }
+                },
+              }}
+            >
+              <Button type="text" className="profile-name-trigger">
+                {displayName}
+              </Button>
+            </Dropdown>
           </Space>
         </Header>
         <Content className="hg-content">
