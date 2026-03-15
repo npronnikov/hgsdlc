@@ -52,12 +52,6 @@ public class NodeModel {
     @JsonProperty("on_failure")
     private String onFailure;
 
-    @JsonProperty("allowed_outcomes")
-    private List<String> allowedOutcomes;
-
-    @JsonProperty("outcome_routes")
-    private Map<String, String> outcomeRoutes;
-
     @JsonProperty("on_submit")
     private String onSubmit;
 

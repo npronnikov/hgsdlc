@@ -156,8 +156,6 @@ const initialNodes = [
       ],
       expectedMutations: [],
       onSuccess: 'collect-answers',
-      allowedOutcomes: [],
-      outcomeRoutes: {},
       isStart: true,
     },
   },
@@ -208,8 +206,6 @@ const initialNodes = [
         { path: 'docs/requirements/**', required: true },
       ],
       onSuccess: 'approve-requirements',
-      allowedOutcomes: [],
-      outcomeRoutes: {},
     },
   },
   {
@@ -258,8 +254,6 @@ const initialNodes = [
       producedArtifacts: [],
       expectedMutations: [],
       onSuccess: null,
-      allowedOutcomes: [],
-      outcomeRoutes: {},
     },
   },
 ];
@@ -296,11 +290,6 @@ function buildEdges(nodes) {
     }
     if (data.onReject) {
       addEdge(node.id, data.onReject, 'on_reject', 'outcome');
-    }
-    if (data.outcomeRoutes) {
-      Object.entries(data.outcomeRoutes).forEach(([outcome, target]) => {
-        addEdge(node.id, target, `outcome: ${outcome}`, 'outcome');
-      });
     }
     if (data.onReworkRoutes) {
       Object.entries(data.onReworkRoutes).forEach(([mode, target]) => {
@@ -437,9 +426,6 @@ function validateFlow(nodes, meta) {
     if (data.onSubmit) transitions.push(['on_submit', data.onSubmit]);
     if (data.onApprove) transitions.push(['on_approve', data.onApprove]);
     if (data.onReject) transitions.push(['on_reject', data.onReject]);
-    if (data.outcomeRoutes) {
-      Object.entries(data.outcomeRoutes).forEach(([key, value]) => transitions.push([`outcome:${key}`, value]));
-    }
     if (data.onReworkRoutes) {
       Object.entries(data.onReworkRoutes).forEach(([key, value]) => transitions.push([`rework:${key}`, value]));
     }
@@ -457,29 +443,8 @@ function validateFlow(nodes, meta) {
     }
 
     if (data.type === 'executor') {
-      const hasOnSuccess = !!data.onSuccess;
-      const hasOutcomes = Array.isArray(data.allowedOutcomes) && data.allowedOutcomes.length > 0;
-      if (!hasOnSuccess && !hasOutcomes) {
-        errors.push(`Executor нода требует on_success или allowed_outcomes: ${node.id}`);
-      }
-      if (hasOutcomes) {
-        if (!data.outcomeRoutes || Object.keys(data.outcomeRoutes).length === 0) {
-          errors.push(`outcome_routes обязателен при allowed_outcomes: ${node.id}`);
-        } else {
-          data.allowedOutcomes.forEach((outcome) => {
-            if (!data.outcomeRoutes[outcome]) {
-              errors.push(`Нет outcome route для ${outcome}: ${node.id}`);
-            }
-          });
-          Object.keys(data.outcomeRoutes).forEach((outcome) => {
-            if (!data.allowedOutcomes.includes(outcome)) {
-              errors.push(`Outcome route не объявлен в allowed_outcomes: ${node.id}`);
-            }
-          });
-        }
-      }
-      if (data.nodeKind !== 'ai' && hasOutcomes) {
-        errors.push(`allowed_outcomes поддерживаются только AI нодами: ${node.id}`);
+      if (!data.onSuccess) {
+        errors.push(`Executor нода требует on_success: ${node.id}`);
       }
     }
 
@@ -539,13 +504,16 @@ function validateFlow(nodes, meta) {
 
 export default function FlowEditor() {
   const { flowId } = useParams();
-  const [flowMeta, setFlowMeta] = useState(initialFlow);
+  const isCreateMode = flowId === 'create';
+  const [flowMeta, setFlowMeta] = useState(isCreateMode ? emptyFlow : initialFlow);
   const [resourceVersion, setResourceVersion] = useState(0);
-  const [flowVersion, setFlowVersion] = useState('0.1');
-  const [currentStatus, setCurrentStatus] = useState('');
+  const [flowVersion, setFlowVersion] = useState(isCreateMode ? '0.1' : '0.1');
+  const [currentStatus, setCurrentStatus] = useState(isCreateMode ? 'draft' : '');
   const [showYaml, setShowYaml] = useState(false);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [selectedNodeId, setSelectedNodeId] = useState(initialNodes[0].id);
+  const [nodes, setNodes, onNodesChange] = useNodesState(isCreateMode ? [] : initialNodes);
+  const [selectedNodeId, setSelectedNodeId] = useState(
+    isCreateMode ? null : (initialNodes[0]?.id || null),
+  );
   const [flowInstance, setFlowInstance] = useState(null);
   const flowWrapperRef = useRef(null);
   const [pendingConnection, setPendingConnection] = useState(null);
@@ -556,7 +524,6 @@ export default function FlowEditor() {
   const [nodeIdDraft, setNodeIdDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const isCreateMode = flowId === 'create';
   const flowVersionLabel = currentStatus === 'draft' || isCreateMode
     ? 'черновик'
     : (flowVersion || '0.0.0');
@@ -624,14 +591,6 @@ export default function FlowEditor() {
         if (data.onSubmit === selectedNodeId) nextData.onSubmit = trimmed;
         if (data.onApprove === selectedNodeId) nextData.onApprove = trimmed;
         if (data.onReject === selectedNodeId) nextData.onReject = trimmed;
-        if (data.outcomeRoutes) {
-          nextData.outcomeRoutes = Object.fromEntries(
-            Object.entries(data.outcomeRoutes).map(([key, value]) => [
-              key,
-              value === selectedNodeId ? trimmed : value,
-            ])
-          );
-        }
         if (data.onReworkRoutes) {
           nextData.onReworkRoutes = Object.fromEntries(
             Object.entries(data.onReworkRoutes).map(([key, value]) => [
@@ -692,11 +651,6 @@ export default function FlowEditor() {
           if (data.onSubmit === nodeId) nextData.onSubmit = '';
           if (data.onApprove === nodeId) nextData.onApprove = '';
           if (data.onReject === nodeId) nextData.onReject = '';
-          if (data.outcomeRoutes) {
-            nextData.outcomeRoutes = Object.fromEntries(
-              Object.entries(data.outcomeRoutes).filter(([, value]) => value !== nodeId)
-            );
-          }
           if (data.onReworkRoutes) {
             nextData.onReworkRoutes = Object.fromEntries(
               Object.entries(data.onReworkRoutes).filter(([, value]) => value !== nodeId)
@@ -716,15 +670,7 @@ export default function FlowEditor() {
   const getRouteOptions = (node) => {
     const data = node?.data || {};
     if (data.nodeKind === 'ai') {
-      const outcomes = data.allowedOutcomes || [];
-      const outcomeOptions = outcomes.map((outcome) => ({
-        value: `outcome:${outcome}`,
-        label: `outcome: ${outcome}`,
-      }));
-      return [
-        { value: 'on_success', label: 'on_success' },
-        ...outcomeOptions,
-      ];
+      return [{ value: 'on_success', label: 'on_success' }];
     }
     if (data.nodeKind === 'command') {
       return [{ value: 'on_success', label: 'on_success' }];
@@ -764,13 +710,6 @@ export default function FlowEditor() {
           data.onApprove = targetId;
         } else if (routeKey === 'on_reject') {
           data.onReject = targetId;
-        } else if (routeKey.startsWith('outcome:')) {
-          const outcome = routeKey.split(':')[1];
-          data.outcomeRoutes = { ...(data.outcomeRoutes || {}) };
-          data.outcomeRoutes[outcome] = targetId;
-          const allowed = new Set(data.allowedOutcomes || []);
-          allowed.add(outcome);
-          data.allowedOutcomes = Array.from(allowed);
         } else if (routeKey.startsWith('rework:')) {
           const mode = routeKey.split(':')[1];
           data.onReworkRoutes = { ...(data.onReworkRoutes || {}) };
@@ -800,16 +739,6 @@ export default function FlowEditor() {
           data.onApprove = null;
         } else if (label === 'on_reject') {
           data.onReject = null;
-        } else if (label.startsWith('outcome:')) {
-          const outcome = label.split(':')[1].trim();
-          if (data.outcomeRoutes) {
-            const nextRoutes = { ...data.outcomeRoutes };
-            delete nextRoutes[outcome];
-            data.outcomeRoutes = nextRoutes;
-          }
-          if (data.allowedOutcomes) {
-            data.allowedOutcomes = data.allowedOutcomes.filter((item) => item !== outcome);
-          }
         } else if (label.startsWith('rework:')) {
           const mode = label.split(':')[1].trim();
           if (data.onReworkRoutes) {
@@ -838,8 +767,6 @@ export default function FlowEditor() {
       responseSchema: '',
       producedArtifacts: [],
       expectedMutations: [],
-      allowedOutcomes: [],
-      outcomeRoutes: {},
       onSuccess: '',
       onSubmit: '',
       onApprove: '',
@@ -994,16 +921,6 @@ export default function FlowEditor() {
       }
       if (data.onSuccess) {
         lines.push(`    on_success: ${data.onSuccess}`);
-      }
-      if (data.allowedOutcomes && data.allowedOutcomes.length > 0) {
-        lines.push('    allowed_outcomes:');
-        data.allowedOutcomes.forEach((outcome) => lines.push(`      - ${outcome}`));
-      }
-      if (data.outcomeRoutes && Object.keys(data.outcomeRoutes).length > 0) {
-        lines.push('    outcome_routes:');
-        Object.entries(data.outcomeRoutes).forEach(([key, value]) => {
-          lines.push(`      ${key}: ${value}`);
-        });
       }
       if (data.onSubmit) {
         lines.push(`    on_submit: ${data.onSubmit}`);
@@ -1586,8 +1503,6 @@ export default function FlowEditor() {
                         type: meta.type,
                         executionMode: meta.executionMode,
                         skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
-                        allowedOutcomes: value === 'ai' ? selectedNode.data.allowedOutcomes || [] : [],
-                        outcomeRoutes: value === 'ai' ? selectedNode.data.outcomeRoutes || {} : {},
                         onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
                         onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
                         onReject: value === 'human_approval' ? selectedNode.data.onReject || '' : '',
@@ -1852,39 +1767,6 @@ export default function FlowEditor() {
                           onChange={(event) => updateSelectedNode({ onSuccess: event.target.value })}
                         />
                       </div>
-                      {selectedNode.data.nodeKind === 'ai' && (
-                        <>
-                          <div style={{ marginTop: 8 }}>
-                            <Text className="muted">allowed_outcomes</Text>
-                            <Select
-                              mode="tags"
-                              tokenSeparators={[',']}
-                              value={selectedNode.data.allowedOutcomes || []}
-                              disabled={isReadOnly}
-                              onChange={(value) => updateSelectedNode({ allowedOutcomes: value })}
-                              placeholder="Добавить outcomes"
-                            />
-                          </div>
-                          {selectedNode.data.allowedOutcomes && selectedNode.data.allowedOutcomes.length > 0 && (
-                            <div className="transition-list">
-                              {selectedNode.data.allowedOutcomes.map((outcome) => (
-                                <div key={outcome} className="transition-row">
-                                  <span className="mono">{outcome}</span>
-                                  <Input
-                                    value={selectedNode.data.outcomeRoutes?.[outcome]}
-                                    disabled={isReadOnly}
-                                    onChange={(event) => {
-                                      const nextRoutes = { ...(selectedNode.data.outcomeRoutes || {}) };
-                                      nextRoutes[outcome] = event.target.value;
-                                      updateSelectedNode({ outcomeRoutes: nextRoutes });
-                                    }}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
                     </>
                   )}
                   {selectedNode.data.nodeKind === 'human_input' && (

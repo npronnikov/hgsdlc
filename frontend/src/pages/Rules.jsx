@@ -92,22 +92,26 @@ export default function Rules() {
             {filteredRules.map((rule) => (
               <Card
                 key={rule.key}
-                className="resource-card"
+                className={`resource-card rule-card status-${(rule.status || 'unknown').toLowerCase()}`}
                 hoverable
                 onClick={() => navigate(`/rules/${rule.ruleId}`)}
               >
                 <div className="resource-card-header">
-                  <Text strong>{rule.name}</Text>
+                  <div className="resource-card-title">
+                    <span className="resource-card-name">{rule.name}</span>
+                  </div>
                   <StatusTag value={rule.status} />
                 </div>
-                <div className="resource-card-meta">
-                  <span className="mono">{rule.ruleId}</span>
-                  {rule.description && <Text type="secondary">{rule.description}</Text>}
-                  <span className="mono">{rule.canonical}</span>
-                </div>
+                {rule.description && (
+                  <Text type="secondary" className="resource-card-description">
+                    {rule.description}
+                  </Text>
+                )}
                 <div className="resource-card-footer">
-                  <span className="mono">{rule.version}</span>
-                  <span className="mono">{rule.codingAgent || '-'}</span>
+                  <span className="resource-canonical mono">{rule.canonical}</span>
+                  <div className="resource-card-chips">
+                    <span className="resource-chip">{rule.codingAgent || 'no agent'}</span>
+                  </div>
                 </div>
               </Card>
             ))}

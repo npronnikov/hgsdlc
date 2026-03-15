@@ -50,12 +50,14 @@ public class SeedCatalogInitializer implements ApplicationRunner {
                 RuleStatus.PUBLISHED,
                 RuleProvider.PLATFORM_NATIVE,
                 "Project baseline rule",
+                "Baseline execution constraints for project work.",
                 """
 ---
 id: project-rule
 version: 1.0.0
 canonical_name: project-rule@1.0.0
 title: Project baseline rule
+description: Baseline execution constraints for project work.
 response_schema_id: agent-response-v1
 allowed_paths:
   - src
@@ -75,12 +77,14 @@ Follow the repository conventions and validate before delivery.
                 RuleStatus.PUBLISHED,
                 RuleProvider.CLAUDE,
                 "Audit readiness rule",
+                "Ensure responses are auditable and assumptions are explicit.",
                 """
 ---
 id: audit-rule
 version: 1.0.0
 canonical_name: audit-rule@1.0.0
 title: Audit readiness rule
+description: Ensure responses are auditable and assumptions are explicit.
 response_schema_id: agent-response-v1
 allowed_paths:
   - src
@@ -99,12 +103,14 @@ Document assumptions and provide a clear audit trail.
                 RuleStatus.DRAFT,
                 RuleProvider.QWEN,
                 "Sandbox rule (draft)",
+                "Draft rule for sandbox experiments and trials.",
                 """
 ---
 id: sandbox-rule
 version: 0.2
 canonical_name: sandbox-rule@0.2
 title: Sandbox rule (draft)
+description: Draft rule for sandbox experiments and trials.
 response_schema_id: agent-response-v1
 allowed_paths:
   - src
@@ -402,6 +408,7 @@ nodes:
             RuleStatus status,
             RuleProvider provider,
             String title,
+            String description,
             String markdown
     ) {
         if (!ruleRepository.findByRuleIdOrderBySavedAtDesc(ruleId).isEmpty()) {
@@ -415,6 +422,7 @@ nodes:
         entity.setCanonicalName(canonicalName);
         entity.setStatus(status);
         entity.setTitle(title);
+        entity.setDescription(description);
         entity.setCodingAgent(provider);
         entity.setRuleMarkdown(markdown.trim());
         entity.setChecksum(status == RuleStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);

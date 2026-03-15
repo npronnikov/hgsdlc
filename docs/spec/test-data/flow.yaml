@@ -73,16 +73,11 @@ nodes:
       - path: .hgwork/{runId}/{nodeId}/artifacts/questions.md
         required: false
     expected_mutations: []
-    allowed_outcomes:
-      - requirements_ready
-      - need_more_input
-    outcome_routes:
-      requirements_ready: approve-requirements
-      need_more_input: collect-answers
+    on_success: approve-requirements
     on_failure: fail
     instruction: |
       Update requirements based on answers.
-      If answers are insufficient, return outcome need_more_input and follow-up questions.
+      If answers are insufficient, write follow-up questions.
 
   - id: approve-requirements
     title: Approve requirements

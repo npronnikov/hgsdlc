@@ -137,8 +137,6 @@ public class FlowValidator {
     private void validateTerminal(NodeModel node, List<String> errors) {
         boolean hasTransition = (node.getOnSuccess() != null && !node.getOnSuccess().isBlank())
                 || (node.getOnFailure() != null && !node.getOnFailure().isBlank())
-                || (node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty())
-                || (node.getOutcomeRoutes() != null && !node.getOutcomeRoutes().isEmpty())
                 || (node.getOnSubmit() != null && !node.getOnSubmit().isBlank())
                 || (node.getOnApprove() != null && !node.getOnApprove().isBlank())
                 || (node.getOnReject() != null && !node.getOnReject().isBlank())
@@ -158,9 +156,8 @@ public class FlowValidator {
             List<String> errors
     ) {
         boolean hasOnSuccess = node.getOnSuccess() != null && !node.getOnSuccess().isBlank();
-        boolean hasOutcomes = node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty();
-        if (!hasOnSuccess && !hasOutcomes) {
-            errors.add("Executor node requires on_success or allowed_outcomes: " + node.getId());
+        if (!hasOnSuccess) {
+            errors.add("Executor node requires on_success: " + node.getId());
         }
         if ("ai".equals(nodeKind) && (node.getOnFailure() == null || node.getOnFailure().isBlank())) {
             errors.add("AI executor requires on_failure: " + node.getId());
@@ -174,31 +171,6 @@ public class FlowValidator {
             } else {
                 assertTarget(node.getId(), "on_failure", node.getOnFailure(), nodesById, errors);
             }
-        }
-        if (hasOutcomes) {
-            Map<String, String> routes = node.getOutcomeRoutes();
-            if (routes == null || routes.isEmpty()) {
-                errors.add("Executor node requires outcome_routes when allowed_outcomes present: " + node.getId());
-            } else {
-                for (String outcome : node.getAllowedOutcomes()) {
-                    String target = routes.get(outcome);
-                    if (target == null || target.isBlank()) {
-                        errors.add("Missing outcome route for " + outcome + " in node: " + node.getId());
-                        continue;
-                    }
-                    assertTarget(node.getId(), "outcome:" + outcome, target, nodesById, errors);
-                }
-                for (String outcome : routes.keySet()) {
-                    if (node.getAllowedOutcomes() == null || !node.getAllowedOutcomes().contains(outcome)) {
-                        errors.add("Outcome route not declared in allowed_outcomes: " + node.getId() + " -> " + outcome);
-                    }
-                }
-            }
-        } else if (node.getOutcomeRoutes() != null && !node.getOutcomeRoutes().isEmpty()) {
-            errors.add("Outcome routes require allowed_outcomes: " + node.getId());
-        }
-        if (!"ai".equals(nodeKind) && node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty()) {
-            errors.add("allowed_outcomes only supported for AI nodes: " + node.getId());
         }
     }
 
@@ -270,9 +242,6 @@ public class FlowValidator {
         }
         if (node.getOnFailure() != null) {
             targets.add(node.getOnFailure());
-        }
-        if (node.getOutcomeRoutes() != null) {
-            targets.addAll(node.getOutcomeRoutes().values());
         }
         if (node.getOnSubmit() != null) {
             targets.add(node.getOnSubmit());

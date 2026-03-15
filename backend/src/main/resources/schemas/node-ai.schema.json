@@ -9,6 +9,7 @@
     "node_kind",
     "execution_mode",
     "execution_context",
+    "on_success",
     "on_failure"
   ],
   "properties": {
@@ -37,12 +38,7 @@
       "items": { "$ref": "#/$defs/path_requirement" }
     },
     "on_success": { "type": "string" },
-    "on_failure": { "type": "string" },
-    "allowed_outcomes": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "outcome_routes": { "type": "object" }
+    "on_failure": { "type": "string" }
   },
   "$defs": {
     "execution_context_entry": {

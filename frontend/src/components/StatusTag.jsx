@@ -22,7 +22,7 @@ const colorMap = {
 export default function StatusTag({ value }) {
   const color = colorMap[value] || '#64748b';
   return (
-    <Tag color={color} className="tag-dot">
+    <Tag color={color}>
       {value}
     </Tag>
   );

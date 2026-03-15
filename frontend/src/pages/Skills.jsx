@@ -99,22 +99,26 @@ export default function Skills() {
             {filteredSkills.map((skill) => (
               <Card
                 key={skill.key}
-                className="resource-card"
+                className={`resource-card skill-card status-${(skill.status || 'unknown').toLowerCase()}`}
                 hoverable
                 onClick={() => navigate(`/skills/${skill.skillId}`)}
               >
                 <div className="resource-card-header">
-                  <Text strong>{skill.name}</Text>
+                  <div className="resource-card-title">
+                    <span className="resource-card-name">{skill.name}</span>
+                  </div>
                   <StatusTag value={skill.status} />
                 </div>
-                <div className="resource-card-meta">
-                  <span className="mono">{skill.skillId}</span>
-                  {skill.description && <Text type="secondary">{skill.description}</Text>}
-                  <span className="mono">{skill.canonical}</span>
-                </div>
+                {skill.description && (
+                  <Text type="secondary" className="resource-card-description">
+                    {skill.description}
+                  </Text>
+                )}
                 <div className="resource-card-footer">
-                  <span className="mono">{skill.version}</span>
-                  <span className="mono">{skill.codingAgent || '-'}</span>
+                  <span className="resource-canonical mono">{skill.canonical}</span>
+                  <div className="resource-card-chips">
+                    <span className="resource-chip">{skill.codingAgent || 'no agent'}</span>
+                  </div>
                 </div>
               </Card>
             ))}
