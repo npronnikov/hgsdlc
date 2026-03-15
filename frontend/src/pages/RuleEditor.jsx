@@ -5,6 +5,7 @@ import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../api/request.js';
+import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
@@ -28,6 +29,7 @@ export default function RuleEditor() {
   const [hasDraft, setHasDraft] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('');
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [ruleId, setRuleId] = useState('');
   const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
@@ -46,6 +48,7 @@ export default function RuleEditor() {
       setRuleVersion(data.version || '');
       setCurrentStatus(data.status || '');
       setTitle(data.title || '');
+      setDescription(data.description || '');
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
       setIsNewRule(false);
@@ -93,6 +96,7 @@ export default function RuleEditor() {
       setRuleVersion(data.version || value);
       setCurrentStatus(data.status || '');
       setTitle(data.title || '');
+      setDescription(data.description || '');
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
       setIsNewRule(false);
@@ -164,6 +168,10 @@ export default function RuleEditor() {
       message.error('Нужно название');
       return;
     }
+    if (!description.trim()) {
+      message.error('Нужно описание');
+      return;
+    }
     if (!codingAgent) {
       message.error('Нужен Кодинг-агент');
       return;
@@ -177,6 +185,7 @@ export default function RuleEditor() {
         },
         body: JSON.stringify({
           title: title.trim(),
+          description: description.trim(),
           rule_id: ruleId.trim(),
           coding_agent: codingAgent,
           rule_markdown: editorValue,
@@ -195,13 +204,14 @@ export default function RuleEditor() {
       await loadVersions(response.rule_id || ruleId, response.version || ruleVersion);
       message.success(publish ? 'Rule опубликован' : 'Черновик сохранён');
     } catch (err) {
-      message.error(err.message || 'Не удалось сохранить Rule');
+      message.error(toRussianError(err?.message, 'Не удалось сохранить Rule'));
     }
   };
 
   const startNewRule = () => {
     setSelectedRuleId(null);
     setTitle('');
+    setDescription('');
     setRuleId('');
     setCodingAgent('');
     setEditorValue('');
@@ -422,6 +432,17 @@ export default function RuleEditor() {
               placeholder="Rule проекта"
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Описание</Text>
+            <Input.TextArea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Кратко опишите назначение правила"
+              rows={2}
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>

@@ -100,6 +100,9 @@ public class RuleService {
         if (request.title() == null || request.title().isBlank()) {
             throw new ValidationException("title is required");
         }
+        if (request.description() == null || request.description().isBlank()) {
+            throw new ValidationException("description is required");
+        }
         if (request.ruleId() == null || request.ruleId().isBlank()) {
             throw new ValidationException("rule_id is required");
         }
@@ -171,6 +174,7 @@ public class RuleService {
         entity.setCanonicalName(canonicalName);
         entity.setStatus(publish ? RuleStatus.PUBLISHED : RuleStatus.DRAFT);
         entity.setTitle(request.title().trim());
+        entity.setDescription(request.description() == null ? null : request.description().trim());
         entity.setCodingAgent(codingAgent);
         entity.setRuleMarkdown(updatedMarkdown);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);

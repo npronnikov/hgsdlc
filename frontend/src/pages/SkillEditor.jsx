@@ -5,6 +5,7 @@ import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../api/request.js';
+import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
@@ -203,7 +204,7 @@ export default function SkillEditor() {
       await loadVersions(response.skill_id || skillId, response.version || skillVersion);
       message.success(publish ? 'Skill опубликован' : 'Черновик сохранён');
     } catch (err) {
-      message.error(err.message || 'Не удалось сохранить Skill');
+      message.error(toRussianError(err?.message, 'Не удалось сохранить Skill'));
     }
   };
 

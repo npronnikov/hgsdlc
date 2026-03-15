@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record RuleSaveRequest(
         @JsonProperty("title") String title,
+        @JsonProperty("description") String description,
         @JsonProperty("rule_id") String ruleId,
         @JsonProperty("coding_agent") String codingAgent,
         @JsonProperty("rule_markdown") String ruleMarkdown,

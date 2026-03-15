@@ -43,6 +43,9 @@ public class RuleVersion {
     @Column(nullable = false, length = 255)
     private String title;
 
+    @Column(length = 1024)
+    private String description;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "coding_agent", nullable = false, length = 64)
     private RuleProvider codingAgent;

@@ -34,6 +34,7 @@ import StatusTag from '../components/StatusTag.jsx';
 import { rules, skills } from '../data/mock.js';
 import { useParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
+import { toRussianError } from '../utils/errorMessages.js';
 
 const { Title, Text } = Typography;
 
@@ -1067,7 +1068,7 @@ export default function FlowEditor() {
       message.success(publish ? 'Flow опубликован' : 'Черновик сохранён');
       return true;
     } catch (err) {
-      message.error(err.message || 'Не удалось сохранить Flow');
+      message.error(toRussianError(err?.message, 'Не удалось сохранить Flow'));
       return false;
     }
   };

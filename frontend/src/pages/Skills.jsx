@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Card, Space, Table, Typography, message } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -9,6 +10,14 @@ const { Title, Text } = Typography;
 export default function Skills() {
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    search: '',
+    codingAgent: null,
+    status: null,
+    version: '',
+    hasDescription: null,
+  });
   const navigate = useNavigate();
 
   const loadSkills = async () => {
@@ -36,66 +45,157 @@ export default function Skills() {
   useEffect(() => {
     loadSkills();
   }, []);
-  const columns = [
-    {
-      title: 'Skill',
-      dataIndex: 'name',
-      key: 'name',
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{record.name}</Text>
-          <Text type="secondary">{record.skillId}</Text>
-          {record.description && <Text type="secondary">{record.description}</Text>}
-        </Space>
-      ),
-    },
-    {
-      title: 'Кодинг-агент',
-      dataIndex: 'codingAgent',
-      key: 'codingAgent',
-      render: (value) => <span className="mono">{value || '-'}</span>,
-    },
-    {
-      title: 'Статус',
-      dataIndex: 'status',
-      key: 'status',
-      render: (value) => <StatusTag value={value} />,
-    },
-    {
-      title: 'Последняя версия',
-      dataIndex: 'version',
-      key: 'version',
-      render: (value) => <span className="mono">{value}</span>,
-    },
-    {
-      title: 'Каноническое имя',
-      dataIndex: 'canonical',
-      key: 'canonical',
-      render: (value) => <span className="mono">{value}</span>,
-    },
-  ];
+  const codingAgents = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.codingAgent).filter(Boolean))),
+    [skills]
+  );
+  const statuses = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.status).filter(Boolean))),
+    [skills]
+  );
+
+  const filteredSkills = useMemo(() => {
+    const search = filters.search.trim().toLowerCase();
+    const version = filters.version.trim().toLowerCase();
+    return skills.filter((skill) => {
+      if (filters.codingAgent && skill.codingAgent !== filters.codingAgent) {
+        return false;
+      }
+      if (filters.status && skill.status !== filters.status) {
+        return false;
+      }
+      if (filters.hasDescription === true && !skill.description) {
+        return false;
+      }
+      if (filters.hasDescription === false && skill.description) {
+        return false;
+      }
+      if (version && (skill.version || '').toLowerCase() !== version) {
+        return false;
+      }
+      if (!search) {
+        return true;
+      }
+      return [skill.name, skill.skillId, skill.canonical, skill.description, skill.codingAgent]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(search));
+    });
+  }, [skills, filters]);
 
   return (
-    <div>
+    <div className="cards-page">
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Skills</Title>
         <Space>
-          <Button type="default" onClick={() => navigate('/skills/create')}>Новый Skill</Button>
+          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/skills/create')}>Новый Skill</Button>
+          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Фильтр</Button>
         </Space>
       </div>
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={skills}
-          pagination={false}
-          rowKey="key"
-          loading={loading}
-          onRow={(record) => ({
-            onClick: () => navigate(`/skills/${record.skillId}`),
-            style: { cursor: 'pointer' },
-          })}
-        />
-      </Card>
+      <div className="cards-fullscreen">
+        {loading ? (
+          <div className="card-muted">Загрузка...</div>
+        ) : (
+          <div className="cards-grid">
+            {filteredSkills.map((skill) => (
+              <Card
+                key={skill.key}
+                className="resource-card"
+                hoverable
+                onClick={() => navigate(`/skills/${skill.skillId}`)}
+              >
+                <div className="resource-card-header">
+                  <Text strong>{skill.name}</Text>
+                  <StatusTag value={skill.status} />
+                </div>
+                <div className="resource-card-meta">
+                  <span className="mono">{skill.skillId}</span>
+                  {skill.description && <Text type="secondary">{skill.description}</Text>}
+                  <span className="mono">{skill.canonical}</span>
+                </div>
+                <div className="resource-card-footer">
+                  <span className="mono">{skill.version}</span>
+                  <span className="mono">{skill.codingAgent || '-'}</span>
+                </div>
+              </Card>
+            ))}
+            {filteredSkills.length === 0 && (
+              <div className="card-muted">Навыки не найдены.</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Drawer
+        title="Фильтр Skills"
+        placement="right"
+        open={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        width={360}
+        className="filter-drawer"
+      >
+        <div className="filter-drawer-body">
+          <div className="filter-row">
+            <Text className="muted">Поиск</Text>
+            <Input
+              value={filters.search}
+              onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+              placeholder="Название, ID, описание"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Coding Agent</Text>
+            <Select
+              allowClear
+              value={filters.codingAgent}
+              onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))}
+              options={codingAgents.map((agent) => ({ value: agent, label: agent }))}
+              placeholder="Выберите агент"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Статус</Text>
+            <Select
+              allowClear
+              value={filters.status}
+              onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
+              options={statuses.map((status) => ({ value: status, label: status }))}
+              placeholder="Выберите статус"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Версия</Text>
+            <Input
+              value={filters.version}
+              onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))}
+              placeholder="Например 1.0.0"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Описание</Text>
+            <Select
+              allowClear
+              value={filters.hasDescription}
+              onChange={(value) => setFilters((prev) => ({ ...prev, hasDescription: value ?? null }))}
+              options={[
+                { value: true, label: 'Есть описание' },
+                { value: false, label: 'Без описания' },
+              ]}
+              placeholder="Любое"
+            />
+          </div>
+        </div>
+        <div className="filter-drawer-footer">
+          <Button
+            type="default"
+            onClick={() => setFilters({ search: '', codingAgent: null, status: null, version: '', hasDescription: null })}
+          >
+            Сбросить
+          </Button>
+          <Button type="primary" onClick={() => setIsFilterOpen(false)}>
+            Применить
+          </Button>
+        </div>
+      </Drawer>
     </div>
   );
 }
