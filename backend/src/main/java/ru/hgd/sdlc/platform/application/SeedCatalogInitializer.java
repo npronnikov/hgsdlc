@@ -188,55 +188,101 @@ Use Spring Boot best practices.
                 FlowStatus.PUBLISHED,
                 "Feature change flow",
                 "Flow for feature changes with review.",
-                "PRODUCT_OWNER",
-                "TECH_APPROVER",
                 "intake-analysis",
                 List.of("project-rule@1.0.0", "audit-rule@1.0.0"),
                 """
 id: feature-change-flow
-version: 1.0.0
+version: "1.0.0"
 canonical_name: feature-change-flow@1.0.0
 title: Feature change flow
 description: Flow for feature changes with review.
-start_role: PRODUCT_OWNER
-approver_role: TECH_APPROVER
+status: published
 start_node_id: intake-analysis
+coding_agent: qwen
 rule_refs:
   - project-rule@1.0.0
   - audit-rule@1.0.0
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: true
 
 nodes:
   - id: intake-analysis
+    title: Intake analysis
     type: executor
-    executor_kind: AI
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: user_request
+        required: true
     skill_refs:
       - feature-intake@1.0.0
+    produced_artifacts: []
+    expected_mutations: []
     on_success: collect-answers
   - id: collect-answers
+    title: Collect answers
     type: gate
-    gate_kind: human_input
+    node_kind: human_input
+    execution_mode: human_input
+    execution_context:
+      - type: artifact_ref
+        path: .hgwork/{runId}/intake-analysis/artifacts/questions.md
+        required: true
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/answers.md
+        required: true
+    expected_mutations: []
     on_submit: process-answers
   - id: process-answers
+    title: Process answers
     type: executor
-    executor_kind: AI
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: user_request
+        required: true
     skill_refs:
       - update-requirements@1.0.0
+    produced_artifacts: []
+    expected_mutations:
+      - path: docs/requirements/**
+        required: true
     on_success: approve-requirements
   - id: approve-requirements
+    title: Approve requirements
     type: gate
-    gate_kind: human_approval
+    node_kind: human_approval
+    execution_mode: human_approval
+    execution_context:
+      - type: directory_ref
+        path: docs/requirements
+        required: true
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/approval-comment.md
+        required: false
+    expected_mutations: []
     on_approve: publish-summary
     on_reject: close-run
     on_rework_routes:
       keep_workspace: process-answers
       discard_uncommitted: intake-analysis
   - id: publish-summary
+    title: Publish summary
     type: executor
-    executor_kind: External Command
+    node_kind: command
+    execution_mode: command
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []
     on_success: close-run
   - id: close-run
+    title: Close run
     type: executor
-    executor_kind: External Command
+    node_kind: command
+    execution_mode: command
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []
     on_success: close-run
 """
         );
@@ -247,39 +293,56 @@ nodes:
                 FlowStatus.PUBLISHED,
                 "Audit check flow",
                 "Flow for audit readiness checks.",
-                "PRODUCT_OWNER",
-                "TECH_APPROVER",
                 "audit-start",
                 List.of("audit-rule@1.0.0"),
                 """
 id: audit-check-flow
-version: 1.0.0
+version: "1.0.0"
 canonical_name: audit-check-flow@1.0.0
 title: Audit check flow
 description: Flow for audit readiness checks.
-start_role: PRODUCT_OWNER
-approver_role: TECH_APPROVER
+status: published
 start_node_id: audit-start
+coding_agent: qwen
 rule_refs:
   - audit-rule@1.0.0
 
 nodes:
   - id: audit-start
+    title: Audit start
     type: executor
-    executor_kind: AI
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: user_request
+        required: true
     skill_refs:
       - feature-intake@1.0.0
+    produced_artifacts: []
+    expected_mutations: []
     on_success: approve-audit
   - id: approve-audit
+    title: Approve audit
     type: gate
-    gate_kind: human_approval
+    node_kind: human_approval
+    execution_mode: human_approval
+    execution_context:
+      - type: user_request
+        required: true
+    produced_artifacts: []
+    expected_mutations: []
     on_approve: finalize
     on_reject: finalize
     on_rework_routes:
       keep_workspace: audit-start
   - id: finalize
+    title: Finalize
     type: executor
-    executor_kind: External Command
+    node_kind: command
+    execution_mode: command
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []
     on_success: finalize
 """
         );
@@ -290,30 +353,40 @@ nodes:
                 FlowStatus.DRAFT,
                 "Sandbox flow",
                 "Draft flow for sandbox experiments.",
-                "PRODUCT_OWNER",
-                "TECH_APPROVER",
                 "sandbox-start",
                 List.of("sandbox-rule@0.2"),
                 """
 id: sandbox-flow
-version: 0.2
+version: "0.2"
 canonical_name: sandbox-flow@0.2
 title: Sandbox flow
 description: Draft flow for sandbox experiments.
-start_role: PRODUCT_OWNER
-approver_role: TECH_APPROVER
+status: draft
 start_node_id: sandbox-start
+coding_agent: qwen
 rule_refs:
   - sandbox-rule@0.2
 
 nodes:
   - id: sandbox-start
+    title: Sandbox start
     type: executor
-    executor_kind: AI
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: user_request
+        required: true
+    produced_artifacts: []
+    expected_mutations: []
     on_success: sandbox-finish
   - id: sandbox-finish
+    title: Sandbox finish
     type: executor
-    executor_kind: External Command
+    node_kind: command
+    execution_mode: command
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []
     on_success: sandbox-finish
 """
         );
@@ -383,8 +456,6 @@ nodes:
             FlowStatus status,
             String title,
             String description,
-            String startRole,
-            String approverRole,
             String startNodeId,
             List<String> ruleRefs,
             String flowYaml
@@ -401,8 +472,6 @@ nodes:
         entity.setStatus(status);
         entity.setTitle(title);
         entity.setDescription(description);
-        entity.setStartRole(startRole);
-        entity.setApproverRole(approverRole);
         entity.setStartNodeId(startNodeId);
         entity.setRuleRefs(ruleRefs);
         entity.setFlowYaml(flowYaml.trim());

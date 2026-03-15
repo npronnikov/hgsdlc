@@ -2,6 +2,7 @@ package ru.hgd.sdlc.flow.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -18,16 +19,32 @@ import lombok.Setter;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class NodeModel {
     private String id;
+    private String title;
+    private String description;
     private String type;
 
-    @JsonProperty("executor_kind")
-    private String executorKind;
+    @JsonProperty("node_kind")
+    private String nodeKind;
 
-    @JsonProperty("gate_kind")
-    private String gateKind;
+    @JsonProperty("execution_mode")
+    private String executionMode;
+
+    @JsonProperty("execution_context")
+    private List<ExecutionContextEntry> executionContext;
+
+    private String instruction;
 
     @JsonProperty("skill_refs")
     private List<String> skillRefs;
+
+    @JsonProperty("response_schema")
+    private JsonNode responseSchema;
+
+    @JsonProperty("produced_artifacts")
+    private List<PathRequirement> producedArtifacts;
+
+    @JsonProperty("expected_mutations")
+    private List<PathRequirement> expectedMutations;
 
     @JsonProperty("on_success")
     private String onSuccess;

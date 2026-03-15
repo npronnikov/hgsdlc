@@ -4,18 +4,57 @@
   "type": "object",
   "required": [
     "id",
+    "title",
     "type",
-    "gate_kind"
+    "node_kind",
+    "execution_mode",
+    "execution_context"
   ],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
-    "type": { "type": "string" },
-    "gate_kind": { "type": "string" },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "type": { "type": "string", "enum": ["gate"] },
+    "node_kind": { "type": "string", "enum": ["human_input"] },
+    "execution_mode": { "type": "string", "enum": ["human_input"] },
+    "execution_context": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/execution_context_entry" }
+    },
+    "instruction": { "type": "string" },
+    "response_schema": { "type": "object" },
+    "produced_artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
+    "expected_mutations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
     "input_artifact": { "type": "string" },
     "output_artifact": { "type": "string" },
     "allowed_roles": { "type": "array" },
     "completion_policy": { "type": "object" },
     "on_submit": { "type": "string" }
+  },
+  "$defs": {
+    "execution_context_entry": {
+      "type": "object",
+      "required": ["type", "required"],
+      "properties": {
+        "type": { "type": "string" },
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "path_requirement": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    }
   },
   "additionalProperties": true
 }

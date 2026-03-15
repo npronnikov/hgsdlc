@@ -65,82 +65,106 @@ public class FlowValidator {
 
     private void validateNode(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
         String type = normalize(node.getType());
+        String nodeKind = normalize(node.getNodeKind());
+        String executionMode = normalize(node.getExecutionMode());
         if (type == null) {
             errors.add("Node type is required: " + node.getId());
             return;
         }
-        if ("executor".equals(type)) {
-            validateExecutor(node, nodesById, errors);
+        if (nodeKind == null) {
+            errors.add("node_kind is required: " + node.getId());
             return;
         }
-        if ("gate".equals(type)) {
-            validateGate(node, nodesById, errors);
+        if (executionMode == null) {
+            errors.add("execution_mode is required: " + node.getId());
             return;
         }
-        errors.add("Unsupported node type: " + node.getId());
-    }
 
-    private void validateExecutor(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
-        String executorKind = normalize(node.getExecutorKind());
-        if (executorKind == null) {
-            errors.add("executor_kind is required: " + node.getId());
+        if ("executor".equals(type)) {
+            if (!"ai".equals(nodeKind) && !"command".equals(nodeKind)) {
+                errors.add("Unsupported node_kind for executor: " + node.getId());
+                return;
+            }
+        } else if ("gate".equals(type)) {
+            if (!"human_input".equals(nodeKind) && !"human_approval".equals(nodeKind)) {
+                errors.add("Unsupported node_kind for gate: " + node.getId());
+                return;
+            }
+        } else {
+            errors.add("Unsupported node type: " + node.getId());
             return;
         }
-        if (node.getSkillRefs() != null && !node.getSkillRefs().isEmpty() && !"ai".equals(executorKind)) {
+
+        if ("ai".equals(nodeKind) && !"agent".equals(executionMode)) {
+            errors.add("execution_mode must be agent for AI node: " + node.getId());
+        }
+        if ("command".equals(nodeKind) && !"command".equals(executionMode)) {
+            errors.add("execution_mode must be command for command node: " + node.getId());
+        }
+        if ("human_input".equals(nodeKind) && !"human_input".equals(executionMode)) {
+            errors.add("execution_mode must be human_input for human input node: " + node.getId());
+        }
+        if ("human_approval".equals(nodeKind) && !"human_approval".equals(executionMode)) {
+            errors.add("execution_mode must be human_approval for human approval node: " + node.getId());
+        }
+
+        validateExecutionContext(node, errors);
+        validateDeclaredOutputs(node, errors);
+
+        if (node.getSkillRefs() != null && !node.getSkillRefs().isEmpty() && !"ai".equals(nodeKind)) {
             errors.add("skill_refs only allowed for AI nodes: " + node.getId());
         }
-        if ("ai".equals(executorKind)) {
-            boolean hasOnSuccess = node.getOnSuccess() != null && !node.getOnSuccess().isBlank();
-            boolean hasOutcomes = node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty();
-            if (hasOnSuccess && hasOutcomes) {
-                errors.add("AI node cannot have both on_success and allowed_outcomes: " + node.getId());
-            }
-            if (!hasOnSuccess && !hasOutcomes) {
-                errors.add("AI node requires on_success or allowed_outcomes: " + node.getId());
-            }
-            if (hasOnSuccess) {
-                assertTarget(node.getId(), "on_success", node.getOnSuccess(), nodesById, errors);
-            }
-            if (hasOutcomes) {
-                Map<String, String> routes = node.getOutcomeRoutes();
-                if (routes == null || routes.isEmpty()) {
-                    errors.add("AI node requires outcome_routes when allowed_outcomes present: " + node.getId());
-                } else {
-                    for (String outcome : node.getAllowedOutcomes()) {
-                        String target = routes.get(outcome);
-                        if (target == null || target.isBlank()) {
-                            errors.add("Missing outcome route for " + outcome + " in node: " + node.getId());
-                            continue;
-                        }
-                        assertTarget(node.getId(), "outcome:" + outcome, target, nodesById, errors);
+
+        if ("executor".equals(type)) {
+            validateExecutor(node, nodeKind, nodesById, errors);
+            return;
+        }
+        validateGate(node, nodeKind, nodesById, errors);
+    }
+
+    private void validateExecutor(
+            NodeModel node,
+            String nodeKind,
+            Map<String, NodeModel> nodesById,
+            List<String> errors
+    ) {
+        boolean hasOnSuccess = node.getOnSuccess() != null && !node.getOnSuccess().isBlank();
+        boolean hasOutcomes = node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty();
+        if (!hasOnSuccess && !hasOutcomes) {
+            errors.add("Executor node requires on_success or allowed_outcomes: " + node.getId());
+        }
+        if (hasOnSuccess) {
+            assertTarget(node.getId(), "on_success", node.getOnSuccess(), nodesById, errors);
+        }
+        if (hasOutcomes) {
+            Map<String, String> routes = node.getOutcomeRoutes();
+            if (routes == null || routes.isEmpty()) {
+                errors.add("Executor node requires outcome_routes when allowed_outcomes present: " + node.getId());
+            } else {
+                for (String outcome : node.getAllowedOutcomes()) {
+                    String target = routes.get(outcome);
+                    if (target == null || target.isBlank()) {
+                        errors.add("Missing outcome route for " + outcome + " in node: " + node.getId());
+                        continue;
                     }
-                    for (String outcome : routes.keySet()) {
-                        if (node.getAllowedOutcomes() == null || !node.getAllowedOutcomes().contains(outcome)) {
-                            errors.add("Outcome route not declared in allowed_outcomes: " + node.getId() + " -> " + outcome);
-                        }
+                    assertTarget(node.getId(), "outcome:" + outcome, target, nodesById, errors);
+                }
+                for (String outcome : routes.keySet()) {
+                    if (node.getAllowedOutcomes() == null || !node.getAllowedOutcomes().contains(outcome)) {
+                        errors.add("Outcome route not declared in allowed_outcomes: " + node.getId() + " -> " + outcome);
                     }
                 }
             }
-            return;
+        } else if (node.getOutcomeRoutes() != null && !node.getOutcomeRoutes().isEmpty()) {
+            errors.add("Outcome routes require allowed_outcomes: " + node.getId());
         }
-        if ("external_command".equals(executorKind)) {
-            if (node.getOnSuccess() == null || node.getOnSuccess().isBlank()) {
-                errors.add("External Command node requires on_success: " + node.getId());
-            } else {
-                assertTarget(node.getId(), "on_success", node.getOnSuccess(), nodesById, errors);
-            }
-            return;
+        if (!"ai".equals(nodeKind) && node.getAllowedOutcomes() != null && !node.getAllowedOutcomes().isEmpty()) {
+            errors.add("allowed_outcomes only supported for AI nodes: " + node.getId());
         }
-        errors.add("Unsupported executor_kind: " + node.getId());
     }
 
-    private void validateGate(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
-        String gateKind = normalize(node.getGateKind());
-        if (gateKind == null) {
-            errors.add("gate_kind is required: " + node.getId());
-            return;
-        }
-        if ("human_input".equals(gateKind)) {
+    private void validateGate(NodeModel node, String nodeKind, Map<String, NodeModel> nodesById, List<String> errors) {
+        if ("human_input".equals(nodeKind)) {
             if (node.getOnSubmit() == null || node.getOnSubmit().isBlank()) {
                 errors.add("human_input gate requires on_submit: " + node.getId());
             } else {
@@ -148,7 +172,7 @@ public class FlowValidator {
             }
             return;
         }
-        if ("human_approval".equals(gateKind)) {
+        if ("human_approval".equals(nodeKind)) {
             if (node.getOnApprove() == null || node.getOnApprove().isBlank()) {
                 errors.add("human_approval gate requires on_approve: " + node.getId());
             } else {
@@ -168,7 +192,6 @@ public class FlowValidator {
             }
             return;
         }
-        errors.add("Unsupported gate_kind: " + node.getId());
     }
 
     private void assertTarget(String nodeId, String route, String target, Map<String, NodeModel> nodesById, List<String> errors) {
@@ -222,6 +245,70 @@ public class FlowValidator {
             targets.addAll(node.getOnReworkRoutes().values());
         }
         return targets;
+    }
+
+    private void validateExecutionContext(NodeModel node, List<String> errors) {
+        if (node.getExecutionContext() == null) {
+            errors.add("execution_context is required: " + node.getId());
+            return;
+        }
+        for (int i = 0; i < node.getExecutionContext().size(); i++) {
+            var entry = node.getExecutionContext().get(i);
+            if (entry == null) {
+                errors.add("execution_context entry is required: " + node.getId());
+                continue;
+            }
+            String type = normalize(entry.getType());
+            if (type == null) {
+                errors.add("execution_context type is required: " + node.getId());
+                continue;
+            }
+            if (!Set.of("user_request", "directory_ref", "file_ref", "artifact_ref").contains(type)) {
+                errors.add("Unsupported execution_context type: " + node.getId());
+                continue;
+            }
+            if (entry.getRequired() == null) {
+                errors.add("execution_context required flag is missing: " + node.getId());
+            }
+            if ("user_request".equals(type)) {
+                if (entry.getPath() != null && !entry.getPath().isBlank()) {
+                    errors.add("user_request must not define path: " + node.getId());
+                }
+            } else if (entry.getPath() == null || entry.getPath().isBlank()) {
+                errors.add("execution_context path is required: " + node.getId());
+            }
+        }
+    }
+
+    private void validateDeclaredOutputs(NodeModel node, List<String> errors) {
+        if (node.getProducedArtifacts() != null) {
+            for (var entry : node.getProducedArtifacts()) {
+                if (entry == null) {
+                    errors.add("produced_artifacts entry is required: " + node.getId());
+                    continue;
+                }
+                if (entry.getRequired() == null) {
+                    errors.add("produced_artifacts required flag is missing: " + node.getId());
+                }
+                if (entry.getPath() == null || entry.getPath().isBlank()) {
+                    errors.add("produced_artifacts path is required: " + node.getId());
+                }
+            }
+        }
+        if (node.getExpectedMutations() != null) {
+            for (var entry : node.getExpectedMutations()) {
+                if (entry == null) {
+                    errors.add("expected_mutations entry is required: " + node.getId());
+                    continue;
+                }
+                if (entry.getRequired() == null) {
+                    errors.add("expected_mutations required flag is missing: " + node.getId());
+                }
+                if (entry.getPath() == null || entry.getPath().isBlank()) {
+                    errors.add("expected_mutations path is required: " + node.getId());
+                }
+            }
+        }
     }
 
     private String normalize(String value) {

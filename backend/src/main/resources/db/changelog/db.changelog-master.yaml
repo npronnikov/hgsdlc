@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/012-flows.sql
   - include:
       file: db/changelog/013-coding-agent.sql
+  - include:
+      file: db/changelog/014-flows-update.sql

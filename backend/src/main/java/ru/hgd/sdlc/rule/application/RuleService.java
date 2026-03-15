@@ -150,6 +150,13 @@ public class RuleService {
         String canonicalName = ruleId + "@" + version;
         String updatedMarkdown = request.ruleMarkdown();
 
+        boolean bumpDraftBeforeInsert = publish
+                && existingDraft != null
+                && existingDraft.getVersion().equals(version);
+        if (bumpDraftBeforeInsert) {
+            bumpDraftVersion(existingDraft, version);
+        }
+
         RuleVersion entity;
         if (!publish && existingDraft != null) {
             entity = existingDraft;
@@ -172,7 +179,7 @@ public class RuleService {
 
         RuleVersion saved = repository.save(entity);
 
-        if (publish && existingDraft != null) {
+        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
         }
 

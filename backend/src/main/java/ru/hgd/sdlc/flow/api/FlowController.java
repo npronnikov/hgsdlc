@@ -18,6 +18,7 @@ import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.flow.application.FlowYamlParser;
 import ru.hgd.sdlc.flow.application.FlowService;
 import ru.hgd.sdlc.idempotency.application.IdempotencyService;
 
@@ -25,10 +26,12 @@ import ru.hgd.sdlc.idempotency.application.IdempotencyService;
 @RequestMapping("/api/flows")
 public class FlowController {
     private final FlowService flowService;
+    private final FlowYamlParser flowYamlParser;
     private final IdempotencyService idempotencyService;
 
-    public FlowController(FlowService flowService, IdempotencyService idempotencyService) {
+    public FlowController(FlowService flowService, FlowYamlParser flowYamlParser, IdempotencyService idempotencyService) {
         this.flowService = flowService;
+        this.flowYamlParser = flowYamlParser;
         this.idempotencyService = idempotencyService;
     }
 
@@ -39,7 +42,9 @@ public class FlowController {
 
     @GetMapping("/{flowId}")
     public FlowResponse get(@PathVariable String flowId) {
-        return FlowResponse.from(flowService.getLatest(flowId));
+        var version = flowService.getLatest(flowId);
+        var model = flowYamlParser.parse(version.getFlowYaml());
+        return FlowResponse.from(version, model);
     }
 
     @GetMapping("/{flowId}/versions")
@@ -49,7 +54,9 @@ public class FlowController {
 
     @GetMapping("/{flowId}/versions/{version}")
     public FlowResponse getVersion(@PathVariable String flowId, @PathVariable String version) {
-        return FlowResponse.from(flowService.getVersion(flowId, version));
+        var flowVersion = flowService.getVersion(flowId, version);
+        var model = flowYamlParser.parse(flowVersion.getFlowYaml());
+        return FlowResponse.from(flowVersion, model);
     }
 
     @PostMapping("/{flowId}/save")
@@ -70,7 +77,11 @@ public class FlowController {
                 "flows.save",
                 requestHash,
                 FlowResponse.class,
-                () -> FlowResponse.from(flowService.save(flowId, request, user))
+                () -> {
+                    var saved = flowService.save(flowId, request, user);
+                    var model = flowYamlParser.parse(saved.getFlowYaml());
+                    return FlowResponse.from(saved, model);
+                }
         );
     }
 

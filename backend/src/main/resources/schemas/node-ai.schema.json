@@ -4,23 +4,62 @@
   "type": "object",
   "required": [
     "id",
+    "title",
     "type",
-    "executor_kind"
+    "node_kind",
+    "execution_mode",
+    "execution_context"
   ],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
-    "type": { "type": "string" },
-    "executor_kind": { "type": "string" },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "type": { "type": "string", "enum": ["executor"] },
+    "node_kind": { "type": "string", "enum": ["ai"] },
+    "execution_mode": { "type": "string", "enum": ["agent"] },
+    "execution_context": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/execution_context_entry" }
+    },
+    "instruction": { "type": "string" },
     "skill_refs": {
       "type": "array",
       "items": { "type": "string" }
     },
-    "inputs": { "type": "array" },
-    "outputs": { "type": "array" },
-    "instruction": { "type": "string" },
+    "response_schema": { "type": "object" },
+    "produced_artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
+    "expected_mutations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
     "on_success": { "type": "string" },
-    "allowed_outcomes": { "type": "array" },
+    "allowed_outcomes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "outcome_routes": { "type": "object" }
+  },
+  "$defs": {
+    "execution_context_entry": {
+      "type": "object",
+      "required": ["type", "required"],
+      "properties": {
+        "type": { "type": "string" },
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "path_requirement": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    }
   },
   "additionalProperties": true
 }

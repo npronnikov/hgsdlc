@@ -4,19 +4,58 @@
   "type": "object",
   "required": [
     "id",
+    "title",
     "type",
-    "executor_kind"
+    "node_kind",
+    "execution_mode",
+    "execution_context"
   ],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
-    "type": { "type": "string" },
-    "executor_kind": { "type": "string" },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "type": { "type": "string", "enum": ["executor"] },
+    "node_kind": { "type": "string", "enum": ["command"] },
+    "execution_mode": { "type": "string", "enum": ["command"] },
+    "execution_context": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/execution_context_entry" }
+    },
+    "instruction": { "type": "string" },
+    "response_schema": { "type": "object" },
+    "produced_artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
+    "expected_mutations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_requirement" }
+    },
     "command_engine": { "type": "string" },
     "command_spec": { "type": "object" },
     "success_exit_codes": { "type": "array" },
     "on_success": { "type": "string" },
     "retry_policy": { "type": "object" },
     "idempotent": { "type": "boolean" }
+  },
+  "$defs": {
+    "execution_context_entry": {
+      "type": "object",
+      "required": ["type", "required"],
+      "properties": {
+        "type": { "type": "string" },
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "path_requirement": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    }
   },
   "additionalProperties": true
 }

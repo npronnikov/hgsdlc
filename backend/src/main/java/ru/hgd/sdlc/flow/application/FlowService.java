@@ -126,18 +126,25 @@ public class FlowService {
         if (model.getTitle() == null || model.getTitle().isBlank()) {
             throw new ValidationException("title is required in flow_yaml");
         }
-        if (model.getStartRole() == null || model.getStartRole().isBlank()) {
-            throw new ValidationException("start_role is required in flow_yaml");
-        }
-        if (model.getApproverRole() == null || model.getApproverRole().isBlank()) {
-            throw new ValidationException("approver_role is required in flow_yaml");
+        if (model.getStatus() == null || model.getStatus().isBlank()) {
+            throw new ValidationException("status is required in flow_yaml");
         }
         if (model.getStartNodeId() == null || model.getStartNodeId().isBlank()) {
             throw new ValidationException("start_node_id is required in flow_yaml");
         }
+        if (model.getCodingAgent() == null || model.getCodingAgent().isBlank()) {
+            throw new ValidationException("coding_agent is required in flow_yaml");
+        }
 
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
+        String normalizedStatus = model.getStatus().trim().toLowerCase();
+        if (publish && !"published".equals(normalizedStatus)) {
+            throw new ValidationException("flow_yaml status must be published for publish");
+        }
+        if (!publish && !"draft".equals(normalizedStatus)) {
+            throw new ValidationException("flow_yaml status must be draft for save");
+        }
 
         List<String> validationErrors = flowValidator.validate(model);
         if (!validationErrors.isEmpty()) {
@@ -176,6 +183,13 @@ public class FlowService {
         String canonicalName = flowId + "@" + version;
         String updatedYaml = request.flowYaml();
 
+        boolean bumpDraftBeforeInsert = publish
+                && existingDraft != null
+                && existingDraft.getVersion().equals(version);
+        if (bumpDraftBeforeInsert) {
+            bumpDraftVersion(existingDraft, version);
+        }
+
         FlowVersion entity;
         if (!publish && existingDraft != null) {
             entity = existingDraft;
@@ -191,8 +205,6 @@ public class FlowService {
         entity.setStatus(publish ? FlowStatus.PUBLISHED : FlowStatus.DRAFT);
         entity.setTitle(model.getTitle().trim());
         entity.setDescription(model.getDescription());
-        entity.setStartRole(model.getStartRole().trim());
-        entity.setApproverRole(model.getApproverRole().trim());
         entity.setStartNodeId(model.getStartNodeId().trim());
         entity.setRuleRefs(model.getRuleRefs());
         entity.setFlowYaml(updatedYaml);
@@ -202,7 +214,7 @@ public class FlowService {
 
         FlowVersion saved = repository.save(entity);
 
-        if (publish && existingDraft != null) {
+        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
         }
 

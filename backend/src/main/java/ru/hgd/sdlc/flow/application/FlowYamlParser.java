@@ -3,6 +3,7 @@ package ru.hgd.sdlc.flow.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import org.springframework.stereotype.Component;
@@ -26,12 +27,10 @@ public class FlowYamlParser {
             throw new ValidationException("flow_yaml is required");
         }
         JsonNode root = readTree(flowYaml);
+        normalizeVersion(root);
         schemaValidator.validate(root, "schemas/flow.schema.json");
         validateNodes(root);
         FlowModel model = toModel(root);
-        if ((model.getRuleRefs() == null || model.getRuleRefs().isEmpty()) && model.getRuleRef() != null) {
-            model.setRuleRefs(java.util.List.of(model.getRuleRef()));
-        }
         if (model.getRuleRefs() == null) {
             model.setRuleRefs(java.util.List.of());
         }
@@ -43,6 +42,16 @@ public class FlowYamlParser {
             return yamlMapper.readTree(yaml);
         } catch (IOException ex) {
             throw new ValidationException("Invalid flow_yaml: " + ex.getMessage());
+        }
+    }
+
+    private void normalizeVersion(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return;
+        }
+        JsonNode version = root.get("version");
+        if (version != null && version.isNumber()) {
+            ((ObjectNode) root).put("version", version.asText());
         }
     }
 
@@ -61,9 +70,8 @@ public class FlowYamlParser {
         }
         for (JsonNode node : nodes) {
             String type = text(node.get("type"));
-            String executorKind = text(node.get("executor_kind"));
-            String gateKind = text(node.get("gate_kind"));
-            String schemaPath = resolveSchema(type, executorKind, gateKind);
+            String nodeKind = text(node.get("node_kind"));
+            String schemaPath = resolveSchema(type, nodeKind);
             if (schemaPath == null) {
                 throw new ValidationException("Unsupported node type or kind");
             }
@@ -71,26 +79,26 @@ public class FlowYamlParser {
         }
     }
 
-    private String resolveSchema(String type, String executorKind, String gateKind) {
+    private String resolveSchema(String type, String nodeKind) {
         if (type == null) {
             return null;
         }
         String normalizedType = normalize(type);
         if ("executor".equals(normalizedType)) {
-            String normalizedExecutor = normalize(executorKind);
-            if ("ai".equals(normalizedExecutor)) {
+            String normalizedKind = normalize(nodeKind);
+            if ("ai".equals(normalizedKind)) {
                 return "schemas/node-ai.schema.json";
             }
-            if ("external_command".equals(normalizedExecutor)) {
+            if ("command".equals(normalizedKind)) {
                 return "schemas/node-command.schema.json";
             }
         }
         if ("gate".equals(normalizedType)) {
-            String normalizedGate = normalize(gateKind);
-            if ("human_input".equals(normalizedGate)) {
+            String normalizedKind = normalize(nodeKind);
+            if ("human_input".equals(normalizedKind)) {
                 return "schemas/node-human-input-gate.schema.json";
             }
-            if ("human_approval".equals(normalizedGate)) {
+            if ("human_approval".equals(normalizedKind)) {
                 return "schemas/node-human-approval-gate.schema.json";
             }
         }

@@ -2,6 +2,7 @@ package ru.hgd.sdlc.flow.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,11 +26,7 @@ public class FlowModel {
     private String title;
     private String description;
 
-    @JsonProperty("start_role")
-    private String startRole;
-
-    @JsonProperty("approver_role")
-    private String approverRole;
+    private String status;
 
     @JsonProperty("start_node_id")
     private String startNodeId;
@@ -37,8 +34,17 @@ public class FlowModel {
     @JsonProperty("rule_refs")
     private List<String> ruleRefs;
 
-    @JsonProperty("rule_ref")
-    private String ruleRef;
+    @JsonProperty("coding_agent")
+    private String codingAgent;
+
+    @JsonProperty("fail_on_missing_declared_output")
+    private Boolean failOnMissingDeclaredOutput;
+
+    @JsonProperty("fail_on_missing_expected_mutation")
+    private Boolean failOnMissingExpectedMutation;
+
+    @JsonProperty("response_schema")
+    private JsonNode responseSchema;
 
     private List<NodeModel> nodes;
 }

@@ -49,12 +49,6 @@ public class FlowVersion {
     @Column(length = 1024)
     private String description;
 
-    @Column(name = "start_role", nullable = false, length = 255)
-    private String startRole;
-
-    @Column(name = "approver_role", nullable = false, length = 255)
-    private String approverRole;
-
     @Column(name = "start_node_id", nullable = false, length = 255)
     private String startNodeId;
 
