@@ -150,7 +150,7 @@ export default function RuleEditor() {
         title: 'Сменить кодинг-агент?',
         content: 'Требования к шаблону и frontmatter изменятся. Заменить markdown новым шаблоном?',
         okText: 'Заменить шаблон',
-        cancelText: 'Оставить текущий markdown',
+        cancelText: 'Оставить текущий',
         onOk: () => applyChange(true),
         onCancel: () => applyChange(false),
       });

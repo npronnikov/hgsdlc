@@ -211,7 +211,7 @@ public class RuleService {
         draft.setVersion(nextDraftVersion);
         draft.setCanonicalName(draft.getRuleId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
-        repository.save(draft);
+        repository.saveAndFlush(draft);
     }
 
     private String resolveSavedBy(User user) {

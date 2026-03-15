@@ -23,16 +23,9 @@ import {
   Typography,
   message,
 } from 'antd';
-import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  DeleteOutlined,
-  MoreOutlined,
-  PlusOutlined,
-} from '@ant-design/icons';
-import StatusTag from '../components/StatusTag.jsx';
+import { DeleteOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { rules, skills } from '../data/mock.js';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 
@@ -105,6 +98,8 @@ function FlowNode({ data, selected }) {
 }
 
 const nodeTypes = { flowNode: FlowNode };
+
+const ARTIFACT_PATH_PREFIX = '.hgwork/{runId}/{nodeId}/artifacts/';
 
 const initialFlow = {
   title: 'Flow изменений',
@@ -258,6 +253,22 @@ const initialNodes = [
   },
 ];
 
+function extractArtifactName(path) {
+  if (!path) {
+    return '';
+  }
+  const lastSlashIndex = path.lastIndexOf('/');
+  return lastSlashIndex >= 0 ? path.slice(lastSlashIndex + 1) : path;
+}
+
+function buildArtifactPath(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  return `${ARTIFACT_PATH_PREFIX}${trimmed}`;
+}
+
 function buildEdges(nodes) {
   const edges = [];
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -282,6 +293,9 @@ function buildEdges(nodes) {
     if (data.onSuccess) {
       addEdge(node.id, data.onSuccess, 'on_success', 'main');
     }
+    if (data.onFailure) {
+      addEdge(node.id, data.onFailure, 'on_failure', 'outcome');
+    }
     if (data.onSubmit) {
       addEdge(node.id, data.onSubmit, 'on_submit', 'main');
     }
@@ -299,17 +313,6 @@ function buildEdges(nodes) {
   });
 
   return edges;
-}
-
-function reorder(list, index, direction) {
-  const next = [...list];
-  const targetIndex = index + direction;
-  if (targetIndex < 0 || targetIndex >= next.length) {
-    return next;
-  }
-  const [item] = next.splice(index, 1);
-  next.splice(targetIndex, 0, item);
-  return next;
 }
 
 function validateFlow(nodes, meta) {
@@ -423,6 +426,7 @@ function validateFlow(nodes, meta) {
 
     const transitions = [];
     if (data.onSuccess) transitions.push(['on_success', data.onSuccess]);
+    if (data.onFailure) transitions.push(['on_failure', data.onFailure]);
     if (data.onSubmit) transitions.push(['on_submit', data.onSubmit]);
     if (data.onApprove) transitions.push(['on_approve', data.onApprove]);
     if (data.onReject) transitions.push(['on_reject', data.onReject]);
@@ -504,7 +508,8 @@ function validateFlow(nodes, meta) {
 
 export default function FlowEditor() {
   const { flowId } = useParams();
-  const isCreateMode = flowId === 'create';
+  const location = useLocation();
+  const isCreateMode = flowId === 'create' || location.pathname.endsWith('/flows/create');
   const [flowMeta, setFlowMeta] = useState(isCreateMode ? emptyFlow : initialFlow);
   const [resourceVersion, setResourceVersion] = useState(0);
   const [flowVersion, setFlowVersion] = useState(isCreateMode ? '0.1' : '0.1');
@@ -528,6 +533,10 @@ export default function FlowEditor() {
     ? 'черновик'
     : (flowVersion || '0.0.0');
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
+  const nodeIdOptions = useMemo(
+    () => nodes.map((node) => ({ value: node.id, label: node.id })),
+    [nodes]
+  );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const validationErrors = validateFlow(nodes, flowMeta);
   const isReadOnly = !isEditing;
@@ -588,6 +597,7 @@ export default function FlowEditor() {
         const data = node.data || {};
         const nextData = { ...data };
         if (data.onSuccess === selectedNodeId) nextData.onSuccess = trimmed;
+        if (data.onFailure === selectedNodeId) nextData.onFailure = trimmed;
         if (data.onSubmit === selectedNodeId) nextData.onSubmit = trimmed;
         if (data.onApprove === selectedNodeId) nextData.onApprove = trimmed;
         if (data.onReject === selectedNodeId) nextData.onReject = trimmed;
@@ -648,6 +658,7 @@ export default function FlowEditor() {
           const data = node.data || {};
           const nextData = { ...data };
           if (data.onSuccess === nodeId) nextData.onSuccess = '';
+          if (data.onFailure === nodeId) nextData.onFailure = '';
           if (data.onSubmit === nodeId) nextData.onSubmit = '';
           if (data.onApprove === nodeId) nextData.onApprove = '';
           if (data.onReject === nodeId) nextData.onReject = '';
@@ -670,10 +681,16 @@ export default function FlowEditor() {
   const getRouteOptions = (node) => {
     const data = node?.data || {};
     if (data.nodeKind === 'ai') {
-      return [{ value: 'on_success', label: 'on_success' }];
+      return [
+        { value: 'on_success', label: 'on_success' },
+        { value: 'on_failure', label: 'on_failure' },
+      ];
     }
     if (data.nodeKind === 'command') {
-      return [{ value: 'on_success', label: 'on_success' }];
+      return [
+        { value: 'on_success', label: 'on_success' },
+        { value: 'on_failure', label: 'on_failure' },
+      ];
     }
     if (data.nodeKind === 'human_input') {
       return [{ value: 'on_submit', label: 'on_submit' }];
@@ -689,7 +706,10 @@ export default function FlowEditor() {
     if (data.nodeKind === 'terminal') {
       return [];
     }
-    return [{ value: 'on_success', label: 'on_success' }];
+    return [
+      { value: 'on_success', label: 'on_success' },
+      { value: 'on_failure', label: 'on_failure' },
+    ];
   };
 
   const applyConnection = (sourceId, targetId, routeKey) => {
@@ -704,6 +724,8 @@ export default function FlowEditor() {
         const data = { ...node.data };
         if (routeKey === 'on_success') {
           data.onSuccess = targetId;
+        } else if (routeKey === 'on_failure') {
+          data.onFailure = targetId;
         } else if (routeKey === 'on_submit') {
           data.onSubmit = targetId;
         } else if (routeKey === 'on_approve') {
@@ -733,6 +755,8 @@ export default function FlowEditor() {
         const data = { ...node.data };
         if (label === 'on_success') {
           data.onSuccess = null;
+        } else if (label === 'on_failure') {
+          data.onFailure = null;
         } else if (label === 'on_submit') {
           data.onSubmit = null;
         } else if (label === 'on_approve') {
@@ -768,6 +792,7 @@ export default function FlowEditor() {
       producedArtifacts: [],
       expectedMutations: [],
       onSuccess: '',
+      onFailure: '',
       onSubmit: '',
       onApprove: '',
       onReject: '',
@@ -921,6 +946,9 @@ export default function FlowEditor() {
       }
       if (data.onSuccess) {
         lines.push(`    on_success: ${data.onSuccess}`);
+      }
+      if (data.onFailure) {
+        lines.push(`    on_failure: ${data.onFailure}`);
       }
       if (data.onSubmit) {
         lines.push(`    on_submit: ${data.onSubmit}`);
@@ -1283,63 +1311,75 @@ export default function FlowEditor() {
               <div className="form-stack">
               <div>
                 <Text className="muted">Название</Text>
-                <Input
-                  value={flowMeta.title}
-                  disabled={isReadOnly}
-                  onChange={(event) => updateFlowMeta({ title: event.target.value })}
-                />
+                <div className="field-control">
+                  <Input
+                    value={flowMeta.title}
+                    disabled={isReadOnly}
+                    onChange={(event) => updateFlowMeta({ title: event.target.value })}
+                  />
+                </div>
               </div>
               <div>
                 <Text className="muted">ID Flow</Text>
-                <Input
-                  value={flowMeta.flowId}
-                  disabled={isReadOnly}
-                  onChange={(event) => updateFlowMeta({ flowId: event.target.value })}
-                />
+                <div className="field-control">
+                  <Input
+                    value={flowMeta.flowId}
+                    disabled={isReadOnly}
+                    onChange={(event) => updateFlowMeta({ flowId: event.target.value })}
+                  />
+                </div>
               </div>
               <div>
                 <Text className="muted">Описание</Text>
-                <Input.TextArea
-                  rows={3}
-                  value={flowMeta.description}
-                  disabled={isReadOnly}
-                  onChange={(event) => updateFlowMeta({ description: event.target.value })}
-                />
+                <div className="field-control">
+                  <Input.TextArea
+                    rows={3}
+                    value={flowMeta.description}
+                    disabled={isReadOnly}
+                    onChange={(event) => updateFlowMeta({ description: event.target.value })}
+                  />
+                </div>
               </div>
               <div>
                 <Text className="muted">Статус</Text>
-                <Select
-                  value={flowMeta.status}
-                  disabled={isReadOnly}
-                  onChange={(value) => updateFlowMeta({ status: value })}
-                  options={[
-                    { value: 'draft', label: 'draft' },
-                    { value: 'published', label: 'published' },
-                  ]}
-                />
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.status}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ status: value })}
+                    options={[
+                      { value: 'draft', label: 'draft' },
+                      { value: 'published', label: 'published' },
+                    ]}
+                  />
+                </div>
               </div>
               <div>
                 <Text className="muted">Стартовая нода</Text>
-                <Select
-                  value={flowMeta.startNodeId}
-                  disabled={isReadOnly}
-                  onChange={handleStartNodeChange}
-                  options={nodes.map((node) => ({ value: node.id, label: node.id }))}
-                />
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.startNodeId}
+                    disabled={isReadOnly}
+                    onChange={handleStartNodeChange}
+                    options={nodes.map((node) => ({ value: node.id, label: node.id }))}
+                  />
+                </div>
               </div>
               <div>
-                <Text className="muted">Coding Agent</Text>
-                <Select
-                  value={flowMeta.codingAgent}
-                  disabled={isReadOnly}
-                  onChange={(value) => updateFlowMeta({ codingAgent: value })}
-                  options={[
-                    { value: 'qwen', label: 'qwen' },
-                    { value: 'claude', label: 'claude' },
-                    { value: 'cursor', label: 'cursor' },
-                  ]}
-                  placeholder="Выберите coding agent"
-                />
+                <Text className="muted">Кодинг агент</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.codingAgent}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ codingAgent: value })}
+                    options={[
+                      { value: 'qwen', label: 'qwen' },
+                      { value: 'claude', label: 'claude' },
+                      { value: 'cursor', label: 'cursor' },
+                    ]}
+                    placeholder="Выберите coding agent"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1347,8 +1387,7 @@ export default function FlowEditor() {
 
             <div className="linked-block">
               <div className="linked-header">
-                <Title level={5}>Linked Rules</Title>
-                <Text className="muted">Фильтр по coding_agent</Text>
+                <Title level={5}>Привязанные правила</Title>
               </div>
               <Select
                 mode="multiple"
@@ -1356,54 +1395,30 @@ export default function FlowEditor() {
                 value={flowMeta.ruleRefs}
                 disabled={isReadOnly}
                 onChange={(value) => updateFlowMeta({ ruleRefs: value })}
-                placeholder="Выберите Rules"
+                placeholder="Выберите правила"
               />
               <List
                 dataSource={flowMeta.ruleRefs}
-                locale={{ emptyText: 'Нет связанных Rules' }}
+                locale={{ emptyText: 'Нет связанных правил' }}
                 renderItem={(ref, index) => {
-                  const rule = rules.find((item) => item.canonical === ref);
                   return (
                     <List.Item
                       className="linked-item"
-                      actions={[
-                        <Button
-                          key="up"
-                          size="small"
-                          icon={<ArrowUpOutlined />}
-                          type="default"
-                          disabled={isReadOnly}
-                          onClick={() => updateFlowMeta({ ruleRefs: reorder(flowMeta.ruleRefs, index, -1) })}
-                        />,
-                        <Button
-                          key="down"
-                          size="small"
-                          icon={<ArrowDownOutlined />}
-                          type="default"
-                          disabled={isReadOnly}
-                          onClick={() => updateFlowMeta({ ruleRefs: reorder(flowMeta.ruleRefs, index, 1) })}
-                        />,
-                        <Button
-                          key="delete"
-                          size="small"
-                          type="default"
-                          danger
-                          icon={<DeleteOutlined />}
-                          disabled={isReadOnly}
-                          onClick={() => updateFlowMeta({ ruleRefs: flowMeta.ruleRefs.filter((item) => item !== ref) })}
-                        />,
-                      ]}
                     >
-                      <List.Item.Meta
-                        title={rule ? rule.name : ref}
-                        description={
-                          <div className="linked-meta">
-                            <span className="mono">{ref}</span>
-                            <span>{rule?.codingAgent || 'неизвестно'}</span>
-                          </div>
-                        }
-                      />
-                      <StatusTag value={rule?.status || 'не найдено'} />
+                      <div className="linked-rule-row">
+                        <span className="mono linked-rule-name">{ref}</span>
+                        <div className="linked-rule-actions">
+                          <Button
+                            key="delete"
+                            size="small"
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            disabled={isReadOnly}
+                            onClick={() => updateFlowMeta({ ruleRefs: flowMeta.ruleRefs.filter((item) => item !== ref) })}
+                          />
+                        </div>
+                      </div>
                     </List.Item>
                   );
                 }}
@@ -1413,16 +1428,16 @@ export default function FlowEditor() {
             <Divider />
 
             <div className="form-stack">
-              <div>
-                <Text className="muted">Fail on missing declared output</Text>
+              <div className="switch-row">
+                <Text className="muted">Провалить при отсутствии объявленного выхода</Text>
                 <Switch
                   checked={flowMeta.failOnMissingDeclaredOutput}
                   disabled={isReadOnly}
                   onChange={(checked) => updateFlowMeta({ failOnMissingDeclaredOutput: checked })}
                 />
               </div>
-              <div>
-                <Text className="muted">Fail on missing expected mutation</Text>
+              <div className="switch-row">
+                <Text className="muted">Провалить при отсутствии ожидаемой мутации</Text>
                 <Switch
                   checked={flowMeta.failOnMissingExpectedMutation}
                   disabled={isReadOnly}
@@ -1430,14 +1445,16 @@ export default function FlowEditor() {
                 />
               </div>
               <div>
-                <Text className="muted">Response Schema (опционально)</Text>
-                <Input.TextArea
-                  rows={6}
-                  value={flowMeta.responseSchema}
-                  placeholder="YAML/JSON schema"
-                  disabled={isReadOnly}
-                  onChange={(event) => updateFlowMeta({ responseSchema: event.target.value })}
-                />
+                <Text className="muted">Схема ответа (опционально)</Text>
+                <div className="field-control">
+                  <Input.TextArea
+                    rows={6}
+                    value={flowMeta.responseSchema}
+                    placeholder="YAML/JSON schema"
+                    disabled={isReadOnly}
+                    onChange={(event) => updateFlowMeta({ responseSchema: event.target.value })}
+                  />
+                </div>
               </div>
             </div>
             </Card>
@@ -1447,57 +1464,66 @@ export default function FlowEditor() {
               <div className="form-stack">
                 <div>
                   <Text className="muted">ID ноды</Text>
-                  <Input
-                    value={nodeIdDraft}
-                    disabled={!canEditNodeId}
-                    onChange={(event) => {
-                      if (!canEditNodeId) {
-                        return;
-                      }
-                      setNodeIdDraft(event.target.value);
-                    }}
-                    onBlur={(event) => {
-                      if (!canEditNodeId) {
-                        return;
-                      }
-                      renameSelectedNodeId(event.target.value);
-                    }}
-                    onPressEnter={(event) => {
-                      if (!canEditNodeId) {
-                        return;
-                      }
-                      renameSelectedNodeId(event.currentTarget.value);
-                    }}
-                  />
+                  <div className="field-control">
+                    <Input
+                      value={nodeIdDraft}
+                      disabled={!canEditNodeId}
+                      onChange={(event) => {
+                        if (!canEditNodeId) {
+                          return;
+                        }
+                        setNodeIdDraft(event.target.value);
+                      }}
+                      onBlur={(event) => {
+                        if (!canEditNodeId) {
+                          return;
+                        }
+                        renameSelectedNodeId(event.target.value);
+                      }}
+                      onPressEnter={(event) => {
+                        if (!canEditNodeId) {
+                          return;
+                        }
+                        renameSelectedNodeId(event.currentTarget.value);
+                      }}
+                    />
+                  </div>
                 </div>
                 <div>
                   <Text className="muted">Название</Text>
-                  <Input
-                    value={selectedNode.data.title}
-                    disabled={isReadOnly}
-                    onChange={(event) => updateSelectedNode({ title: event.target.value })}
-                  />
+                  <div className="field-control">
+                    <Input
+                      value={selectedNode.data.title}
+                      disabled={isReadOnly}
+                      onChange={(event) => updateSelectedNode({ title: event.target.value })}
+                    />
+                  </div>
                 </div>
                 <div>
                   <Text className="muted">Описание</Text>
-                  <Input.TextArea
-                    rows={2}
-                    value={selectedNode.data.description}
-                    disabled={isReadOnly}
-                    onChange={(event) => updateSelectedNode({ description: event.target.value })}
-                  />
+                  <div className="field-control">
+                    <Input.TextArea
+                      rows={2}
+                      value={selectedNode.data.description}
+                      disabled={isReadOnly}
+                      onChange={(event) => updateSelectedNode({ description: event.target.value })}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <Text className="muted">Type</Text>
-                  <Input value={selectedNode.data.type} disabled />
+                  <Text className="muted">Тип</Text>
+                  <div className="field-control">
+                    <Input value={selectedNode.data.type} disabled />
+                  </div>
                 </div>
                 <div>
-                  <Text className="muted">Node Kind</Text>
-                  <Select
-                    value={selectedNode.data.nodeKind}
-                    disabled={isReadOnly}
-                    onChange={(value) => {
-                      const meta = NODE_KIND_META[value] || {};
+                  <Text className="muted">Тип Node</Text>
+                  <div className="field-control">
+                    <Select
+                      value={selectedNode.data.nodeKind}
+                      disabled={isReadOnly}
+                      onChange={(value) => {
+                        const meta = NODE_KIND_META[value] || {};
                       updateSelectedNode({
                         nodeKind: value,
                         type: meta.type,
@@ -1508,27 +1534,32 @@ export default function FlowEditor() {
                         onReject: value === 'human_approval' ? selectedNode.data.onReject || '' : '',
                         onReworkRoutes: value === 'human_approval' ? selectedNode.data.onReworkRoutes || {} : {},
                         onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
+                        onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
                       });
-                    }}
-                    options={[
-                      { value: 'ai', label: 'ai' },
-                      { value: 'command', label: 'command' },
-                      { value: 'human_input', label: 'human_input' },
-                      { value: 'human_approval', label: 'human_approval' },
-                      { value: 'terminal', label: 'terminal' },
-                    ]}
-                  />
+                      }}
+                      options={[
+                        { value: 'ai', label: 'ai' },
+                        { value: 'command', label: 'command' },
+                        { value: 'human_input', label: 'human_input' },
+                        { value: 'human_approval', label: 'human_approval' },
+                        { value: 'terminal', label: 'terminal' },
+                      ]}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <Text className="muted">Execution Mode</Text>
-                  <Input value={selectedNode.data.executionMode} disabled />
+                  <Text className="muted">Режим исполнения</Text>
+                  <div className="field-control">
+                    <Input value={selectedNode.data.executionMode} disabled />
+                  </div>
                 </div>
 
                 <Divider />
 
                 <div>
-                  <Text className="muted">Execution Context</Text>
-                  <div className="context-list">
+                  <Text className="muted">Контекст исполнения</Text>
+                  <div className="field-control">
+                    <div className="context-list">
                     {(selectedNode.data.executionContext || []).map((entry, index) => (
                       <div key={`${entry.type}-${index}`} className="context-row">
                         <Select
@@ -1544,7 +1575,7 @@ export default function FlowEditor() {
                         />
                         <Input
                           value={entry.path || ''}
-                          placeholder="path"
+                          placeholder="путь"
                           disabled={isReadOnly || entry.type === 'user_request'}
                           onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
                         />
@@ -1572,42 +1603,47 @@ export default function FlowEditor() {
                         addSelectedNodeListItem('executionContext', { type: 'user_request', required: true })
                       }
                     >
-                      Добавить context
+                      Добавить контекст
                     </Button>
+                    </div>
                   </div>
                 </div>
 
                 <Divider />
 
                 <div>
-                  <Text className="muted">Instruction</Text>
-                  <Input.TextArea
-                    rows={3}
-                    value={selectedNode.data.instruction}
-                    disabled={isReadOnly}
-                    onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
-                  />
+                  <Text className="muted">Инструкция</Text>
+                  <div className="field-control">
+                    <Input.TextArea
+                      rows={3}
+                      value={selectedNode.data.instruction}
+                      disabled={isReadOnly}
+                      onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <Text className="muted">Response Schema (опционально)</Text>
-                  <Input.TextArea
-                    rows={4}
-                    value={selectedNode.data.responseSchema}
-                    placeholder="YAML/JSON schema"
-                    disabled={isReadOnly}
-                    onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
-                  />
+                  <Text className="muted">Схема ответа (опционально)</Text>
+                  <div className="field-control">
+                    <Input.TextArea
+                      rows={4}
+                      value={selectedNode.data.responseSchema}
+                      placeholder="YAML/JSON schema"
+                      disabled={isReadOnly}
+                      onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
+                    />
+                  </div>
                 </div>
 
                 <Divider />
 
                 <div className="linked-block">
                   <div className="linked-header">
-                    <Title level={5}>Linked Skills</Title>
+                    <Title level={5}>Привязанные навыки</Title>
                     <Text className="muted">Только для AI</Text>
                   </div>
                   {selectedNode.data.nodeKind !== 'ai' ? (
-                    <div className="card-muted">Linked Skills доступны только для AI-исполнителей.</div>
+                    <div className="card-muted">Привязанные навыки доступны только для AI-исполнителей.</div>
                   ) : (
                     <>
                       <Select
@@ -1616,55 +1652,29 @@ export default function FlowEditor() {
                         value={selectedNode.data.skillRefs || []}
                         disabled={isReadOnly}
                         onChange={(value) => updateSelectedNode({ skillRefs: value })}
-                        placeholder="Выберите Skills"
+                        placeholder="Выберите навыки"
                       />
                       <List
                         dataSource={selectedNode.data.skillRefs || []}
-                        locale={{ emptyText: 'Нет связанных Skills' }}
+                        locale={{ emptyText: 'Нет связанных навыков' }}
                         renderItem={(ref, index) => {
-                          const skill = skills.find((item) => item.canonical === ref);
                           const skillRefs = selectedNode.data.skillRefs || [];
                           return (
-                            <List.Item
-                              className="linked-item"
-                              actions={[
-                                <Button
-                                  key="up"
-                                  size="small"
-                                  icon={<ArrowUpOutlined />}
-                                  type="default"
-                                  disabled={isReadOnly}
-                                  onClick={() => updateSelectedNode({ skillRefs: reorder(skillRefs, index, -1) })}
-                                />,
-                                <Button
-                                  key="down"
-                                  size="small"
-                                  icon={<ArrowDownOutlined />}
-                                  type="default"
-                                  disabled={isReadOnly}
-                                  onClick={() => updateSelectedNode({ skillRefs: reorder(skillRefs, index, 1) })}
-                                />,
-                                <Button
-                                  key="delete"
-                                  size="small"
-                                  type="default"
-                                  danger
-                                  icon={<DeleteOutlined />}
-                                  disabled={isReadOnly}
-                                  onClick={() => updateSelectedNode({ skillRefs: skillRefs.filter((item) => item !== ref) })}
-                                />,
-                              ]}
-                            >
-                              <List.Item.Meta
-                                title={skill ? skill.name : ref}
-                                description={
-                                  <div className="linked-meta">
-                                    <span className="mono">{ref}</span>
-                                    <span>{skill?.codingAgent || 'неизвестно'}</span>
-                                  </div>
-                                }
-                              />
-                              <StatusTag value={skill?.status || 'не найдено'} />
+                            <List.Item className="linked-item">
+                              <div className="linked-rule-row">
+                                <span className="mono linked-rule-name">{ref}</span>
+                                <div className="linked-rule-actions">
+                                  <Button
+                                    key="delete"
+                                    size="small"
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    disabled={isReadOnly}
+                                    onClick={() => updateSelectedNode({ skillRefs: skillRefs.filter((item) => item !== ref) })}
+                                  />
+                                </div>
+                              </div>
                             </List.Item>
                           );
                         }}
@@ -1676,50 +1686,50 @@ export default function FlowEditor() {
                 <Divider />
 
                 <div>
-                  <Title level={5}>Expected Outputs</Title>
-                  <Text className="muted">produced_artifacts</Text>
+                  <Title level={5}>Ожидаемые выходы</Title>
+                  <Text className="muted">Создаваемые артефакты</Text>
                   <div className="context-list">
                     {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
-                      <div key={`${entry.path}-${index}`} className="context-row">
+                      <div key={`${entry.path}-${index}`} className="artifact-row">
                         <Input
-                          value={entry.path || ''}
-                          placeholder="path"
+                          value={extractArtifactName(entry.path)}
+                          placeholder="имя артефакта"
                           disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })}
+                          onChange={(event) =>
+                            updateSelectedNodeList('producedArtifacts', index, {
+                              path: buildArtifactPath(event.target.value),
+                            })
+                          }
                         />
-                        <Switch
-                          checked={!!entry.required}
-                          disabled={isReadOnly}
-                          onChange={(checked) => updateSelectedNodeList('producedArtifacts', index, { required: checked })}
-                        />
-                        <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          disabled={isReadOnly}
-                          onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
-                        />
+                        <div className="artifact-row-controls">
+                          <Button
+                            size="small"
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            disabled={isReadOnly}
+                            onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
+                          />
+                        </div>
                       </div>
                     ))}
                     <Button
-                      size="small"
                       type="dashed"
                       icon={<PlusOutlined />}
                       disabled={isReadOnly}
                       onClick={() => addSelectedNodeListItem('producedArtifacts', { path: '', required: true })}
                     >
-                      Добавить artifact
+                      Добавить артефакт
                     </Button>
                   </div>
 
-                  <Text className="muted" style={{ marginTop: 12 }}>expected_mutations</Text>
+                  <Text className="muted" style={{ marginTop: 12 }}>Ожидаемые изменения</Text>
                   <div className="context-list">
                     {(selectedNode.data.expectedMutations || []).map((entry, index) => (
                       <div key={`${entry.path}-${index}`} className="context-row">
                         <Input
                           value={entry.path || ''}
-                          placeholder="path"
+                          placeholder="путь"
                           disabled={isReadOnly}
                           onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
                         />
@@ -1739,13 +1749,12 @@ export default function FlowEditor() {
                       </div>
                     ))}
                     <Button
-                      size="small"
                       type="dashed"
                       icon={<PlusOutlined />}
                       disabled={isReadOnly}
                       onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true })}
                     >
-                      Добавить mutation
+                      Добавить изменение
                     </Button>
                   </div>
                 </div>
@@ -1753,90 +1762,138 @@ export default function FlowEditor() {
                 <Divider />
 
                 <div>
-                  <Title level={5}>Routing</Title>
+                  <Title level={5}>Переходы</Title>
                   {selectedNode.data.type === 'terminal' && (
                     <div className="card-muted">Terminal нода завершает flow и не имеет переходов.</div>
                   )}
                   {selectedNode.data.type === 'executor' && (
                     <>
-                      <div className="transition-row">
-                        <span className="mono">on_success</span>
-                        <Input
-                          value={selectedNode.data.onSuccess || ''}
-                          disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNode({ onSuccess: event.target.value })}
-                        />
+                      <div className="transition-block">
+                        <Text className="muted mono">on_success</Text>
+                        <div className="field-control">
+                          <Select
+                            value={selectedNode.data.onSuccess || undefined}
+                            disabled={isReadOnly}
+                            allowClear
+                            options={nodeIdOptions}
+                            placeholder="Выберите ноду"
+                            onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
+                          />
+                        </div>
+                      </div>
+                      <div className="transition-block">
+                        <Text className="muted mono">on_failure</Text>
+                        <div className="field-control">
+                          <Select
+                            value={selectedNode.data.onFailure || undefined}
+                            disabled={isReadOnly}
+                            allowClear
+                            options={nodeIdOptions}
+                            placeholder="Выберите ноду"
+                            onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
+                          />
+                        </div>
                       </div>
                     </>
                   )}
                   {selectedNode.data.nodeKind === 'human_input' && (
-                    <div className="transition-row">
-                      <span className="mono">on_submit</span>
-                      <Input
-                        value={selectedNode.data.onSubmit || ''}
-                        disabled={isReadOnly}
-                        onChange={(event) => updateSelectedNode({ onSubmit: event.target.value })}
-                      />
+                    <div className="transition-block">
+                      <Text className="muted mono">on_submit</Text>
+                      <div className="field-control">
+                        <Select
+                          value={selectedNode.data.onSubmit || undefined}
+                          disabled={isReadOnly}
+                          allowClear
+                          options={nodeIdOptions}
+                          placeholder="Выберите ноду"
+                          onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
+                        />
+                      </div>
                     </div>
                   )}
                   {selectedNode.data.nodeKind === 'human_approval' && (
                     <>
-                      <div className="transition-row">
-                        <span className="mono">on_approve</span>
-                        <Input
-                          value={selectedNode.data.onApprove || ''}
-                          disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNode({ onApprove: event.target.value })}
-                        />
+                      <div className="transition-block">
+                        <Text className="muted mono">on_approve</Text>
+                        <div className="field-control">
+                          <Select
+                            value={selectedNode.data.onApprove || undefined}
+                            disabled={isReadOnly}
+                            allowClear
+                            options={nodeIdOptions}
+                            placeholder="Выберите ноду"
+                            onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
+                          />
+                        </div>
                       </div>
-                      <div className="transition-row">
-                        <span className="mono">on_reject</span>
-                        <Input
-                          value={selectedNode.data.onReject || ''}
-                          disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNode({ onReject: event.target.value })}
-                        />
+                      <div className="transition-block">
+                        <Text className="muted mono">on_reject</Text>
+                        <div className="field-control">
+                          <Select
+                            value={selectedNode.data.onReject || undefined}
+                            disabled={isReadOnly}
+                            allowClear
+                            options={nodeIdOptions}
+                            placeholder="Выберите ноду"
+                            onChange={(value) => updateSelectedNode({ onReject: value || '' })}
+                          />
+                        </div>
                       </div>
                       <div className="transition-list">
                         {Object.entries(selectedNode.data.onReworkRoutes || {}).map(([mode, target]) => (
-                          <div key={mode} className="transition-row">
-                            <span className="mono">rework:{mode}</span>
-                            <Input
-                              value={target}
-                              disabled={isReadOnly}
-                              onChange={(event) => {
-                                const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                                nextRoutes[mode] = event.target.value;
-                                updateSelectedNode({ onReworkRoutes: nextRoutes });
-                              }}
-                            />
-                            <Button
-                              size="small"
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              disabled={isReadOnly}
-                              onClick={() => {
-                                const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                                delete nextRoutes[mode];
-                                updateSelectedNode({ onReworkRoutes: nextRoutes });
-                              }}
-                            />
+                          <div key={mode} className="transition-block">
+                            <div className="transition-header">
+                              <Text className="muted mono">rework:{mode}</Text>
+                              <Button
+                                size="small"
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                disabled={isReadOnly}
+                                onClick={() => {
+                                  const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
+                                  delete nextRoutes[mode];
+                                  updateSelectedNode({ onReworkRoutes: nextRoutes });
+                                }}
+                              />
+                            </div>
+                            <div className="field-control">
+                              <Select
+                                value={target || undefined}
+                                disabled={isReadOnly}
+                                allowClear
+                                options={nodeIdOptions}
+                                placeholder="Выберите ноду"
+                                onChange={(value) => {
+                                  const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
+                                  nextRoutes[mode] = value || '';
+                                  updateSelectedNode({ onReworkRoutes: nextRoutes });
+                                }}
+                              />
+                            </div>
                           </div>
                         ))}
-                        <div className="transition-row">
-                          <Input
-                            value={reworkMode}
-                            placeholder="rework mode"
-                            disabled={isReadOnly}
-                            onChange={(event) => setReworkMode(event.target.value)}
-                          />
-                          <Input
-                            value={reworkTarget}
-                            placeholder="target node"
-                            disabled={isReadOnly}
-                            onChange={(event) => setReworkTarget(event.target.value)}
-                          />
+                        <div className="transition-block">
+                          <Text className="muted">Режим rework</Text>
+                          <div className="field-control">
+                            <Input
+                              value={reworkMode}
+                              placeholder="например, keep_workspace"
+                              disabled={isReadOnly}
+                              onChange={(event) => setReworkMode(event.target.value)}
+                            />
+                          </div>
+                          <Text className="muted">Целевая нода</Text>
+                          <div className="field-control">
+                            <Select
+                              value={reworkTarget || undefined}
+                              disabled={isReadOnly}
+                              allowClear
+                              options={nodeIdOptions}
+                              placeholder="Выберите ноду"
+                              onChange={(value) => setReworkTarget(value || '')}
+                            />
+                          </div>
                           <Button
                             size="small"
                             type="default"

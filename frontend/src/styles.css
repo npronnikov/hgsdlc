@@ -202,8 +202,9 @@ body {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 2px 4px;
   border-radius: 8px;
+  line-height: 1.2;
 }
 
 .hg-breadcrumbs button:hover {
@@ -387,6 +388,18 @@ body {
   gap: 12px;
 }
 
+.field-control {
+  margin-top: 6px;
+}
+
+.field-control .ant-input,
+.field-control .ant-input-affix-wrapper,
+.field-control .ant-input-number,
+.field-control .ant-picker,
+.field-control .ant-select {
+  width: 100%;
+}
+
 .linked-block {
   display: flex;
   flex-direction: column;
@@ -402,6 +415,36 @@ body {
 
 .linked-item {
   align-items: flex-start;
+}
+
+.linked-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.linked-rule-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-rule-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.switch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-row .ant-switch {
+  justify-self: end;
 }
 
 .linked-meta {
@@ -573,8 +616,25 @@ body {
 .transition-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 8px;
+}
+
+.transition-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transition-header {
+  display: grid;
+  grid-template-columns: minmax(0, 9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.transition-header .ant-btn {
+  justify-self: end;
 }
 
 .context-list {
@@ -589,6 +649,20 @@ body {
   grid-template-columns: 140px 1fr auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.artifact-row {
+  display: grid;
+  grid-template-columns: 75% 25%;
+  gap: 8px;
+  align-items: center;
+}
+
+.artifact-row-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .context-row .ant-btn {

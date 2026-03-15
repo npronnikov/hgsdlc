@@ -211,7 +211,7 @@ public class SkillService {
         draft.setVersion(nextDraftVersion);
         draft.setCanonicalName(draft.getSkillId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
-        repository.save(draft);
+        repository.saveAndFlush(draft);
     }
 
     private String resolveSavedBy(User user) {
