@@ -464,6 +464,7 @@ nodes:
       - feature-analysis
       - questions
     on_success: collect-answers
+    on_failure: fail
     instruction: |
       Analyze the requested feature.
       Study the project context.
@@ -508,6 +509,7 @@ nodes:
     outcome_routes:
       requirements_ready: approve-requirements
       need_more_input: collect-answers
+    on_failure: fail
     instruction: |
       Read feature analysis, questions and human answers.
       Update requirements draft.
@@ -545,6 +547,7 @@ nodes:
     outputs:
       - implementation-plan
     on_success: approve-plan
+    on_failure: fail
     instruction: |
       Create a concrete implementation plan.
 
@@ -587,6 +590,7 @@ nodes:
       - code-summary
       - validation-summary
     on_success: approve-code
+    on_failure: fail
     instruction: |
       Implement the approved feature and update tests.
 
@@ -956,6 +960,7 @@ Human approval gate:
 
 * `AI` node with `on_success` moves to `on_success`
 * `AI` node with `allowed_outcomes` moves to `outcome_routes[outcome]`
+* `AI` node failure (no agent response or missing required artifacts) moves to `on_failure`
 * `External Command` node moves to `on_success`
 * `human_input` submit moves to `on_submit`
 * `human_approval approve` moves to `on_approve`
@@ -1008,6 +1013,7 @@ Backward edges разрешены только в:
 * `instruction`
 * либо `on_success`
 * либо `allowed_outcomes` и `outcome_routes`
+* `on_failure` required
 * `retry_policy` optional
 
 ### 12.3 `node-command.schema.json`
@@ -1383,9 +1389,10 @@ Runtime:
 11. Если node имеет `allowed_outcomes`, проверить `response.outcome`.
 12. Сохранить output artifacts как новые artifact versions.
 13. Посчитать summary delta.
-14. Если всё валидно — `succeeded`, иначе `failed`.
-15. Создать audit events.
-16. Если задан `outcome`, перейти в `outcome_routes[outcome]`, иначе перейти в `on_success`.
+14. Если нет ответа от агента или отсутствуют требуемые артефакты — `failed` и перейти в `on_failure`.
+15. Если всё валидно — `succeeded`, иначе `failed`.
+16. Создать audit events.
+17. Если задан `outcome`, перейти в `outcome_routes[outcome]`, иначе перейти в `on_success`.
 
 ### 17.4 Алгоритм External Command node
 
@@ -2425,6 +2432,7 @@ TECH_APPROVER открывает `approve-code`.
 * наличие `instruction`
 * либо наличие `on_success`
 * либо наличие `allowed_outcomes` и `outcome_routes`
+* `on_failure` required
 
 ### 28.4 External Command node validation
 

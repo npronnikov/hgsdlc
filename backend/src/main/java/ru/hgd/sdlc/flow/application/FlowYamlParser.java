@@ -102,6 +102,12 @@ public class FlowYamlParser {
                 return "schemas/node-human-approval-gate.schema.json";
             }
         }
+        if ("terminal".equals(normalizedType)) {
+            String normalizedKind = normalize(nodeKind);
+            if ("terminal".equals(normalizedKind)) {
+                return "schemas/node-terminal.schema.json";
+            }
+        }
         return null;
     }
 

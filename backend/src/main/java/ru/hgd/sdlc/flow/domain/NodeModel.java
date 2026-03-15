@@ -49,6 +49,9 @@ public class NodeModel {
     @JsonProperty("on_success")
     private String onSuccess;
 
+    @JsonProperty("on_failure")
+    private String onFailure;
+
     @JsonProperty("allowed_outcomes")
     private List<String> allowedOutcomes;
 

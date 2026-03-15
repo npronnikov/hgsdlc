@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "node-ai-schema",
+  "title": "node-terminal-schema",
   "type": "object",
   "required": [
     "id",
@@ -8,25 +8,20 @@
     "type",
     "node_kind",
     "execution_mode",
-    "execution_context",
-    "on_failure"
+    "execution_context"
   ],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
-    "type": { "type": "string", "enum": ["executor"] },
-    "node_kind": { "type": "string", "enum": ["ai"] },
-    "execution_mode": { "type": "string", "enum": ["agent"] },
+    "type": { "type": "string", "enum": ["terminal"] },
+    "node_kind": { "type": "string", "enum": ["terminal"] },
+    "execution_mode": { "type": "string", "enum": ["terminal"] },
     "execution_context": {
       "type": "array",
       "items": { "$ref": "#/$defs/execution_context_entry" }
     },
     "instruction": { "type": "string" },
-    "skill_refs": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
     "response_schema": { "type": "object" },
     "produced_artifacts": {
       "type": "array",
@@ -35,14 +30,7 @@
     "expected_mutations": {
       "type": "array",
       "items": { "$ref": "#/$defs/path_requirement" }
-    },
-    "on_success": { "type": "string" },
-    "on_failure": { "type": "string" },
-    "allowed_outcomes": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "outcome_routes": { "type": "object" }
+    }
   },
   "$defs": {
     "execution_context_entry": {

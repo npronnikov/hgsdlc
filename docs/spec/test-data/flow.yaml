@@ -1,0 +1,174 @@
+id: test-flow
+version: "1.0.0"
+canonical_name: test-flow@1.0.0
+title: Test flow
+description: Flow used for manual testing of rules, skills, and node transitions.
+status: published
+start_node_id: intake
+coding_agent: qwen
+rule_refs:
+  - test-rule@1.0.0
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: true
+
+nodes:
+  - id: intake
+    title: Intake request
+    type: executor
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: user_request
+        required: true
+    skill_refs:
+      - test-intake@1.0.0
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/analysis.md
+        required: true
+      - path: .hgwork/{runId}/{nodeId}/artifacts/questions.md
+        required: true
+    expected_mutations: []
+    on_success: collect-answers
+    on_failure: fail
+    instruction: |
+      Analyze the request and generate analysis plus questions.
+
+  - id: collect-answers
+    title: Collect answers
+    type: gate
+    node_kind: human_input
+    execution_mode: human_input
+    execution_context:
+      - type: artifact_ref
+        path: .hgwork/{runId}/intake/artifacts/questions.md
+        required: true
+    input_artifact: questions
+    output_artifact: answers
+    allowed_roles:
+      - PRODUCT_OWNER
+    completion_policy:
+      require_non_empty_output: true
+      output_format: markdown
+      min_content_length: 20
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/answers.md
+        required: true
+    expected_mutations: []
+    on_submit: process-answers
+
+  - id: process-answers
+    title: Process answers
+    type: executor
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: artifact_ref
+        path: .hgwork/{runId}/collect-answers/artifacts/answers.md
+        required: true
+    skill_refs:
+      - test-requirements@1.0.0
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/requirements.md
+        required: true
+      - path: .hgwork/{runId}/{nodeId}/artifacts/questions.md
+        required: false
+    expected_mutations: []
+    allowed_outcomes:
+      - requirements_ready
+      - need_more_input
+    outcome_routes:
+      requirements_ready: approve-requirements
+      need_more_input: collect-answers
+    on_failure: fail
+    instruction: |
+      Update requirements based on answers.
+      If answers are insufficient, return outcome need_more_input and follow-up questions.
+
+  - id: approve-requirements
+    title: Approve requirements
+    type: gate
+    node_kind: human_approval
+    execution_mode: human_approval
+    execution_context:
+      - type: artifact_ref
+        path: .hgwork/{runId}/process-answers/artifacts/requirements.md
+        required: true
+    review_artifacts:
+      - requirements
+    allowed_actions:
+      - approve
+      - reject
+      - rework
+    allowed_roles:
+      - TECH_APPROVER
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/approval-comment.md
+        required: false
+    expected_mutations: []
+    on_approve: implement
+    on_reject: fail
+    on_rework_routes:
+      keep_workspace: process-answers
+
+  - id: implement
+    title: Implement change
+    type: executor
+    node_kind: ai
+    execution_mode: agent
+    execution_context:
+      - type: directory_ref
+        path: src
+        required: true
+      - type: artifact_ref
+        path: .hgwork/{runId}/process-answers/artifacts/requirements.md
+        required: true
+    skill_refs:
+      - test-implement@1.0.0
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/code-summary.md
+        required: true
+      - path: .hgwork/{runId}/{nodeId}/artifacts/validation-summary.md
+        required: true
+    expected_mutations:
+      - path: src/**
+        required: true
+    on_success: commit
+    on_failure: fail
+    instruction: |
+      Implement the change and provide code and validation summaries.
+
+  - id: commit
+    title: Commit result
+    type: executor
+    node_kind: command
+    execution_mode: command
+    execution_context: []
+    command_engine: git
+    command_spec:
+      action: git_commit
+      message_template: "test: apply change"
+    success_exit_codes:
+      - 0
+    produced_artifacts:
+      - path: .hgwork/{runId}/{nodeId}/artifacts/git-commit-result.json
+        required: true
+    expected_mutations: []
+    on_success: end
+
+  - id: end
+    title: End
+    type: terminal
+    node_kind: terminal
+    execution_mode: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []
+
+  - id: fail
+    title: Fail
+    type: terminal
+    node_kind: terminal
+    execution_mode: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

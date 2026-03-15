@@ -219,6 +219,7 @@ nodes:
     produced_artifacts: []
     expected_mutations: []
     on_success: collect-answers
+    on_failure: close-run
   - id: collect-answers
     title: Collect answers
     type: gate
@@ -248,6 +249,7 @@ nodes:
       - path: docs/requirements/**
         required: true
     on_success: approve-requirements
+    on_failure: close-run
   - id: approve-requirements
     title: Approve requirements
     type: gate
@@ -321,6 +323,7 @@ nodes:
     produced_artifacts: []
     expected_mutations: []
     on_success: approve-audit
+    on_failure: finalize
   - id: approve-audit
     title: Approve audit
     type: gate
@@ -379,6 +382,7 @@ nodes:
     produced_artifacts: []
     expected_mutations: []
     on_success: sandbox-finish
+    on_failure: sandbox-finish
   - id: sandbox-finish
     title: Sandbox finish
     type: executor

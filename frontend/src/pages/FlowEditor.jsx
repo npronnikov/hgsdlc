@@ -63,6 +63,12 @@ const NODE_KIND_META = {
     type: 'gate',
     executionMode: 'human_approval',
   },
+  terminal: {
+    label: 'Terminal',
+    variant: 'terminal',
+    type: 'terminal',
+    executionMode: 'terminal',
+  },
 };
 
 const EXECUTION_CONTEXT_TYPES = [
@@ -77,6 +83,7 @@ const NODE_TYPE_OPTIONS = [
   { key: 'command', label: 'Command executor' },
   { key: 'human_input', label: 'Human input gate' },
   { key: 'human_approval', label: 'Human approval gate' },
+  { key: 'terminal', label: 'Terminal' },
 ];
 
 function FlowNode({ data, selected }) {
@@ -442,6 +449,13 @@ function validateFlow(nodes, meta) {
       }
     });
 
+    if (data.nodeKind === 'terminal' || data.type === 'terminal') {
+      if (transitions.length > 0) {
+        errors.push(`Terminal нода не может иметь переходов: ${node.id}`);
+      }
+      return;
+    }
+
     if (data.type === 'executor') {
       const hasOnSuccess = !!data.onSuccess;
       const hasOutcomes = Array.isArray(data.allowedOutcomes) && data.allowedOutcomes.length > 0;
@@ -725,6 +739,9 @@ export default function FlowEditor() {
         { value: 'rework:keep_workspace', label: 'rework: keep_workspace' },
         { value: 'rework:discard_uncommitted', label: 'rework: discard_uncommitted' },
       ];
+    }
+    if (data.nodeKind === 'terminal') {
+      return [];
     }
     return [{ value: 'on_success', label: 'on_success' }];
   };
@@ -1227,6 +1244,9 @@ export default function FlowEditor() {
                   }
                   const sourceNode = nodes.find((node) => node.id === connection.source);
                   const options = getRouteOptions(sourceNode);
+                  if (options.length === 0) {
+                    return;
+                  }
                   if (options.length === 1) {
                     applyConnection(connection.source, connection.target, options[0].value);
                     return;
@@ -1572,6 +1592,7 @@ export default function FlowEditor() {
                         onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
                         onReject: value === 'human_approval' ? selectedNode.data.onReject || '' : '',
                         onReworkRoutes: value === 'human_approval' ? selectedNode.data.onReworkRoutes || {} : {},
+                        onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
                       });
                     }}
                     options={[
@@ -1579,6 +1600,7 @@ export default function FlowEditor() {
                       { value: 'command', label: 'command' },
                       { value: 'human_input', label: 'human_input' },
                       { value: 'human_approval', label: 'human_approval' },
+                      { value: 'terminal', label: 'terminal' },
                     ]}
                   />
                 </div>
@@ -1817,6 +1839,9 @@ export default function FlowEditor() {
 
                 <div>
                   <Title level={5}>Routing</Title>
+                  {selectedNode.data.type === 'terminal' && (
+                    <div className="card-muted">Terminal нода завершает flow и не имеет переходов.</div>
+                  )}
                   {selectedNode.data.type === 'executor' && (
                     <>
                       <div className="transition-row">
