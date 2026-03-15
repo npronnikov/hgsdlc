@@ -61,15 +61,14 @@ export default function GateApproval() {
             <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Rework mode</Text>
             <Select
               style={{ width: '100%', marginTop: 8 }}
-              defaultValue="keep_workspace"
+              defaultValue="keep_current_changes"
               options={[
-                { value: 'keep_workspace', label: 'keep_workspace' },
-                { value: 'discard_uncommitted', label: 'discard_uncommitted' },
+                { value: 'keep_current_changes', label: 'keep_current_changes' },
+                { value: 'discard_current_changes', label: 'discard_current_changes' },
               ]}
             />
             <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
               <Button type="primary">Approve</Button>
-              <Button danger>Reject</Button>
               <Button type="default" style={{ borderColor: '#d97706', color: '#d97706' }}>Rework</Button>
             </div>
           </Card>

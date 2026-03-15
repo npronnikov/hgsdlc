@@ -66,17 +66,12 @@ public class FlowValidator {
     private void validateNode(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
         String type = normalize(node.getType());
         String nodeKind = normalize(node.getNodeKind());
-        String executionMode = normalize(node.getExecutionMode());
         if (type == null) {
             errors.add("Node type is required: " + node.getId());
             return;
         }
         if (nodeKind == null) {
             errors.add("node_kind is required: " + node.getId());
-            return;
-        }
-        if (executionMode == null) {
-            errors.add("execution_mode is required: " + node.getId());
             return;
         }
 
@@ -98,22 +93,6 @@ public class FlowValidator {
         } else {
             errors.add("Unsupported node type: " + node.getId());
             return;
-        }
-
-        if ("ai".equals(nodeKind) && !"agent".equals(executionMode)) {
-            errors.add("execution_mode must be agent for AI node: " + node.getId());
-        }
-        if ("command".equals(nodeKind) && !"command".equals(executionMode)) {
-            errors.add("execution_mode must be command for command node: " + node.getId());
-        }
-        if ("human_input".equals(nodeKind) && !"human_input".equals(executionMode)) {
-            errors.add("execution_mode must be human_input for human input node: " + node.getId());
-        }
-        if ("human_approval".equals(nodeKind) && !"human_approval".equals(executionMode)) {
-            errors.add("execution_mode must be human_approval for human approval node: " + node.getId());
-        }
-        if ("terminal".equals(nodeKind) && !"terminal".equals(executionMode)) {
-            errors.add("execution_mode must be terminal for terminal node: " + node.getId());
         }
 
         validateExecutionContext(node, errors);
@@ -139,7 +118,6 @@ public class FlowValidator {
                 || (node.getOnFailure() != null && !node.getOnFailure().isBlank())
                 || (node.getOnSubmit() != null && !node.getOnSubmit().isBlank())
                 || (node.getOnApprove() != null && !node.getOnApprove().isBlank())
-                || (node.getOnReject() != null && !node.getOnReject().isBlank())
                 || (node.getOnReworkRoutes() != null && !node.getOnReworkRoutes().isEmpty());
         if (hasTransition) {
             errors.add("Terminal node cannot have transitions: " + node.getId());
@@ -188,11 +166,6 @@ public class FlowValidator {
                 errors.add("human_approval gate requires on_approve: " + node.getId());
             } else {
                 assertTarget(node.getId(), "on_approve", node.getOnApprove(), nodesById, errors);
-            }
-            if (node.getOnReject() == null || node.getOnReject().isBlank()) {
-                errors.add("human_approval gate requires on_reject: " + node.getId());
-            } else {
-                assertTarget(node.getId(), "on_reject", node.getOnReject(), nodesById, errors);
             }
             if (node.getOnReworkRoutes() == null || node.getOnReworkRoutes().isEmpty()) {
                 errors.add("human_approval gate requires on_rework_routes: " + node.getId());
@@ -248,9 +221,6 @@ public class FlowValidator {
         }
         if (node.getOnApprove() != null) {
             targets.add(node.getOnApprove());
-        }
-        if (node.getOnReject() != null) {
-            targets.add(node.getOnReject());
         }
         if (node.getOnReworkRoutes() != null) {
             targets.addAll(node.getOnReworkRoutes().values());

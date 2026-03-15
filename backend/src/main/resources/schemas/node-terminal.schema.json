@@ -7,7 +7,6 @@
     "title",
     "type",
     "node_kind",
-    "execution_mode",
     "execution_context"
   ],
   "properties": {
@@ -16,7 +15,6 @@
     "description": { "type": "string" },
     "type": { "type": "string", "enum": ["terminal"] },
     "node_kind": { "type": "string", "enum": ["terminal"] },
-    "execution_mode": { "type": "string", "enum": ["terminal"] },
     "execution_context": {
       "type": "array",
       "items": { "$ref": "#/$defs/execution_context_entry" }

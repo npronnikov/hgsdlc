@@ -26,9 +26,6 @@ public class NodeModel {
     @JsonProperty("node_kind")
     private String nodeKind;
 
-    @JsonProperty("execution_mode")
-    private String executionMode;
-
     @JsonProperty("execution_context")
     private List<ExecutionContextEntry> executionContext;
 
@@ -57,9 +54,6 @@ public class NodeModel {
 
     @JsonProperty("on_approve")
     private String onApprove;
-
-    @JsonProperty("on_reject")
-    private String onReject;
 
     @JsonProperty("on_rework_routes")
     private Map<String, String> onReworkRoutes;

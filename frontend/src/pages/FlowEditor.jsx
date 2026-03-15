@@ -36,31 +36,26 @@ const NODE_KIND_META = {
     label: 'AI executor',
     variant: 'executor ai',
     type: 'executor',
-    executionMode: 'agent',
   },
   command: {
     label: 'Command executor',
     variant: 'executor command',
     type: 'executor',
-    executionMode: 'command',
   },
   human_input: {
     label: 'Human input gate',
     variant: 'gate input',
     type: 'gate',
-    executionMode: 'human_input',
   },
   human_approval: {
     label: 'Human approval gate',
     variant: 'gate approval',
     type: 'gate',
-    executionMode: 'human_approval',
   },
   terminal: {
     label: 'Terminal',
     variant: 'terminal',
     type: 'terminal',
-    executionMode: 'terminal',
   },
 };
 
@@ -138,7 +133,6 @@ const initialNodes = [
       description: 'Анализирует запрос и формирует вопросы.',
       nodeKind: 'ai',
       type: 'executor',
-      executionMode: 'agent',
       executionContext: [
         { type: 'user_request', required: true },
         { type: 'directory_ref', path: 'docs/requirements', required: true },
@@ -164,7 +158,6 @@ const initialNodes = [
       description: 'Сбор ответов владельца продукта.',
       nodeKind: 'human_input',
       type: 'gate',
-      executionMode: 'human_input',
       executionContext: [
         { type: 'artifact_ref', path: '.hgwork/{runId}/intake-analysis/artifacts/questions.md', required: true },
       ],
@@ -188,7 +181,6 @@ const initialNodes = [
       description: 'Обновить требования на основе ответов.',
       nodeKind: 'ai',
       type: 'executor',
-      executionMode: 'agent',
       executionContext: [
         { type: 'user_request', required: true },
         { type: 'artifact_ref', path: '.hgwork/{runId}/collect-answers/artifacts/answers.md', required: true },
@@ -213,7 +205,6 @@ const initialNodes = [
       description: 'Проверить обновлённые требования.',
       nodeKind: 'human_approval',
       type: 'gate',
-      executionMode: 'human_approval',
       executionContext: [
         { type: 'directory_ref', path: 'docs/requirements', required: true },
       ],
@@ -225,9 +216,8 @@ const initialNodes = [
       ],
       expectedMutations: [],
       onApprove: 'close-run',
-      onReject: 'close-run',
       onReworkRoutes: {
-        keep_workspace: 'process-answers',
+        keep_current_changes: 'process-answers',
       },
     },
   },
@@ -241,7 +231,6 @@ const initialNodes = [
       description: 'Завершение flow.',
       nodeKind: 'command',
       type: 'executor',
-      executionMode: 'command',
       executionContext: [],
       instruction: '',
       skillRefs: [],
@@ -302,9 +291,6 @@ function buildEdges(nodes) {
     if (data.onApprove) {
       addEdge(node.id, data.onApprove, 'on_approve', 'main');
     }
-    if (data.onReject) {
-      addEdge(node.id, data.onReject, 'on_reject', 'outcome');
-    }
     if (data.onReworkRoutes) {
       Object.entries(data.onReworkRoutes).forEach(([mode, target]) => {
         addEdge(node.id, target, `rework: ${mode}`, 'rework');
@@ -360,9 +346,6 @@ function validateFlow(nodes, meta) {
     const data = node.data || {};
     if (!data.nodeKind) {
       errors.push(`node_kind не задан: ${node.id}`);
-    }
-    if (!data.executionMode) {
-      errors.push(`execution_mode не задан: ${node.id}`);
     }
     if (data.skillRefs && data.skillRefs.length > 0 && data.nodeKind !== 'ai') {
       errors.push(`skill_refs разрешены только для AI нод: ${node.id}`);
@@ -429,7 +412,6 @@ function validateFlow(nodes, meta) {
     if (data.onFailure) transitions.push(['on_failure', data.onFailure]);
     if (data.onSubmit) transitions.push(['on_submit', data.onSubmit]);
     if (data.onApprove) transitions.push(['on_approve', data.onApprove]);
-    if (data.onReject) transitions.push(['on_reject', data.onReject]);
     if (data.onReworkRoutes) {
       Object.entries(data.onReworkRoutes).forEach(([key, value]) => transitions.push([`rework:${key}`, value]));
     }
@@ -461,9 +443,6 @@ function validateFlow(nodes, meta) {
     if (data.nodeKind === 'human_approval') {
       if (!data.onApprove) {
         errors.push(`human_approval требует on_approve: ${node.id}`);
-      }
-      if (!data.onReject) {
-        errors.push(`human_approval требует on_reject: ${node.id}`);
       }
       if (!data.onReworkRoutes || Object.keys(data.onReworkRoutes).length === 0) {
         errors.push(`human_approval требует on_rework_routes: ${node.id}`);
@@ -600,7 +579,6 @@ export default function FlowEditor() {
         if (data.onFailure === selectedNodeId) nextData.onFailure = trimmed;
         if (data.onSubmit === selectedNodeId) nextData.onSubmit = trimmed;
         if (data.onApprove === selectedNodeId) nextData.onApprove = trimmed;
-        if (data.onReject === selectedNodeId) nextData.onReject = trimmed;
         if (data.onReworkRoutes) {
           nextData.onReworkRoutes = Object.fromEntries(
             Object.entries(data.onReworkRoutes).map(([key, value]) => [
@@ -661,7 +639,6 @@ export default function FlowEditor() {
           if (data.onFailure === nodeId) nextData.onFailure = '';
           if (data.onSubmit === nodeId) nextData.onSubmit = '';
           if (data.onApprove === nodeId) nextData.onApprove = '';
-          if (data.onReject === nodeId) nextData.onReject = '';
           if (data.onReworkRoutes) {
             nextData.onReworkRoutes = Object.fromEntries(
               Object.entries(data.onReworkRoutes).filter(([, value]) => value !== nodeId)
@@ -698,9 +675,8 @@ export default function FlowEditor() {
     if (data.nodeKind === 'human_approval') {
       return [
         { value: 'on_approve', label: 'on_approve' },
-        { value: 'on_reject', label: 'on_reject' },
-        { value: 'rework:keep_workspace', label: 'rework: keep_workspace' },
-        { value: 'rework:discard_uncommitted', label: 'rework: discard_uncommitted' },
+        { value: 'rework:keep_current_changes', label: 'rework: keep_current_changes' },
+        { value: 'rework:discard_current_changes', label: 'rework: discard_current_changes' },
       ];
     }
     if (data.nodeKind === 'terminal') {
@@ -730,8 +706,6 @@ export default function FlowEditor() {
           data.onSubmit = targetId;
         } else if (routeKey === 'on_approve') {
           data.onApprove = targetId;
-        } else if (routeKey === 'on_reject') {
-          data.onReject = targetId;
         } else if (routeKey.startsWith('rework:')) {
           const mode = routeKey.split(':')[1];
           data.onReworkRoutes = { ...(data.onReworkRoutes || {}) };
@@ -761,8 +735,6 @@ export default function FlowEditor() {
           data.onSubmit = null;
         } else if (label === 'on_approve') {
           data.onApprove = null;
-        } else if (label === 'on_reject') {
-          data.onReject = null;
         } else if (label.startsWith('rework:')) {
           const mode = label.split(':')[1].trim();
           if (data.onReworkRoutes) {
@@ -784,7 +756,6 @@ export default function FlowEditor() {
       description: '',
       nodeKind: kind,
       type: meta.type,
-      executionMode: meta.executionMode,
       executionContext: [],
       instruction: '',
       skillRefs: [],
@@ -795,7 +766,6 @@ export default function FlowEditor() {
       onFailure: '',
       onSubmit: '',
       onApprove: '',
-      onReject: '',
       onReworkRoutes: {},
     };
   };
@@ -901,7 +871,6 @@ export default function FlowEditor() {
       }
       lines.push(`    type: ${data.type || 'executor'}`);
       lines.push(`    node_kind: ${data.nodeKind || ''}`);
-      lines.push(`    execution_mode: ${data.executionMode || ''}`);
       if (data.executionContext && data.executionContext.length > 0) {
         lines.push('    execution_context:');
         data.executionContext.forEach((entry) => {
@@ -955,9 +924,6 @@ export default function FlowEditor() {
       }
       if (data.onApprove) {
         lines.push(`    on_approve: ${data.onApprove}`);
-      }
-      if (data.onReject) {
-        lines.push(`    on_reject: ${data.onReject}`);
       }
       if (data.onReworkRoutes && Object.keys(data.onReworkRoutes).length > 0) {
         lines.push('    on_rework_routes:');
@@ -1524,18 +1490,16 @@ export default function FlowEditor() {
                       disabled={isReadOnly}
                       onChange={(value) => {
                         const meta = NODE_KIND_META[value] || {};
-                      updateSelectedNode({
-                        nodeKind: value,
-                        type: meta.type,
-                        executionMode: meta.executionMode,
-                        skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
-                        onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
-                        onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
-                        onReject: value === 'human_approval' ? selectedNode.data.onReject || '' : '',
-                        onReworkRoutes: value === 'human_approval' ? selectedNode.data.onReworkRoutes || {} : {},
-                        onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
-                        onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
-                      });
+                        updateSelectedNode({
+                          nodeKind: value,
+                          type: meta.type,
+                          skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
+                          onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
+                          onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
+                          onReworkRoutes: value === 'human_approval' ? selectedNode.data.onReworkRoutes || {} : {},
+                          onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
+                          onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
+                        });
                       }}
                       options={[
                         { value: 'ai', label: 'ai' },
@@ -1547,13 +1511,6 @@ export default function FlowEditor() {
                     />
                   </div>
                 </div>
-                <div>
-                  <Text className="muted">Режим исполнения</Text>
-                  <div className="field-control">
-                    <Input value={selectedNode.data.executionMode} disabled />
-                  </div>
-                </div>
-
                 <Divider />
 
                 <div>
@@ -1826,19 +1783,6 @@ export default function FlowEditor() {
                           />
                         </div>
                       </div>
-                      <div className="transition-block">
-                        <Text className="muted mono">on_reject</Text>
-                        <div className="field-control">
-                          <Select
-                            value={selectedNode.data.onReject || undefined}
-                            disabled={isReadOnly}
-                            allowClear
-                            options={nodeIdOptions}
-                            placeholder="Выберите ноду"
-                            onChange={(value) => updateSelectedNode({ onReject: value || '' })}
-                          />
-                        </div>
-                      </div>
                       <div className="transition-list">
                         {Object.entries(selectedNode.data.onReworkRoutes || {}).map(([mode, target]) => (
                           <div key={mode} className="transition-block">
@@ -1878,7 +1822,7 @@ export default function FlowEditor() {
                           <div className="field-control">
                             <Input
                               value={reworkMode}
-                              placeholder="например, keep_workspace"
+                              placeholder="например, keep_current_changes"
                               disabled={isReadOnly}
                               onChange={(event) => setReworkMode(event.target.value)}
                             />

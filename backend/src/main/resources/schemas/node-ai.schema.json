@@ -7,7 +7,6 @@
     "title",
     "type",
     "node_kind",
-    "execution_mode",
     "execution_context",
     "on_success",
     "on_failure"
@@ -18,7 +17,6 @@
     "description": { "type": "string" },
     "type": { "type": "string", "enum": ["executor"] },
     "node_kind": { "type": "string", "enum": ["ai"] },
-    "execution_mode": { "type": "string", "enum": ["agent"] },
     "execution_context": {
       "type": "array",
       "items": { "$ref": "#/$defs/execution_context_entry" }

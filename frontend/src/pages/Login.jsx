@@ -69,7 +69,7 @@ export default function Login() {
           </Card>
           <Card size="small">
             <Tag color="#16a34a">TECH_APPROVER</Tag>
-            <Text type="secondary">Approve, reject or rework gates.</Text>
+            <Text type="secondary">Approve or rework gates.</Text>
           </Card>
         </div>
       </div>

@@ -7,7 +7,6 @@
     "title",
     "type",
     "node_kind",
-    "execution_mode",
     "execution_context"
   ],
   "properties": {
@@ -16,7 +15,6 @@
     "description": { "type": "string" },
     "type": { "type": "string", "enum": ["gate"] },
     "node_kind": { "type": "string", "enum": ["human_approval"] },
-    "execution_mode": { "type": "string", "enum": ["human_approval"] },
     "execution_context": {
       "type": "array",
       "items": { "$ref": "#/$defs/execution_context_entry" }
@@ -35,7 +33,6 @@
     "allowed_actions": { "type": "array" },
     "allowed_roles": { "type": "array" },
     "on_approve": { "type": "string" },
-    "on_reject": { "type": "string" },
     "on_rework_routes": { "type": "object" }
   },
   "$defs": {

@@ -216,7 +216,6 @@ nodes:
     title: Intake analysis
     type: executor
     node_kind: ai
-    execution_mode: agent
     execution_context:
       - type: user_request
         required: true
@@ -230,7 +229,6 @@ nodes:
     title: Collect answers
     type: gate
     node_kind: human_input
-    execution_mode: human_input
     execution_context:
       - type: artifact_ref
         path: .hgwork/{runId}/intake-analysis/artifacts/questions.md
@@ -244,7 +242,6 @@ nodes:
     title: Process answers
     type: executor
     node_kind: ai
-    execution_mode: agent
     execution_context:
       - type: user_request
         required: true
@@ -260,7 +257,6 @@ nodes:
     title: Approve requirements
     type: gate
     node_kind: human_approval
-    execution_mode: human_approval
     execution_context:
       - type: directory_ref
         path: docs/requirements
@@ -270,15 +266,13 @@ nodes:
         required: false
     expected_mutations: []
     on_approve: publish-summary
-    on_reject: close-run
     on_rework_routes:
-      keep_workspace: process-answers
-      discard_uncommitted: intake-analysis
+      keep_current_changes: process-answers
+      discard_current_changes: intake-analysis
   - id: publish-summary
     title: Publish summary
     type: executor
     node_kind: command
-    execution_mode: command
     execution_context: []
     produced_artifacts: []
     expected_mutations: []
@@ -287,7 +281,6 @@ nodes:
     title: Close run
     type: executor
     node_kind: command
-    execution_mode: command
     execution_context: []
     produced_artifacts: []
     expected_mutations: []
@@ -320,7 +313,6 @@ nodes:
     title: Audit start
     type: executor
     node_kind: ai
-    execution_mode: agent
     execution_context:
       - type: user_request
         required: true
@@ -334,21 +326,18 @@ nodes:
     title: Approve audit
     type: gate
     node_kind: human_approval
-    execution_mode: human_approval
     execution_context:
       - type: user_request
         required: true
     produced_artifacts: []
     expected_mutations: []
     on_approve: finalize
-    on_reject: finalize
     on_rework_routes:
-      keep_workspace: audit-start
+      keep_current_changes: audit-start
   - id: finalize
     title: Finalize
     type: executor
     node_kind: command
-    execution_mode: command
     execution_context: []
     produced_artifacts: []
     expected_mutations: []
@@ -381,7 +370,6 @@ nodes:
     title: Sandbox start
     type: executor
     node_kind: ai
-    execution_mode: agent
     execution_context:
       - type: user_request
         required: true
@@ -393,7 +381,6 @@ nodes:
     title: Sandbox finish
     type: executor
     node_kind: command
-    execution_mode: command
     execution_context: []
     produced_artifacts: []
     expected_mutations: []
