@@ -15,5 +15,6 @@ import lombok.Setter;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PathRequirement {
     private String path;
+    private String scope;
     private Boolean required;
 }

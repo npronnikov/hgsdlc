@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   AppstoreOutlined,
+  AuditOutlined,
   BranchesOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
@@ -11,8 +12,10 @@ import {
   NodeIndexOutlined,
   PlayCircleOutlined,
   ProjectOutlined,
+  RobotOutlined,
   SafetyOutlined,
   SettingOutlined,
+  SisternodeOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -23,9 +26,9 @@ const { Text } = Typography;
 const navItems = [
   { key: '/overview', icon: <AppstoreOutlined />, label: 'Overview' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/flows', icon: <BranchesOutlined />, label: 'Flows' },
-  { key: '/rules', icon: <FileTextOutlined />, label: 'Rules' },
-  { key: '/skills', icon: <NodeIndexOutlined />, label: 'Skills' },
+  { key: '/flows', icon: <SisternodeOutlined />, label: 'Flows' },
+  { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
+  { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
   { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
   { key: '/gates-inbox', icon: <SafetyOutlined />, label: 'Gates Inbox' },
@@ -159,7 +162,6 @@ export default function AppShell() {
           </Space>
           <Space size="middle">
             <Input placeholder="Search" allowClear />
-            <Avatar style={{ backgroundColor: '#4f46e5' }}>{initials}</Avatar>
             <Dropdown
               trigger={['hover']}
               menu={{
@@ -171,9 +173,12 @@ export default function AppShell() {
                 },
               }}
             >
-              <Button type="text" className="profile-name-trigger">
-                {displayName}
-              </Button>
+              <Space className="profile-menu-trigger" size={8}>
+                <Avatar style={{ backgroundColor: '#4f46e5' }}>{initials}</Avatar>
+                <Button type="text" className="profile-name-trigger">
+                  {displayName}
+                </Button>
+              </Space>
             </Dropdown>
           </Space>
         </Header>

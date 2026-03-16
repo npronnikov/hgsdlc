@@ -1,27 +1,3 @@
-export const projects = [
-  {
-    key: 'p1',
-    name: 'checkout-service',
-    repo: 'git@github.com:acme/checkout-service.git',
-    branch: 'main',
-    status: 'completed',
-  },
-  {
-    key: 'p2',
-    name: 'billing-core',
-    repo: 'git@github.com:acme/billing-core.git',
-    branch: 'main',
-    status: 'waiting_gate',
-  },
-  {
-    key: 'p3',
-    name: 'admin-portal',
-    repo: 'git@github.com:acme/admin-portal.git',
-    branch: 'develop',
-    status: 'failed',
-  },
-];
-
 export const flows = [
   {
     key: 'f1',
@@ -54,6 +30,24 @@ export const rules = [
     canonical: 'project-rule@1.0.2',
   },
   {
+    key: 'r3',
+    name: 'security-rule',
+    description: 'Security hardening checks',
+    codingAgent: 'qwen',
+    status: 'published',
+    version: '1.1.0',
+    canonical: 'security-rule@1.1.0',
+  },
+  {
+    key: 'r4',
+    name: 'docs-rule',
+    description: 'Documentation update guardrails',
+    codingAgent: 'qwen',
+    status: 'draft',
+    version: '0.3.0',
+    canonical: 'docs-rule@0.3.0',
+  },
+  {
     key: 'r2',
     name: 'sandbox-rule',
     description: 'Restricted experimentation',
@@ -73,6 +67,24 @@ export const skills = [
     status: 'published',
     version: '1.2.0',
     canonical: 'update-requirements@1.2.0',
+  },
+  {
+    key: 's3',
+    name: 'trace-changes',
+    description: 'Summarize code changes with rationale',
+    codingAgent: 'qwen',
+    status: 'published',
+    version: '1.0.1',
+    canonical: 'trace-changes@1.0.1',
+  },
+  {
+    key: 's4',
+    name: 'validate-constraints',
+    description: 'Check against rule constraints before delivery',
+    codingAgent: 'qwen',
+    status: 'draft',
+    version: '0.2.0',
+    canonical: 'validate-constraints@0.2.0',
   },
   {
     key: 's2',

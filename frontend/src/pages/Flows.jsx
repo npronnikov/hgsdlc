@@ -107,9 +107,9 @@ export default function Flows() {
                     {flow.description}
                   </Text>
                 )}
-                <div className="resource-card-footer">
+                <div className="resource-card-footer resource-card-footer-stack">
                   <span className="resource-canonical mono">{flow.canonical}</span>
-                  <div className="resource-card-chips">
+                  <div className="resource-card-chips resource-card-chips-right">
                     <span className="resource-chip">
                       <UserOutlined />
                       {flow.savedBy || 'unknown'}

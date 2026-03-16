@@ -47,15 +47,21 @@ public class SkillTemplateService {
         ));
         summary.put(SkillProvider.CLAUDE, List.of(
                 new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать")
+                new FrontmatterField("description", "Что делает skill и когда его использовать"),
+                new FrontmatterField("argument-hint", "Подсказка для аргументов"),
+                new FrontmatterField("disable-model-invocation", "Запретить авто-вызов модели"),
+                new FrontmatterField("user-invocable", "Показывать skill в меню"),
+                new FrontmatterField("allowed-tools", "Разрешённые инструменты"),
+                new FrontmatterField("model", "Модель для skill"),
+                new FrontmatterField("context", "Контекст запуска (например, fork)"),
+                new FrontmatterField("agent", "Тип subagent"),
+                new FrontmatterField("hooks", "Lifecycle hooks")
         ));
         summary.put(SkillProvider.CURSOR, List.of(
                 new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать")
-        ));
-        summary.put(SkillProvider.PLATFORM_NATIVE, List.of(
-                new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать")
+                new FrontmatterField("description", "Что делает skill и когда его использовать"),
+                new FrontmatterField("license", "Лицензия (опционально)"),
+                new FrontmatterField("compatibility", "Требования окружения (опционально)")
         ));
         return summary;
     }
@@ -63,9 +69,8 @@ public class SkillTemplateService {
     private Map<SkillProvider, List<String>> buildRequiredFrontmatter() {
         Map<SkillProvider, List<String>> required = new EnumMap<>(SkillProvider.class);
         required.put(SkillProvider.QWEN, List.of("name", "description"));
-        required.put(SkillProvider.CLAUDE, List.of("name", "description"));
+        required.put(SkillProvider.CLAUDE, List.of());
         required.put(SkillProvider.CURSOR, List.of("name", "description"));
-        required.put(SkillProvider.PLATFORM_NATIVE, List.of("name", "description"));
         return required;
     }
 

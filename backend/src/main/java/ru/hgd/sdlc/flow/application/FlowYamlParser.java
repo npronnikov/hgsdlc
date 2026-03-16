@@ -28,6 +28,7 @@ public class FlowYamlParser {
         }
         JsonNode root = readTree(flowYaml);
         normalizeVersion(root);
+        normalizeNodeTypes(root);
         schemaValidator.validate(root, "schemas/flow.schema.json");
         validateNodes(root);
         FlowModel model = toModel(root);
@@ -70,8 +71,7 @@ public class FlowYamlParser {
         }
         for (JsonNode node : nodes) {
             String type = text(node.get("type"));
-            String nodeKind = text(node.get("node_kind"));
-            String schemaPath = resolveSchema(type, nodeKind);
+            String schemaPath = resolveSchema(type);
             if (schemaPath == null) {
                 throw new ValidationException("Unsupported node type or kind");
             }
@@ -79,34 +79,49 @@ public class FlowYamlParser {
         }
     }
 
-    private String resolveSchema(String type, String nodeKind) {
+    private void normalizeNodeTypes(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return;
+        }
+        JsonNode nodes = root.get("nodes");
+        if (nodes == null || !nodes.isArray()) {
+            return;
+        }
+        for (JsonNode node : nodes) {
+            if (!node.isObject()) {
+                continue;
+            }
+            String type = text(node.get("type"));
+            String nodeKind = text(node.get("node_kind"));
+            if (nodeKind == null || nodeKind.isBlank()) {
+                continue;
+            }
+            String normalizedType = normalize(type);
+            if ("executor".equals(normalizedType) || "gate".equals(normalizedType)) {
+                ((ObjectNode) node).put("type", nodeKind);
+            }
+        }
+    }
+
+    private String resolveSchema(String type) {
         if (type == null) {
             return null;
         }
         String normalizedType = normalize(type);
-        if ("executor".equals(normalizedType)) {
-            String normalizedKind = normalize(nodeKind);
-            if ("ai".equals(normalizedKind)) {
-                return "schemas/node-ai.schema.json";
-            }
-            if ("command".equals(normalizedKind)) {
-                return "schemas/node-command.schema.json";
-            }
+        if ("ai".equals(normalizedType)) {
+            return "schemas/node-ai.schema.json";
         }
-        if ("gate".equals(normalizedType)) {
-            String normalizedKind = normalize(nodeKind);
-            if ("human_input".equals(normalizedKind)) {
-                return "schemas/node-human-input-gate.schema.json";
-            }
-            if ("human_approval".equals(normalizedKind)) {
-                return "schemas/node-human-approval-gate.schema.json";
-            }
+        if ("command".equals(normalizedType)) {
+            return "schemas/node-command.schema.json";
+        }
+        if ("human_input".equals(normalizedType)) {
+            return "schemas/node-human-input-gate.schema.json";
+        }
+        if ("human_approval".equals(normalizedType)) {
+            return "schemas/node-human-approval-gate.schema.json";
         }
         if ("terminal".equals(normalizedType)) {
-            String normalizedKind = normalize(nodeKind);
-            if ("terminal".equals(normalizedKind)) {
-                return "schemas/node-terminal.schema.json";
-            }
+            return "schemas/node-terminal.schema.json";
         }
         return null;
     }

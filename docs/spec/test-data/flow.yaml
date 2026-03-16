@@ -22,9 +22,9 @@ nodes:
     skill_refs:
       - test-intake@1.0.0
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/analysis.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/analysis.md
         required: true
-      - path: .hgwork/{runId}/{nodeId}/artifacts/questions.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/questions.md
         required: true
     expected_mutations: []
     on_success: collect-answers
@@ -38,7 +38,7 @@ nodes:
     node_kind: human_input
     execution_context:
       - type: artifact_ref
-        path: .hgwork/{runId}/intake/artifacts/questions.md
+        path: .hgsdlc/{runId}/intake/artifacts/questions.md
         required: true
     input_artifact: questions
     output_artifact: answers
@@ -49,7 +49,7 @@ nodes:
       output_format: markdown
       min_content_length: 20
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/answers.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/answers.md
         required: true
     expected_mutations: []
     on_submit: process-answers
@@ -60,14 +60,14 @@ nodes:
     node_kind: ai
     execution_context:
       - type: artifact_ref
-        path: .hgwork/{runId}/collect-answers/artifacts/answers.md
+        path: .hgsdlc/{runId}/collect-answers/artifacts/answers.md
         required: true
     skill_refs:
       - test-requirements@1.0.0
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/requirements.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/requirements.md
         required: true
-      - path: .hgwork/{runId}/{nodeId}/artifacts/questions.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/questions.md
         required: false
     expected_mutations: []
     on_success: approve-requirements
@@ -82,7 +82,7 @@ nodes:
     node_kind: human_approval
     execution_context:
       - type: artifact_ref
-        path: .hgwork/{runId}/process-answers/artifacts/requirements.md
+        path: .hgsdlc/{runId}/process-answers/artifacts/requirements.md
         required: true
     review_artifacts:
       - requirements
@@ -92,7 +92,7 @@ nodes:
     allowed_roles:
       - TECH_APPROVER
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/approval-comment.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/approval-comment.md
         required: false
     expected_mutations: []
     on_approve: implement
@@ -108,14 +108,14 @@ nodes:
         path: src
         required: true
       - type: artifact_ref
-        path: .hgwork/{runId}/process-answers/artifacts/requirements.md
+        path: .hgsdlc/{runId}/process-answers/artifacts/requirements.md
         required: true
     skill_refs:
       - test-implement@1.0.0
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/code-summary.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/code-summary.md
         required: true
-      - path: .hgwork/{runId}/{nodeId}/artifacts/validation-summary.md
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/validation-summary.md
         required: true
     expected_mutations:
       - path: src/**
@@ -137,7 +137,7 @@ nodes:
     success_exit_codes:
       - 0
     produced_artifacts:
-      - path: .hgwork/{runId}/{nodeId}/artifacts/git-commit-result.json
+      - path: .hgsdlc/{runId}/{nodeId}/artifacts/git-commit-result.json
         required: true
     expected_mutations: []
     on_success: end

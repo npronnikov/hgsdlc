@@ -1,20 +1,102 @@
 ---
-name: your-skill-name
-description: Brief description of what this skill does and when it should be used
+# Поле: name
+# Зачем: имя skill в Claude Code; если не указать, берётся из имени папки.
+# Пример заполнения: release-notes
+name: <имя-skill-в-kebab-case>
+
+# Поле: description
+# Зачем: описывает, что skill делает и когда его использовать.
+# Пример заполнения:
+# Готовит release notes по git-истории и PR. Использовать перед релизом,
+# при подготовке changelog и описания версии.
+description: >-
+  <что делает skill и в каких сценариях его использовать>
+
+# Поле: argument-hint
+# Зачем: подсказывает пользователю формат аргументов в автокомплите.
+# Пример заполнения: [version] [from-ref] [to-ref]
+argument-hint: <опционально>
+
+# Поле: disable-model-invocation
+# Зачем: true = Claude НЕ будет вызывать skill сам, только вручную через /skill-name.
+# Пример заполнения: true
+disable-model-invocation: <true|false>
+
+# Поле: user-invocable
+# Зачем: false = скрыть skill из пользовательского меню /.
+# Пример заполнения: true
+user-invocable: <true|false>
+
+# Поле: allowed-tools
+# Зачем: ограничить/разрешить инструменты во время работы skill.
+# Пример заполнения: Bash(git *), Read, Glob, Grep
+allowed-tools: <опционально>
+
+# Поле: model
+# Зачем: выбрать модель для skill.
+# Пример заполнения: sonnet
+model: <опционально>
+
+# Поле: context
+# Зачем: fork = запускать skill в изолированном subagent-контексте.
+# Пример заполнения: fork
+context: <опционально>
+
+# Поле: agent
+# Зачем: указать тип subagent, если context: fork.
+# Пример заполнения: Explore
+agent: <опционально>
+
+# Поле: hooks
+# Зачем: привязать lifecycle hooks именно к этому skill.
+# Пример заполнения: см. блок ниже
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./scripts/precheck.sh"
 ---
 
-# Purpose
+# <Название skill>
 
-Describe the purpose of this skill.
+## Цель
+<!-- Зачем: коротко объяснить бизнес-результат. -->
+<!-- Пример заполнения:
+Собрать релизные заметки из git-истории, PR, conventional commits и changelog-файлов.
+-->
 
-# Usage guidance
+## Входные данные
+<!-- Зачем: зафиксировать, что skill ожидает на вход. -->
+<!-- Пример заполнения:
+- версия релиза;
+- диапазон коммитов;
+- при необходимости номер milestone.
+-->
 
-Explain when this skill should be invoked.
+## Порядок действий
+<!-- Зачем: дать Claude детерминированный workflow. -->
+<!-- Пример заполнения:
+1. Получи список коммитов в диапазоне.
+2. Сгруппируй изменения по категориям.
+3. Выдели breaking changes.
+4. Сформируй human-readable release notes.
+-->
 
-# Instructions
+## Формат результата
+<!-- Зачем: унифицировать ответ. -->
+<!-- Пример заполнения:
+Верни:
+- заголовок релиза;
+- new features;
+- fixes;
+- breaking changes;
+- migration notes.
+-->
 
-List the core instructions.
-
-# Examples
-
-Add examples if relevant.
+## Ограничения
+<!-- Зачем: исключить опасные/нежелательные действия. -->
+<!-- Пример заполнения:
+- Не публикуй релиз автоматически.
+- Не изменяй git history.
+-->

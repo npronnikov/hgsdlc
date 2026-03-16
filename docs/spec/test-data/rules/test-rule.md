@@ -4,15 +4,15 @@ version: 1.0.0
 canonical_name: test-rule@1.0.0
 title: Test execution rule
 description: Rule for validating test flows in development.
-response_schema_id: agent-response-v1
+response_schema: {}
 allowed_paths:
   - src/**
   - docs/**
-  - .hgwork/**
+  - .hgsdlc/**
 forbidden_paths:
   - .git/**
   - .qwen/**
-  - .hgwork/system/**
+  - .hgsdlc/system/**
 allowed_commands:
   - git_commit
 require_structured_response: true

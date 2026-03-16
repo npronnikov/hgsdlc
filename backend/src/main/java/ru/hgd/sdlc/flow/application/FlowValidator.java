@@ -64,33 +64,15 @@ public class FlowValidator {
     }
 
     private void validateNode(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
-        String type = normalize(node.getType());
         String nodeKind = normalize(node.getNodeKind());
-        if (type == null) {
+        if (nodeKind == null) {
+            nodeKind = normalize(node.getType());
+        }
+        if (nodeKind == null) {
             errors.add("Node type is required: " + node.getId());
             return;
         }
-        if (nodeKind == null) {
-            errors.add("node_kind is required: " + node.getId());
-            return;
-        }
-
-        if ("executor".equals(type)) {
-            if (!"ai".equals(nodeKind) && !"command".equals(nodeKind)) {
-                errors.add("Unsupported node_kind for executor: " + node.getId());
-                return;
-            }
-        } else if ("gate".equals(type)) {
-            if (!"human_input".equals(nodeKind) && !"human_approval".equals(nodeKind)) {
-                errors.add("Unsupported node_kind for gate: " + node.getId());
-                return;
-            }
-        } else if ("terminal".equals(type)) {
-            if (!"terminal".equals(nodeKind)) {
-                errors.add("Unsupported node_kind for terminal: " + node.getId());
-                return;
-            }
-        } else {
+        if (!Set.of("ai", "command", "human_input", "human_approval", "terminal").contains(nodeKind)) {
             errors.add("Unsupported node type: " + node.getId());
             return;
         }
@@ -102,11 +84,11 @@ public class FlowValidator {
             errors.add("skill_refs only allowed for AI nodes: " + node.getId());
         }
 
-        if ("terminal".equals(type)) {
+        if ("terminal".equals(nodeKind)) {
             validateTerminal(node, errors);
             return;
         }
-        if ("executor".equals(type)) {
+        if ("ai".equals(nodeKind) || "command".equals(nodeKind)) {
             validateExecutor(node, nodeKind, nodesById, errors);
             return;
         }
@@ -255,8 +237,18 @@ public class FlowValidator {
                 if (entry.getPath() != null && !entry.getPath().isBlank()) {
                     errors.add("user_request must not define path: " + node.getId());
                 }
+                if (entry.getScope() != null && !entry.getScope().isBlank()) {
+                    errors.add("user_request must not define scope: " + node.getId());
+                }
             } else if (entry.getPath() == null || entry.getPath().isBlank()) {
                 errors.add("execution_context path is required: " + node.getId());
+            } else {
+                String scope = normalize(entry.getScope());
+                if (scope == null) {
+                    errors.add("execution_context scope is required: " + node.getId());
+                } else if (!Set.of("project", "run").contains(scope)) {
+                    errors.add("Unsupported execution_context scope: " + node.getId());
+                }
             }
         }
     }
@@ -274,6 +266,12 @@ public class FlowValidator {
                 if (entry.getPath() == null || entry.getPath().isBlank()) {
                     errors.add("produced_artifacts path is required: " + node.getId());
                 }
+                String scope = normalize(entry.getScope());
+                if (scope == null) {
+                    errors.add("produced_artifacts scope is required: " + node.getId());
+                } else if (!Set.of("project", "run").contains(scope)) {
+                    errors.add("Unsupported produced_artifacts scope: " + node.getId());
+                }
             }
         }
         if (node.getExpectedMutations() != null) {
@@ -287,6 +285,12 @@ public class FlowValidator {
                 }
                 if (entry.getPath() == null || entry.getPath().isBlank()) {
                     errors.add("expected_mutations path is required: " + node.getId());
+                }
+                String scope = normalize(entry.getScope());
+                if (scope == null) {
+                    errors.add("expected_mutations scope is required: " + node.getId());
+                } else if (!Set.of("project", "run").contains(scope)) {
+                    errors.add("Unsupported expected_mutations scope: " + node.getId());
                 }
             }
         }

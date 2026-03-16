@@ -233,10 +233,13 @@ public class RuleService {
     }
 
     private void validateCodingAgentFrontmatter(RuleProvider codingAgent, ObjectNode frontmatter) {
+        List<String> required = templateService.requiredFrontmatter(codingAgent);
         if (frontmatter == null) {
+            if (required.isEmpty()) {
+                return;
+            }
             throw new ValidationException("Frontmatter is required for publish");
         }
-        List<String> required = templateService.requiredFrontmatter(codingAgent);
         for (String field : required) {
             if (!frontmatter.hasNonNull(field)) {
                 throw new ValidationException("Frontmatter field '" + field + "' is required for coding_agent " + codingAgent.name().toLowerCase());

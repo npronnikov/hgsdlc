@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
 import { MoreOutlined } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
@@ -10,11 +10,31 @@ import { useLocation, useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
+const splitFrontmatter = (markdown = '') => {
+  const normalized = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalized.split('\n');
+  if (lines.length === 0 || lines[0].trim() !== '---') {
+    return { frontmatter: null, body: markdown };
+  }
+  let endIndex = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === '---') {
+      endIndex = i;
+      break;
+    }
+  }
+  if (endIndex === -1) {
+    return { frontmatter: null, body: markdown };
+  }
+  const frontmatter = lines.slice(1, endIndex).join('\n').trimEnd();
+  const body = lines.slice(endIndex + 1).join('\n');
+  return { frontmatter, body };
+};
+
 const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
   { value: 'claude', label: 'claude' },
   { value: 'cursor', label: 'cursor' },
-  { value: 'platform-native', label: 'platform-native' },
 ];
 
 const DEFAULT_VERSION = '0.1';
@@ -78,6 +98,7 @@ export default function RuleEditor() {
   const editorRef = useRef(null);
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
+  const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
 
   const loadRule = async (ruleId) => {
     try {
@@ -458,8 +479,11 @@ export default function RuleEditor() {
                     });
                   }}
                 >
+                  {previewContent.frontmatter && (
+                    <pre className="frontmatter-block">{`---\n${previewContent.frontmatter}\n---`}</pre>
+                  )}
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {editorValue || ''}
+                    {previewContent.body || ''}
                   </ReactMarkdown>
                 </div>
               </div>
@@ -468,8 +492,11 @@ export default function RuleEditor() {
             <div className="editor-pane">
               <Text className="muted">Предпросмотр</Text>
               <div className="editor-pane-body markdown-preview">
+                {previewContent.frontmatter && (
+                  <pre className="frontmatter-block">{`---\n${previewContent.frontmatter}\n---`}</pre>
+                )}
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {editorValue || ''}
+                  {previewContent.body || ''}
                 </ReactMarkdown>
               </div>
             </div>

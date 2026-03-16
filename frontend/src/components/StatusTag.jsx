@@ -4,6 +4,8 @@ import { Tag } from 'antd';
 const colorMap = {
   published: '#16a34a',
   draft: '#94a3b8',
+  active: '#16a34a',
+  archived: '#64748b',
   waiting_gate: '#d97706',
   failed: '#dc2626',
   completed: '#16a34a',

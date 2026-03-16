@@ -7,7 +7,6 @@
     "version",
     "canonical_name",
     "description",
-    "response_schema_id",
     "allowed_paths",
     "forbidden_paths",
     "allowed_commands",
@@ -19,7 +18,7 @@
     "canonical_name": { "type": "string", "minLength": 1 },
     "title": { "type": "string" },
     "description": { "type": "string", "minLength": 1 },
-    "response_schema_id": { "type": "string", "minLength": 1 },
+    "response_schema": { "type": "object" },
     "allowed_paths": {
       "type": "array",
       "items": { "type": "string" },

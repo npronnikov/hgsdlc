@@ -348,7 +348,7 @@ repo-root/
 ## 7. Workspace structure
 
 На сервере primary root — это сам checked out проект.
-Внутрь него runtime materialize-ит `.qwen` и `.hgwork`.
+Внутрь него runtime materialize-ит `.qwen` и `.hgsdlc`.
 
 ### 7.1 Workspace layout
 
@@ -361,7 +361,7 @@ project/
       update-requirements@0.1/
         SKILL.md
 
-  .hgwork/
+  .hgsdlc/
     run001
       context/
         context-manifest.json
@@ -396,11 +396,11 @@ project/
 1. Проект является корнем workspace.
 2. `.qwen/QWEN.md` — flow-level rules, отрендеренные из rule version.
 3. `.qwen/skills/*/SKILL.md` — node-level skills, отрендеренные из skill versions.
-4. `.hgwork/{runId}/...` — execution artifacts и runtime files конкретного run.
-5. `.hgwork/{runId}/context/context-manifest.json` — детерминированное описание выбранного `context_root_dir`.
+4. `.hgsdlc/{runId}/...` — execution artifacts и runtime files конкретного run.
+5. `.hgsdlc/{runId}/context/context-manifest.json` — детерминированное описание выбранного `context_root_dir`.
 6. Prompt package не записывается как файл в workspace.
 7. Workspace удаляется или архивируется по retention policy.
-8. Agent и command nodes не имеют права модифицировать `.qwen/**` и `.hgwork/system/**`.
+8. Agent и command nodes не имеют права модифицировать `.qwen/**` и `.hgsdlc/system/**`.
 
 ---
 
@@ -663,12 +663,12 @@ allowed_paths:
   - src/main/java/**
   - src/test/java/**
   - docs/**
-  - .hgwork/**
+  - .hgsdlc/**
 forbidden_paths:
   - .git/**
   - .github/**
   - .qwen/**
-  - .hgwork/system/**
+  - .hgsdlc/system/**
 require_structured_response: true
 allowed_commands:
   - git_commit
@@ -680,7 +680,7 @@ allowed_commands:
 
 - Main code is under src main java
 - Tests are under src test java
-- Runtime artifacts are under .hgwork
+- Runtime artifacts are under .hgsdlc
 
 # Coding conventions
 
@@ -842,20 +842,20 @@ Executor optional fields:
 Артефакт сохраняется в workspace по node-scoped path:
 
 ```text
-.hgwork/{runId}/{nodeId}/artifacts/{fileName}
+.hgsdlc/{runId}/{nodeId}/artifacts/{fileName}
 ```
 
 Примеры:
 
-* `questions -> .hgwork/run001/intake-analysis/artifacts/questions.md`
-* `answers -> .hgwork/run001/collect-answers/artifacts/answers.md`
-* `feature-analysis -> .hgwork/run001/intake-analysis/artifacts/feature-analysis.md`
-* `requirements-draft -> .hgwork/run001/process-answers/artifacts/requirements-draft.md`
-* `implementation-plan -> .hgwork/run001/build-plan/artifacts/implementation-plan.md`
-* `code-summary -> .hgwork/run001/implement-feature/artifacts/code-summary.md`
-* `validation-summary -> .hgwork/run001/implement-feature/artifacts/validation-summary.md`
-* `approval-comment -> .hgwork/run001/approve-code/artifacts/approval-comment.md`
-* `git-commit-result -> .hgwork/run001/commit-result/artifacts/git-commit-result.json`
+* `questions -> .hgsdlc/run001/intake-analysis/artifacts/questions.md`
+* `answers -> .hgsdlc/run001/collect-answers/artifacts/answers.md`
+* `feature-analysis -> .hgsdlc/run001/intake-analysis/artifacts/feature-analysis.md`
+* `requirements-draft -> .hgsdlc/run001/process-answers/artifacts/requirements-draft.md`
+* `implementation-plan -> .hgsdlc/run001/build-plan/artifacts/implementation-plan.md`
+* `code-summary -> .hgsdlc/run001/implement-feature/artifacts/code-summary.md`
+* `validation-summary -> .hgsdlc/run001/implement-feature/artifacts/validation-summary.md`
+* `approval-comment -> .hgsdlc/run001/approve-code/artifacts/approval-comment.md`
+* `git-commit-result -> .hgsdlc/run001/commit-result/artifacts/git-commit-result.json`
 
 ### 10.8 Artifact version contract
 
@@ -1299,7 +1299,7 @@ Run snapshot обязан включать:
 5. `External Command` node не может менять:
 
    * `.qwen/**`
-   * `.hgwork/system/**`
+   * `.hgsdlc/system/**`
    * конфигурацию HGSDLC в БД
 
 ---
@@ -2229,7 +2229,7 @@ sequenceDiagram
 ### ADR 014 — Project-first workspace layout
 
 **Статус:** accepted
-**Решение:** корнем workspace является checked out проект, а `.hgwork` располагается внутри него.
+**Решение:** корнем workspace является checked out проект, а `.hgsdlc` располагается внутри него.
 **Причина:** модель проще для понимания и ближе к реальной структуре репозитория.
 
 ---
@@ -2655,4 +2655,4 @@ TECH_APPROVER открывает `approve-code`.
 33. Workspace организован как project-first layout:
 
 * корень — checked out project
-* `.hgwork/{runId}` хранит runtime файлы конкретного run
+* `.hgsdlc/{runId}` хранит runtime файлы конкретного run

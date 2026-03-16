@@ -49,41 +49,14 @@ public class RuleTemplateService {
                 new FrontmatterField("globs", "File patterns применения"),
                 new FrontmatterField("alwaysApply", "Всегда ли применять правило")
         ));
-        summary.put(RuleProvider.QWEN, List.of(
-                new FrontmatterField("description", "Краткое описание назначения правила"),
-                new FrontmatterField("allowed_paths", "Пути, которые разрешено изменять"),
-                new FrontmatterField("forbidden_paths", "Пути, которые запрещено изменять"),
-                new FrontmatterField("allowed_commands", "Команды, которые разрешено запускать"),
-                new FrontmatterField("response_schema_id", "Идентификатор schema для ответа агента")
-        ));
-        summary.put(RuleProvider.PLATFORM_NATIVE, List.of(
-                new FrontmatterField("description", "Краткое описание назначения правила"),
-                new FrontmatterField("allowed_paths", "Пути, которые разрешено изменять"),
-                new FrontmatterField("forbidden_paths", "Пути, которые запрещено изменять"),
-                new FrontmatterField("allowed_commands", "Команды, которые разрешено запускать"),
-                new FrontmatterField("response_schema_id", "Идентификатор schema для ответа агента")
-        ));
         return summary;
     }
 
     private Map<RuleProvider, List<String>> buildRequiredFrontmatter() {
         Map<RuleProvider, List<String>> required = new EnumMap<>(RuleProvider.class);
-        required.put(RuleProvider.QWEN, List.of(
-                "description",
-                "allowed_paths",
-                "forbidden_paths",
-                "allowed_commands",
-                "response_schema_id"
-        ));
-        required.put(RuleProvider.CLAUDE, List.of("paths"));
+        required.put(RuleProvider.QWEN, List.of());
+        required.put(RuleProvider.CLAUDE, List.of());
         required.put(RuleProvider.CURSOR, List.of("description", "globs", "alwaysApply"));
-        required.put(RuleProvider.PLATFORM_NATIVE, List.of(
-                "description",
-                "allowed_paths",
-                "forbidden_paths",
-                "allowed_commands",
-                "response_schema_id"
-        ));
         return required;
     }
 

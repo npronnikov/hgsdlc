@@ -17,7 +17,7 @@
 | Artifact versioning | `artifact_version_no` и `is_latest` |
 | Content persistence | `content_text` как raw bytes |
 | Checksum | sha256 на каждый артефакт |
-| Path resolver | `.hgwork/{runId}/{nodeId}/artifacts` |
+| Path resolver | `.hgsdlc/{runId}/{nodeId}/artifacts` |
 
 ### НЕ входит в scope (Phase 0)
 

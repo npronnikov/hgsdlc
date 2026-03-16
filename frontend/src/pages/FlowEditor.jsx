@@ -24,38 +24,33 @@ import {
   message,
 } from 'antd';
 import { DeleteOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
-import { rules, skills } from '../data/mock.js';
 import { useLocation, useParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
+import { parse as parseYaml } from 'yaml';
 
 const { Title, Text } = Typography;
 
 const NODE_KIND_META = {
   ai: {
-    label: 'AI executor',
+    label: 'AI Executor',
     variant: 'executor ai',
-    type: 'executor',
   },
   command: {
-    label: 'Command executor',
+    label: 'Command Executor',
     variant: 'executor command',
-    type: 'executor',
   },
   human_input: {
-    label: 'Human input gate',
+    label: 'Human Input Gate',
     variant: 'gate input',
-    type: 'gate',
   },
   human_approval: {
-    label: 'Human approval gate',
+    label: 'Human Approval Gate',
     variant: 'gate approval',
-    type: 'gate',
   },
   terminal: {
     label: 'Terminal',
     variant: 'terminal',
-    type: 'terminal',
   },
 };
 
@@ -82,19 +77,28 @@ const nextMinorVersion = (version) => {
 };
 
 const EXECUTION_CONTEXT_TYPES = [
-  { value: 'user_request', label: 'user_request' },
-  { value: 'directory_ref', label: 'directory_ref' },
-  { value: 'file_ref', label: 'file_ref' },
-  { value: 'artifact_ref', label: 'artifact_ref' },
+  { value: 'user_request', label: 'Запрос пользователя' },
+  { value: 'directory_ref', label: 'Каталог' },
+  { value: 'file_ref', label: 'Файл' },
+  { value: 'artifact_ref', label: 'Артефакт' },
 ];
 
+const SCOPE_OPTIONS = [
+  { value: 'project', label: 'Scope:project' },
+  { value: 'run', label: 'Scope:run' },
+];
+
+const defaultScopeForContext = (type) => (type === 'artifact_ref' ? 'run' : 'project');
+
 const NODE_TYPE_OPTIONS = [
-  { key: 'ai', label: 'AI executor' },
-  { key: 'command', label: 'Command executor' },
-  { key: 'human_input', label: 'Human input gate' },
-  { key: 'human_approval', label: 'Human approval gate' },
+  { key: 'ai', label: 'AI Executor' },
+  { key: 'command', label: 'Command Executor' },
+  { key: 'human_input', label: 'Human Input Gate' },
+  { key: 'human_approval', label: 'Human Approval Gate' },
   { key: 'terminal', label: 'Terminal' },
 ];
+
+const APPROVAL_REWORK_MODES = ['keep_current_changes', 'discard_current_changes'];
 
 function FlowNode({ data, selected }) {
   const visuals = NODE_KIND_META[data.nodeKind] || {};
@@ -116,20 +120,6 @@ function FlowNode({ data, selected }) {
 
 const nodeTypes = { flowNode: FlowNode };
 
-const ARTIFACT_PATH_PREFIX = '.hgwork/{runId}/{nodeId}/artifacts/';
-
-const initialFlow = {
-  title: 'Flow изменений',
-  flowId: 'feature-change-flow',
-  description: 'Flow реализации изменений с этапом согласования.',
-  startNodeId: 'intake-analysis',
-  codingAgent: 'qwen',
-  ruleRefs: ['project-rule@1.0.2'],
-  failOnMissingDeclaredOutput: true,
-  failOnMissingExpectedMutation: true,
-  responseSchema: '',
-};
-
 const emptyFlow = {
   title: '',
   flowId: '',
@@ -142,141 +132,6 @@ const emptyFlow = {
   responseSchema: '',
 };
 
-const initialNodes = [
-  {
-    id: 'intake-analysis',
-    type: 'flowNode',
-    position: { x: 40, y: 80 },
-    data: {
-      id: 'intake-analysis',
-      title: 'Анализ запроса',
-      description: 'Анализирует запрос и формирует вопросы.',
-      nodeKind: 'ai',
-      type: 'executor',
-      executionContext: [
-        { type: 'user_request', required: true },
-        { type: 'directory_ref', path: 'docs/requirements', required: true },
-      ],
-      instruction: 'Проанализировать запрос и подготовить уточняющие вопросы.',
-      skillRefs: ['update-requirements@1.2.0'],
-      responseSchema: '',
-      producedArtifacts: [
-        { path: '.hgwork/{runId}/{nodeId}/artifacts/questions.md', required: true },
-      ],
-      expectedMutations: [],
-      onSuccess: 'collect-answers',
-      isStart: true,
-    },
-  },
-  {
-    id: 'collect-answers',
-    type: 'flowNode',
-    position: { x: 360, y: 40 },
-    data: {
-      id: 'collect-answers',
-      title: 'Сбор ответов',
-      description: 'Сбор ответов владельца продукта.',
-      nodeKind: 'human_input',
-      type: 'gate',
-      executionContext: [
-        { type: 'artifact_ref', path: '.hgwork/{runId}/intake-analysis/artifacts/questions.md', required: true },
-      ],
-      instruction: '',
-      skillRefs: [],
-      responseSchema: '',
-      producedArtifacts: [
-        { path: '.hgwork/{runId}/{nodeId}/artifacts/answers.md', required: true },
-      ],
-      expectedMutations: [],
-      onSubmit: 'process-answers',
-    },
-  },
-  {
-    id: 'process-answers',
-    type: 'flowNode',
-    position: { x: 660, y: 80 },
-    data: {
-      id: 'process-answers',
-      title: 'Обработать ответы',
-      description: 'Обновить требования на основе ответов.',
-      nodeKind: 'ai',
-      type: 'executor',
-      executionContext: [
-        { type: 'user_request', required: true },
-        { type: 'artifact_ref', path: '.hgwork/{runId}/collect-answers/artifacts/answers.md', required: true },
-      ],
-      instruction: 'Обновить требования на основе ответов.',
-      skillRefs: ['update-requirements@1.2.0'],
-      responseSchema: '',
-      producedArtifacts: [],
-      expectedMutations: [
-        { path: 'docs/requirements/**', required: true },
-      ],
-      onSuccess: 'approve-requirements',
-    },
-  },
-  {
-    id: 'approve-requirements',
-    type: 'flowNode',
-    position: { x: 980, y: 80 },
-    data: {
-      id: 'approve-requirements',
-      title: 'Согласовать требования',
-      description: 'Проверить обновлённые требования.',
-      nodeKind: 'human_approval',
-      type: 'gate',
-      executionContext: [
-        { type: 'directory_ref', path: 'docs/requirements', required: true },
-      ],
-      instruction: '',
-      skillRefs: [],
-      responseSchema: '',
-      producedArtifacts: [
-        { path: '.hgwork/{runId}/{nodeId}/artifacts/approval-comment.md', required: false },
-      ],
-      expectedMutations: [],
-      onApprove: 'close-run',
-      onReworkRoutes: {
-        keep_current_changes: 'process-answers',
-      },
-    },
-  },
-  {
-    id: 'close-run',
-    type: 'flowNode',
-    position: { x: 1280, y: 80 },
-    data: {
-      id: 'close-run',
-      title: 'Завершить запуск',
-      description: 'Завершение flow.',
-      nodeKind: 'command',
-      type: 'executor',
-      executionContext: [],
-      instruction: '',
-      skillRefs: [],
-      responseSchema: '',
-      producedArtifacts: [],
-      expectedMutations: [],
-      onSuccess: null,
-    },
-  },
-];
-
-function extractArtifactName(path) {
-  if (!path) {
-    return '';
-  }
-  const lastSlashIndex = path.lastIndexOf('/');
-  return lastSlashIndex >= 0 ? path.slice(lastSlashIndex + 1) : path;
-}
-
-function buildArtifactPath(name) {
-  const trimmed = (name || '').trim();
-  if (!trimmed) {
-    return '';
-  }
-  return `${ARTIFACT_PATH_PREFIX}${trimmed}`;
-}
 
 function buildEdges(nodes) {
   const edges = [];
@@ -321,7 +176,48 @@ function buildEdges(nodes) {
   return edges;
 }
 
-function validateFlow(nodes, meta) {
+function toNodeData(node, isStart) {
+  const kind = node.node_kind || node.nodeKind || node.type || '';
+  return {
+    id: node.id || '',
+    title: node.title || '',
+    description: node.description || '',
+    nodeKind: kind,
+    type: kind,
+    executionContext: node.execution_context || node.executionContext || [],
+    instruction: node.instruction || '',
+    skillRefs: node.skill_refs || node.skillRefs || [],
+    responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
+    producedArtifacts: node.produced_artifacts || node.producedArtifacts || [],
+    expectedMutations: node.expected_mutations || node.expectedMutations || [],
+    onSuccess: node.on_success || node.onSuccess || '',
+    onFailure: node.on_failure || node.onFailure || '',
+    onSubmit: node.on_submit || node.onSubmit || '',
+    onApprove: node.on_approve || node.onApprove || '',
+    onReworkRoutes: node.on_rework_routes || node.onReworkRoutes || {},
+    isStart: !!isStart,
+  };
+}
+
+function parseFlowYaml(flowYaml, startNodeId) {
+  if (!flowYaml) {
+    return [];
+  }
+  try {
+    const parsed = parseYaml(flowYaml);
+    const nodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
+    return nodes.map((node, index) => ({
+      id: node.id || `node-${index + 1}`,
+      type: 'flowNode',
+      position: { x: 80 + index * 320, y: 120 },
+      data: toNodeData(node, node.id === startNodeId),
+    }));
+  } catch (err) {
+    return [];
+  }
+}
+
+function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
   const errors = [];
   const nodeIds = nodes.map((node) => node.id);
   const uniqueIds = new Set(nodeIds);
@@ -346,31 +242,34 @@ function validateFlow(nodes, meta) {
     });
   }
 
-  const rulesByCanonical = new Map(rules.map((rule) => [rule.canonical, rule]));
-  const skillsByCanonical = new Map(skills.map((skill) => [skill.canonical, skill]));
-  meta.ruleRefs.forEach((ref) => {
-    const rule = rulesByCanonical.get(ref);
-    if (!rule) {
-      errors.push(`Rule ref не найден: ${ref}`);
-      return;
-    }
-    if (rule.status !== 'published') {
-      errors.push(`Rule ref не опубликован: ${ref}`);
-    }
-    if (meta.codingAgent && rule.codingAgent !== meta.codingAgent) {
-      errors.push(`Rule ref не соответствует coding_agent: ${ref}`);
-    }
-  });
+  const rulesByCanonical = new Map((rulesCatalog || []).map((rule) => [rule.canonical, rule]));
+  const skillsByCanonical = new Map((skillsCatalog || []).map((skill) => [skill.canonical, skill]));
+  if (rulesByCanonical.size > 0) {
+    meta.ruleRefs.forEach((ref) => {
+      const rule = rulesByCanonical.get(ref);
+      if (!rule) {
+        errors.push(`Rule ref не найден: ${ref}`);
+        return;
+      }
+      if (rule.status !== 'published') {
+        errors.push(`Rule ref не опубликован: ${ref}`);
+      }
+      if (meta.codingAgent && rule.codingAgent !== meta.codingAgent) {
+        errors.push(`Rule ref не соответствует coding_agent: ${ref}`);
+      }
+    });
+  }
 
   nodes.forEach((node) => {
     const data = node.data || {};
-    if (!data.nodeKind) {
-      errors.push(`node_kind не задан: ${node.id}`);
+    const kind = data.nodeKind || data.type;
+    if (!kind) {
+      errors.push(`type не задан: ${node.id}`);
     }
-    if (data.skillRefs && data.skillRefs.length > 0 && data.nodeKind !== 'ai') {
+    if (data.skillRefs && data.skillRefs.length > 0 && kind !== 'ai') {
       errors.push(`skill_refs разрешены только для AI нод: ${node.id}`);
     }
-    if (data.skillRefs) {
+    if (data.skillRefs && skillsByCanonical.size > 0) {
       data.skillRefs.forEach((ref) => {
         const skill = skillsByCanonical.get(ref);
         if (!skill) {
@@ -406,6 +305,9 @@ function validateFlow(nodes, meta) {
         if (entry.type === 'user_request' && entry.path) {
           errors.push(`user_request не должен иметь path: ${node.id}`);
         }
+        if (entry.type !== 'user_request' && !entry.scope) {
+          errors.push(`execution_context scope не задан: ${node.id}`);
+        }
       });
     }
 
@@ -421,6 +323,9 @@ function validateFlow(nodes, meta) {
         }
         if (!item.path) {
           errors.push(`${label} path не задан: ${node.id}`);
+        }
+        if (!item.scope) {
+          errors.push(`${label} scope не задан: ${node.id}`);
         }
       });
     };
@@ -441,26 +346,26 @@ function validateFlow(nodes, meta) {
       }
     });
 
-    if (data.nodeKind === 'terminal' || data.type === 'terminal') {
+    if (kind === 'terminal') {
       if (transitions.length > 0) {
         errors.push(`Terminal нода не может иметь переходов: ${node.id}`);
       }
       return;
     }
 
-    if (data.type === 'executor') {
+    if (kind === 'ai' || kind === 'command') {
       if (!data.onSuccess) {
         errors.push(`Executor нода требует on_success: ${node.id}`);
       }
     }
 
-    if (data.nodeKind === 'human_input') {
+    if (kind === 'human_input') {
       if (!data.onSubmit) {
         errors.push(`human_input требует on_submit: ${node.id}`);
       }
     }
 
-    if (data.nodeKind === 'human_approval') {
+    if (kind === 'human_approval') {
       if (!data.onApprove) {
         errors.push(`human_approval требует on_approve: ${node.id}`);
       }
@@ -509,22 +414,20 @@ export default function FlowEditor() {
   const { flowId } = useParams();
   const location = useLocation();
   const isCreateMode = flowId === 'create' || location.pathname.endsWith('/flows/create');
-  const [flowMeta, setFlowMeta] = useState(isCreateMode ? emptyFlow : initialFlow);
+  const [flowMeta, setFlowMeta] = useState(emptyFlow);
   const [resourceVersion, setResourceVersion] = useState(0);
   const [flowVersion, setFlowVersion] = useState(isCreateMode ? '0.1' : '0.1');
   const [currentStatus, setCurrentStatus] = useState(isCreateMode ? 'draft' : '');
   const [showYaml, setShowYaml] = useState(false);
-  const [nodes, setNodes, onNodesChange] = useNodesState(isCreateMode ? [] : initialNodes);
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    isCreateMode ? null : (initialNodes[0]?.id || null),
-  );
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [rulesCatalog, setRulesCatalog] = useState([]);
+  const [skillsCatalog, setSkillsCatalog] = useState([]);
   const [flowInstance, setFlowInstance] = useState(null);
   const flowWrapperRef = useRef(null);
   const [pendingConnection, setPendingConnection] = useState(null);
   const [routeOptions, setRouteOptions] = useState([]);
   const [routeChoice, setRouteChoice] = useState(null);
-  const [reworkMode, setReworkMode] = useState('');
-  const [reworkTarget, setReworkTarget] = useState('');
   const [nodeIdDraft, setNodeIdDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -542,11 +445,12 @@ export default function FlowEditor() {
     [nodes]
   );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
-  const validationErrors = validateFlow(nodes, flowMeta);
+  const selectedNodeKind = selectedNode?.data?.nodeKind || selectedNode?.data?.type || '';
+  const validationErrors = validateFlow(nodes, flowMeta, rulesCatalog, skillsCatalog);
   const isReadOnly = !isEditing;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
 
-  const filteredRules = rules.filter(
+  const filteredRules = rulesCatalog.filter(
     (rule) => !flowMeta.codingAgent || rule.codingAgent === flowMeta.codingAgent
   );
   const ruleOptions = filteredRules.map((rule) => ({
@@ -555,7 +459,7 @@ export default function FlowEditor() {
     disabled: rule.status !== 'published',
   }));
 
-  const filteredSkills = skills.filter(
+  const filteredSkills = skillsCatalog.filter(
     (skill) => !flowMeta.codingAgent || skill.codingAgent === flowMeta.codingAgent
   );
   const skillOptions = filteredSkills.map((skill) => ({
@@ -682,29 +586,30 @@ export default function FlowEditor() {
 
   const getRouteOptions = (node) => {
     const data = node?.data || {};
-    if (data.nodeKind === 'ai') {
+    const kind = data.nodeKind || data.type;
+    if (kind === 'ai') {
       return [
         { value: 'on_success', label: 'on_success' },
         { value: 'on_failure', label: 'on_failure' },
       ];
     }
-    if (data.nodeKind === 'command') {
+    if (kind === 'command') {
       return [
         { value: 'on_success', label: 'on_success' },
         { value: 'on_failure', label: 'on_failure' },
       ];
     }
-    if (data.nodeKind === 'human_input') {
+    if (kind === 'human_input') {
       return [{ value: 'on_submit', label: 'on_submit' }];
     }
-    if (data.nodeKind === 'human_approval') {
+    if (kind === 'human_approval') {
       return [
         { value: 'on_approve', label: 'on_approve' },
         { value: 'rework:keep_current_changes', label: 'rework: keep_current_changes' },
         { value: 'rework:discard_current_changes', label: 'rework: discard_current_changes' },
       ];
     }
-    if (data.nodeKind === 'terminal') {
+    if (kind === 'terminal') {
       return [];
     }
     return [
@@ -780,7 +685,7 @@ export default function FlowEditor() {
       title: `Новая ${meta.label}`,
       description: '',
       nodeKind: kind,
-      type: meta.type,
+      type: kind,
       executionContext: [],
       instruction: '',
       skillRefs: [],
@@ -834,9 +739,48 @@ export default function FlowEditor() {
     });
   };
 
+  const loadRulesCatalog = async () => {
+    try {
+      const data = await apiRequest('/rules');
+      const mapped = data.map((rule) => ({
+        key: rule.rule_id,
+        name: rule.title || rule.rule_id,
+        description: rule.description || '',
+        ruleId: rule.rule_id,
+        codingAgent: rule.coding_agent,
+        status: rule.status,
+        version: rule.version,
+        canonical: rule.canonical_name,
+      }));
+      setRulesCatalog(mapped);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить Rules');
+    }
+  };
+
+  const loadSkillsCatalog = async () => {
+    try {
+      const data = await apiRequest('/skills');
+      const mapped = data.map((skill) => ({
+        key: skill.skill_id,
+        name: skill.name || skill.skill_id,
+        description: skill.description || '',
+        skillId: skill.skill_id,
+        codingAgent: skill.coding_agent,
+        status: skill.status,
+        version: skill.version,
+        canonical: skill.canonical_name,
+      }));
+      setSkillsCatalog(mapped);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить Skills');
+    }
+  };
+
   const loadFlow = async (id) => {
     try {
       const data = await apiRequest(`/flows/${id}`);
+      const parsedNodes = parseFlowYaml(data.flow_yaml, data.start_node_id || '');
       setFlowMeta((prev) => ({
         ...prev,
         flowId: data.flow_id || id,
@@ -853,6 +797,8 @@ export default function FlowEditor() {
       setFlowVersion(data.version || flowVersion);
       setCurrentStatus(data.status || '');
       setResourceVersion(data.resource_version ?? 0);
+      setNodes(parsedNodes);
+      setSelectedNodeId(parsedNodes[0]?.id || null);
     } catch (err) {
       message.error(err.message || 'Не удалось загрузить Flow');
     }
@@ -893,13 +839,15 @@ export default function FlowEditor() {
       if (data.description) {
         lines.push(`    description: ${data.description}`);
       }
-      lines.push(`    type: ${data.type || 'executor'}`);
-      lines.push(`    node_kind: ${data.nodeKind || ''}`);
+      lines.push(`    type: ${data.nodeKind || data.type || ''}`);
       if (data.executionContext && data.executionContext.length > 0) {
         lines.push('    execution_context:');
         data.executionContext.forEach((entry) => {
           lines.push(`      - type: ${entry.type}`);
           lines.push(`        required: ${!!entry.required}`);
+          if (entry.scope) {
+            lines.push(`        scope: ${entry.scope}`);
+          }
           if (entry.path) {
             lines.push(`        path: ${entry.path}`);
           }
@@ -922,7 +870,11 @@ export default function FlowEditor() {
       if (data.producedArtifacts && data.producedArtifacts.length > 0) {
         lines.push('    produced_artifacts:');
         data.producedArtifacts.forEach((artifact) => {
-          lines.push(`      - path: ${artifact.path}`);
+          lines.push('      -');
+          if (artifact.scope) {
+            lines.push(`        scope: ${artifact.scope}`);
+          }
+          lines.push(`        path: ${artifact.path}`);
           lines.push(`        required: ${!!artifact.required}`);
         });
       } else {
@@ -931,7 +883,11 @@ export default function FlowEditor() {
       if (data.expectedMutations && data.expectedMutations.length > 0) {
         lines.push('    expected_mutations:');
         data.expectedMutations.forEach((mutation) => {
-          lines.push(`      - path: ${mutation.path}`);
+          lines.push('      -');
+          if (mutation.scope) {
+            lines.push(`        scope: ${mutation.scope}`);
+          }
+          lines.push(`        path: ${mutation.path}`);
           lines.push(`        required: ${!!mutation.required}`);
         });
       } else {
@@ -1018,9 +974,6 @@ export default function FlowEditor() {
   };
 
   useEffect(() => {
-    if (!flowId) {
-      return;
-    }
     if (isCreateMode) {
       setFlowMeta(emptyFlow);
       setNodes([]);
@@ -1028,17 +981,22 @@ export default function FlowEditor() {
       setFlowVersion('0.1');
       setCurrentStatus('draft');
       setResourceVersion(0);
+      setIsEditing(true);
       return;
     }
-    setNodes(initialNodes);
-    setSelectedNodeId(initialNodes[0]?.id || null);
+    if (!flowId) {
+      return;
+    }
+    setNodes([]);
+    setSelectedNodeId(null);
+    setIsEditing(false);
     loadFlow(flowId);
   }, [flowId, isCreateMode, setNodes]);
 
   useEffect(() => {
-    setReworkMode('');
-    setReworkTarget('');
-  }, [selectedNodeId]);
+    loadRulesCatalog();
+    loadSkillsCatalog();
+  }, []);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -1379,24 +1337,23 @@ export default function FlowEditor() {
                 dataSource={flowMeta.ruleRefs}
                 locale={{ emptyText: 'Нет связанных правил' }}
                 renderItem={(ref, index) => {
+                  const rule = rulesCatalog.find((item) => item.canonical === ref);
+                  const description = rule?.description || '';
+                  const snippet = description.length > 80
+                    ? `${description.slice(0, 80)}...`
+                    : description;
                   return (
                     <List.Item
                       className="linked-item"
                     >
                       <div className="linked-rule-row">
                         <span className="mono linked-rule-name">{ref}</span>
-                        <div className="linked-rule-actions">
-                          <Button
-                            key="delete"
-                            size="small"
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            disabled={isReadOnly}
-                            onClick={() => updateFlowMeta({ ruleRefs: flowMeta.ruleRefs.filter((item) => item !== ref) })}
-                          />
-                        </div>
                       </div>
+                      {snippet && (
+                        <Text type="secondary" className="linked-rule-description">
+                          {snippet}
+                        </Text>
+                      )}
                     </List.Item>
                   );
                 }}
@@ -1407,7 +1364,7 @@ export default function FlowEditor() {
 
             <div className="form-stack">
               <div className="switch-row">
-                <Text className="muted">Провалить при отсутствии объявленного выхода</Text>
+                <Text className="muted">Остановить Flow при отсутствии ожидаемого результата</Text>
                 <Switch
                   checked={flowMeta.failOnMissingDeclaredOutput}
                   disabled={isReadOnly}
@@ -1415,7 +1372,7 @@ export default function FlowEditor() {
                 />
               </div>
               <div className="switch-row">
-                <Text className="muted">Провалить при отсутствии ожидаемой мутации</Text>
+                <Text className="muted">Остановить Flow при отсутствии ожидаемой мутации</Text>
                 <Switch
                   checked={flowMeta.failOnMissingExpectedMutation}
                   disabled={isReadOnly}
@@ -1489,22 +1446,15 @@ export default function FlowEditor() {
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Тип</Text>
-                  <div className="field-control">
-                    <Input value={selectedNode.data.type} disabled />
-                  </div>
-                </div>
-                <div>
                   <Text className="muted">Тип Node</Text>
                   <div className="field-control">
                     <Select
-                      value={selectedNode.data.nodeKind}
+                      value={selectedNode.data.nodeKind || selectedNode.data.type}
                       disabled={isReadOnly}
                       onChange={(value) => {
-                        const meta = NODE_KIND_META[value] || {};
                         updateSelectedNode({
                           nodeKind: value,
-                          type: meta.type,
+                          type: value,
                           skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
                           onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
                           onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
@@ -1514,107 +1464,112 @@ export default function FlowEditor() {
                         });
                       }}
                       options={[
-                        { value: 'ai', label: 'ai' },
-                        { value: 'command', label: 'command' },
-                        { value: 'human_input', label: 'human_input' },
-                        { value: 'human_approval', label: 'human_approval' },
-                        { value: 'terminal', label: 'terminal' },
+                        { value: 'ai', label: 'AI Executor' },
+                        { value: 'command', label: 'Command Executor' },
+                        { value: 'human_input', label: 'Human Input Gate' },
+                        { value: 'human_approval', label: 'Human Approval Gate' },
+                        { value: 'terminal', label: 'Terminal' },
                       ]}
                     />
                   </div>
                 </div>
-                <Divider />
-
-                <div>
-                  <Text className="muted">Контекст исполнения</Text>
-                  <div className="field-control">
-                    <div className="context-list">
-                    {(selectedNode.data.executionContext || []).map((entry, index) => (
-                      <div key={`${entry.type}-${index}`} className="context-row">
-                        <Select
-                          value={entry.type}
-                          options={EXECUTION_CONTEXT_TYPES}
-                          disabled={isReadOnly}
-                          onChange={(value) => updateSelectedNodeList(
-                            'executionContext',
-                            index,
-                            value === 'user_request' ? { type: value, path: '' } : { type: value }
-                          )}
-                          style={{ minWidth: 140 }}
-                        />
-                        <Input
-                          value={entry.path || ''}
-                          placeholder="путь"
-                          disabled={isReadOnly || entry.type === 'user_request'}
-                          onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
-                        />
-                        <Switch
-                          checked={!!entry.required}
-                          disabled={isReadOnly}
-                          onChange={(checked) => updateSelectedNodeList('executionContext', index, { required: checked })}
-                        />
+                {(selectedNodeKind !== 'human_input' && selectedNodeKind !== 'human_approval' && selectedNodeKind !== 'terminal') && (
+                  <>
+                    <Divider />
+                    <div>
+                      <Text className="muted">Контекст исполнения</Text>
+                      <div className="field-control">
+                        <div className="context-list">
+                        {(selectedNode.data.executionContext || []).map((entry, index) => (
+                          <div key={`${entry.type}-${index}`} className="context-row">
+                            <Select
+                              value={entry.type}
+                              options={EXECUTION_CONTEXT_TYPES}
+                              disabled={isReadOnly}
+                              onChange={(value) => updateSelectedNodeList(
+                                'executionContext',
+                                index,
+                                value === 'user_request'
+                                  ? { type: value, path: '', scope: undefined }
+                                  : { type: value, scope: entry.scope || defaultScopeForContext(value) }
+                              )}
+                              style={{ minWidth: 140 }}
+                            />
+                            {entry.type !== 'user_request' && (
+                              <Select
+                                value={entry.scope || defaultScopeForContext(entry.type)}
+                                options={SCOPE_OPTIONS}
+                                disabled={isReadOnly}
+                                onChange={(value) => updateSelectedNodeList('executionContext', index, { scope: value })}
+                                style={{ minWidth: 140 }}
+                              />
+                            )}
+                            {entry.type !== 'user_request' && (
+                              <Input
+                                value={entry.path || ''}
+                                placeholder="путь"
+                                disabled={isReadOnly}
+                                onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
+                              />
+                            )}
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              disabled={isReadOnly}
+                              onClick={() => removeSelectedNodeListItem('executionContext', index)}
+                            />
+                          </div>
+                        ))}
                         <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
+                          type="dashed"
+                          icon={<PlusOutlined />}
                           disabled={isReadOnly}
-                          onClick={() => removeSelectedNodeListItem('executionContext', index)}
+                          onClick={() =>
+                            addSelectedNodeListItem('executionContext', { type: 'user_request', required: true })
+                          }
+                        >
+                          Добавить контекст
+                        </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Text className="muted">Инструкция</Text>
+                      <div className="field-control">
+                        <Input.TextArea
+                          rows={3}
+                          value={selectedNode.data.instruction}
+                          disabled={isReadOnly}
+                          onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                         />
                       </div>
-                    ))}
-                    <Button
-                      size="small"
-                      type="dashed"
-                      icon={<PlusOutlined />}
-                      disabled={isReadOnly}
-                      onClick={() =>
-                        addSelectedNodeListItem('executionContext', { type: 'user_request', required: true })
-                      }
-                    >
-                      Добавить контекст
-                    </Button>
                     </div>
-                  </div>
-                </div>
+                    <div>
+                      <Text className="muted">Схема ответа (опционально)</Text>
+                      <div className="field-control">
+                        <Input.TextArea
+                          rows={4}
+                          value={selectedNode.data.responseSchema}
+                          placeholder="YAML/JSON schema"
+                          disabled={isReadOnly}
+                          onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-                <Divider />
-
-                <div>
-                  <Text className="muted">Инструкция</Text>
-                  <div className="field-control">
-                    <Input.TextArea
-                      rows={3}
-                      value={selectedNode.data.instruction}
-                      disabled={isReadOnly}
-                      onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Text className="muted">Схема ответа (опционально)</Text>
-                  <div className="field-control">
-                    <Input.TextArea
-                      rows={4}
-                      value={selectedNode.data.responseSchema}
-                      placeholder="YAML/JSON schema"
-                      disabled={isReadOnly}
-                      onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <Divider />
-
-                <div className="linked-block">
-                  <div className="linked-header">
-                    <Title level={5}>Привязанные навыки</Title>
-                    <Text className="muted">Только для AI</Text>
-                  </div>
-                  {selectedNode.data.nodeKind !== 'ai' ? (
-                    <div className="card-muted">Привязанные навыки доступны только для AI-исполнителей.</div>
-                  ) : (
-                    <>
+                {selectedNodeKind === 'ai' && (
+                  <>
+                    <Divider />
+                    <div className="linked-block">
+                      <div className="linked-header">
+                        <Title level={5}>Привязанные навыки</Title>
+                        <Text className="muted">Только для AI</Text>
+                      </div>
                       <Select
                         mode="multiple"
                         options={skillOptions}
@@ -1626,7 +1581,7 @@ export default function FlowEditor() {
                       <List
                         dataSource={selectedNode.data.skillRefs || []}
                         locale={{ emptyText: 'Нет связанных навыков' }}
-                        renderItem={(ref, index) => {
+                        renderItem={(ref) => {
                           const skillRefs = selectedNode.data.skillRefs || [];
                           return (
                             <List.Item className="linked-item">
@@ -1648,231 +1603,190 @@ export default function FlowEditor() {
                           );
                         }}
                       />
-                    </>
-                  )}
-                </div>
-
-                <Divider />
-
-                <div>
-                  <Title level={5}>Ожидаемые выходы</Title>
-                  <Text className="muted">Создаваемые артефакты</Text>
-                  <div className="context-list">
-                    {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
-                      <div key={`${entry.path}-${index}`} className="artifact-row">
-                        <Input
-                          value={extractArtifactName(entry.path)}
-                          placeholder="имя артефакта"
-                          disabled={isReadOnly}
-                          onChange={(event) =>
-                            updateSelectedNodeList('producedArtifacts', index, {
-                              path: buildArtifactPath(event.target.value),
-                            })
-                          }
-                        />
-                        <div className="artifact-row-controls">
-                          <Button
-                            size="small"
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            disabled={isReadOnly}
-                            onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    <Button
-                      type="dashed"
-                      icon={<PlusOutlined />}
-                      disabled={isReadOnly}
-                      onClick={() => addSelectedNodeListItem('producedArtifacts', { path: '', required: true })}
-                    >
-                      Добавить артефакт
-                    </Button>
-                  </div>
-
-                  <Text className="muted" style={{ marginTop: 12 }}>Ожидаемые изменения</Text>
-                  <div className="context-list">
-                    {(selectedNode.data.expectedMutations || []).map((entry, index) => (
-                      <div key={`${entry.path}-${index}`} className="context-row">
-                        <Input
-                          value={entry.path || ''}
-                          placeholder="путь"
-                          disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
-                        />
-                        <Switch
-                          checked={!!entry.required}
-                          disabled={isReadOnly}
-                          onChange={(checked) => updateSelectedNodeList('expectedMutations', index, { required: checked })}
-                        />
-                        <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          disabled={isReadOnly}
-                          onClick={() => removeSelectedNodeListItem('expectedMutations', index)}
-                        />
-                      </div>
-                    ))}
-                    <Button
-                      type="dashed"
-                      icon={<PlusOutlined />}
-                      disabled={isReadOnly}
-                      onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true })}
-                    >
-                      Добавить изменение
-                    </Button>
-                  </div>
-                </div>
-
-                <Divider />
-
-                <div>
-                  <Title level={5}>Переходы</Title>
-                  {selectedNode.data.type === 'terminal' && (
-                    <div className="card-muted">Terminal нода завершает flow и не имеет переходов.</div>
-                  )}
-                  {selectedNode.data.type === 'executor' && (
-                    <>
-                      <div className="transition-block">
-                        <Text className="muted mono">on_success</Text>
-                        <div className="field-control">
-                          <Select
-                            value={selectedNode.data.onSuccess || undefined}
-                            disabled={isReadOnly}
-                            allowClear
-                            options={nodeIdOptions}
-                            placeholder="Выберите ноду"
-                            onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
-                          />
-                        </div>
-                      </div>
-                      <div className="transition-block">
-                        <Text className="muted mono">on_failure</Text>
-                        <div className="field-control">
-                          <Select
-                            value={selectedNode.data.onFailure || undefined}
-                            disabled={isReadOnly}
-                            allowClear
-                            options={nodeIdOptions}
-                            placeholder="Выберите ноду"
-                            onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {selectedNode.data.nodeKind === 'human_input' && (
-                    <div className="transition-block">
-                      <Text className="muted mono">on_submit</Text>
-                      <div className="field-control">
-                        <Select
-                          value={selectedNode.data.onSubmit || undefined}
-                          disabled={isReadOnly}
-                          allowClear
-                          options={nodeIdOptions}
-                          placeholder="Выберите ноду"
-                          onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
-                        />
-                      </div>
                     </div>
-                  )}
-                  {selectedNode.data.nodeKind === 'human_approval' && (
-                    <>
-                      <div className="transition-block">
-                        <Text className="muted mono">on_approve</Text>
-                        <div className="field-control">
-                          <Select
-                            value={selectedNode.data.onApprove || undefined}
-                            disabled={isReadOnly}
-                            allowClear
-                            options={nodeIdOptions}
-                            placeholder="Выберите ноду"
-                            onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
-                          />
-                        </div>
-                      </div>
-                      <div className="transition-list">
-                        {Object.entries(selectedNode.data.onReworkRoutes || {}).map(([mode, target]) => (
-                          <div key={mode} className="transition-block">
-                            <div className="transition-header">
-                              <Text className="muted mono">rework:{mode}</Text>
+                  </>
+                )}
+
+                {selectedNodeKind !== 'terminal' && (
+                  <>
+                    <Divider />
+
+                    <div>
+                      <Title level={5}>Ожидаемые выходы</Title>
+                      <Text className="muted">Создаваемые артефакты</Text>
+                      <div className="context-list">
+                        {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
+                          <div key={`artifact-${index}`} className="artifact-row">
+                            <Select
+                              value={entry.scope || 'run'}
+                              options={SCOPE_OPTIONS}
+                              disabled={isReadOnly}
+                              onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
+                            />
+                            <Input
+                              value={entry.path || ''}
+                              placeholder="путь"
+                              disabled={isReadOnly}
+                              onChange={(event) =>
+                                updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
+                              }
+                            />
+                            <div className="artifact-row-controls">
                               <Button
                                 size="small"
                                 type="text"
                                 danger
                                 icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
-                                onClick={() => {
-                                  const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                                  delete nextRoutes[mode];
-                                  updateSelectedNode({ onReworkRoutes: nextRoutes });
-                                }}
-                              />
-                            </div>
-                            <div className="field-control">
-                              <Select
-                                value={target || undefined}
-                                disabled={isReadOnly}
-                                allowClear
-                                options={nodeIdOptions}
-                                placeholder="Выберите ноду"
-                                onChange={(value) => {
-                                  const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                                  nextRoutes[mode] = value || '';
-                                  updateSelectedNode({ onReworkRoutes: nextRoutes });
-                                }}
+                                onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
                               />
                             </div>
                           </div>
                         ))}
-                        <div className="transition-block">
-                          <Text className="muted">Режим rework</Text>
-                          <div className="field-control">
-                            <Input
-                              value={reworkMode}
-                              placeholder="например, keep_current_changes"
+                        <Button
+                          type="dashed"
+                          icon={<PlusOutlined />}
+                          disabled={isReadOnly}
+                          onClick={() => addSelectedNodeListItem('producedArtifacts', { path: '', required: true, scope: 'run' })}
+                        >
+                          Добавить артефакт
+                        </Button>
+                      </div>
+
+                      <Text className="muted" style={{ marginTop: 12 }}>Ожидаемые изменения</Text>
+                      <div className="context-list">
+                        {(selectedNode.data.expectedMutations || []).map((entry, index) => (
+                          <div key={`mutation-${index}`} className="mutation-row">
+                            <Select
+                              value={entry.scope || 'project'}
+                              options={SCOPE_OPTIONS}
                               disabled={isReadOnly}
-                              onChange={(event) => setReworkMode(event.target.value)}
+                              onChange={(value) => updateSelectedNodeList('expectedMutations', index, { scope: value })}
+                            />
+                            <Input
+                              value={entry.path || ''}
+                              placeholder="путь"
+                              disabled={isReadOnly}
+                              onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
+                            />
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              disabled={isReadOnly}
+                              onClick={() => removeSelectedNodeListItem('expectedMutations', index)}
                             />
                           </div>
-                          <Text className="muted">Целевая нода</Text>
+                        ))}
+                        <Button
+                          type="dashed"
+                          icon={<PlusOutlined />}
+                          disabled={isReadOnly}
+                          onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true, scope: 'project' })}
+                        >
+                          Добавить изменение
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Divider />
+
+                    <div>
+                      <Title level={5}>Переходы</Title>
+                      {(selectedNodeKind === 'ai' || selectedNodeKind === 'command') && (
+                        <>
+                          <div className="transition-block">
+                            <Text className="muted mono">on_success</Text>
+                            <div className="field-control">
+                              <Select
+                                value={selectedNode.data.onSuccess || undefined}
+                                disabled={isReadOnly}
+                                allowClear
+                                options={nodeIdOptions}
+                                placeholder="Выберите ноду"
+                                onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
+                              />
+                            </div>
+                          </div>
+                          <div className="transition-block">
+                            <Text className="muted mono">on_failure</Text>
+                            <div className="field-control">
+                              <Select
+                                value={selectedNode.data.onFailure || undefined}
+                                disabled={isReadOnly}
+                                allowClear
+                                options={nodeIdOptions}
+                                placeholder="Выберите ноду"
+                                onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {selectedNodeKind === 'human_input' && (
+                        <div className="transition-block">
+                          <Text className="muted mono">on_submit</Text>
                           <div className="field-control">
                             <Select
-                              value={reworkTarget || undefined}
+                              value={selectedNode.data.onSubmit || undefined}
                               disabled={isReadOnly}
                               allowClear
                               options={nodeIdOptions}
                               placeholder="Выберите ноду"
-                              onChange={(value) => setReworkTarget(value || '')}
+                              onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
                             />
                           </div>
-                          <Button
-                            size="small"
-                            type="default"
-                            icon={<PlusOutlined />}
-                            disabled={isReadOnly}
-                            onClick={() => {
-                              if (!reworkMode || !reworkTarget) {
-                                return;
-                              }
-                              const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                              nextRoutes[reworkMode] = reworkTarget;
-                              updateSelectedNode({ onReworkRoutes: nextRoutes });
-                              setReworkMode('');
-                              setReworkTarget('');
-                            }}
-                          >
-                            Добавить
-                          </Button>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      )}
+                      {selectedNodeKind === 'human_approval' && (
+                        <>
+                          <div className="transition-block">
+                            <Text className="muted mono">on_approve</Text>
+                            <div className="field-control">
+                              <Select
+                                value={selectedNode.data.onApprove || undefined}
+                                disabled={isReadOnly}
+                                allowClear
+                                options={nodeIdOptions}
+                                placeholder="Выберите ноду"
+                                onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
+                              />
+                            </div>
+                          </div>
+                          <div className="transition-list">
+                            {APPROVAL_REWORK_MODES.map((mode) => {
+                              const target = (selectedNode.data.onReworkRoutes || {})[mode] || '';
+                              return (
+                                <div key={mode} className="transition-block">
+                                  <Text className="muted mono">rework:{mode}</Text>
+                                  <div className="field-control">
+                                    <Select
+                                      value={target || undefined}
+                                      disabled={isReadOnly}
+                                      allowClear
+                                      options={nodeIdOptions}
+                                      placeholder="Выберите ноду"
+                                      onChange={(value) => {
+                                        const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
+                                        if (!value) {
+                                          delete nextRoutes[mode];
+                                        } else {
+                                          nextRoutes[mode] = value;
+                                        }
+                                        updateSelectedNode({ onReworkRoutes: nextRoutes });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
           )}

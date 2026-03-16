@@ -1,9 +1,40 @@
-import React from 'react';
-import { Button, Card, Col, Form, Input, Row, Select, Typography } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Card, Col, Form, Input, Row, Select, Typography, message } from 'antd';
+import { useSearchParams } from 'react-router-dom';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
 export default function RunLaunch() {
+  const [searchParams] = useSearchParams();
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
+
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const data = await apiRequest('/projects');
+        setProjects(data || []);
+        const paramProjectId = searchParams.get('projectId');
+        if (paramProjectId) {
+          setSelectedProjectId(paramProjectId);
+        } else if (data && data.length > 0) {
+          setSelectedProjectId(data[0].id);
+        }
+      } catch (err) {
+        message.error(err.message || 'Не удалось загрузить проекты');
+      }
+    };
+    loadProjects();
+  }, [searchParams]);
+
+  const projectOptions = useMemo(
+    () => projects.map((project) => ({ value: project.id, label: project.name })),
+    [projects]
+  );
+
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+
   return (
     <div>
       <div className="page-header">
@@ -16,10 +47,9 @@ export default function RunLaunch() {
             <Form layout="vertical">
               <Form.Item label="Project">
                 <Select
-                  options={[
-                    { value: 'checkout-service', label: 'checkout-service' },
-                    { value: 'billing-core', label: 'billing-core' },
-                  ]}
+                  options={projectOptions}
+                  value={selectedProjectId || undefined}
+                  onChange={(value) => setSelectedProjectId(value)}
                 />
               </Form.Item>
               <Form.Item label="Flow version">
@@ -52,6 +82,13 @@ export default function RunLaunch() {
               <Text className="muted">Flow</Text>
               <div className="mono">feature-change-flow@1.0.3</div>
             </div>
+            {selectedProject && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Project</Text>
+                <div className="mono">{selectedProject.name}</div>
+                <div className="mono muted">{selectedProject.repo_url}</div>
+              </div>
+            )}
             <div style={{ marginTop: 12 }}>
               <Text className="muted">Rule</Text>
               <div className="mono">project-rule@1.0.2</div>

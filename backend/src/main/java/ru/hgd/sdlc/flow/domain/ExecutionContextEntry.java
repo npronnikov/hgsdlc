@@ -16,5 +16,6 @@ import lombok.Setter;
 public class ExecutionContextEntry {
     private String type;
     private String path;
+    private String scope;
     private Boolean required;
 }
