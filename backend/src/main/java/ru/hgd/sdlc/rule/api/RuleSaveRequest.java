@@ -10,6 +10,7 @@ public record RuleSaveRequest(
         @JsonProperty("rule_markdown") String ruleMarkdown,
         @JsonProperty("publish") Boolean publish,
         @JsonProperty("release") Boolean release,
+        @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion
 ) {
 }

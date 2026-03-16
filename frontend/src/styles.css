@@ -750,6 +750,40 @@ body {
   text-align: center;
 }
 
+.flow-preview-edge-success .react-flow__edge-path {
+  stroke: #16a34a;
+}
+
+.flow-preview-edge-failure .react-flow__edge-path {
+  stroke: #dc2626;
+}
+
+.flow-preview-edge-submit .react-flow__edge-path {
+  stroke: #2563eb;
+}
+
+.flow-preview-edge-approve .react-flow__edge-path {
+  stroke: #f59e0b;
+}
+
+.flow-preview-edge-rework .react-flow__edge-path {
+  stroke: #64748b;
+}
+
+.flow-preview-edge-label {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px 8px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 @media (max-width: 992px) {
   .launch-modal-grid {
     grid-template-columns: 1fr;
@@ -987,7 +1021,7 @@ body {
 
 .react-flow__edge-text {
   font-size: 11px;
-  fill: var(--text-muted);
+  fill: #0f172a;
 }
 
 .rule-editor-page {

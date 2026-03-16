@@ -64,6 +64,10 @@ const parseMajorMinor = (version) => {
   }
   return { major: Number(match[1]), minor: Number(match[2]), valid: true };
 };
+const compareVersions = (a, b) => {
+  if (a.major !== b.major) return a.major - b.major;
+  return a.minor - b.minor;
+};
 const nextMajorVersion = (version) => {
   const parsed = parseMajorMinor(version);
   const major = parsed.valid ? parsed.major : 0;
@@ -76,6 +80,51 @@ const nextMinorVersion = (version) => {
   }
   return `${parsed.major}.${parsed.minor + 1}`;
 };
+const getLatestVersion = (versions, status) => {
+  const candidates = versions.filter((item) => !status || item.status === status);
+  let best = null;
+  candidates.forEach((item) => {
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid) {
+      return;
+    }
+    if (!best || compareVersions(parsed, best.parsed) > 0) {
+      best = { value: item.value, parsed };
+    }
+  });
+  return best ? best.value : '';
+};
+const getMaxPublishedMajor = (versions) => {
+  let maxMajor = null;
+  versions.forEach((item) => {
+    if (item.status !== 'published') return;
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid) return;
+    if (maxMajor === null || parsed.major > maxMajor) {
+      maxMajor = parsed.major;
+    }
+  });
+  return maxMajor;
+};
+const getMaxPublishedMinorForMajor = (versions, major) => {
+  let maxMinor = null;
+  versions.forEach((item) => {
+    if (item.status !== 'published') return;
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid || parsed.major !== major) return;
+    if (maxMinor === null || parsed.minor > maxMinor) {
+      maxMinor = parsed.minor;
+    }
+  });
+  return maxMinor;
+};
+const getDraftForMajor = (versions, major) => (
+  versions.find((item) => {
+    if (item.status !== 'draft') return false;
+    const parsed = parseMajorMinor(item.value);
+    return parsed.valid && parsed.major === major;
+  })
+);
 
 const EXECUTION_CONTEXT_TYPES = [
   { value: 'user_request', label: 'Запрос пользователя' },
@@ -427,10 +476,12 @@ export default function FlowEditor() {
   const [flowMeta, setFlowMeta] = useState(emptyFlow);
   const [resourceVersion, setResourceVersion] = useState(0);
   const [flowVersion, setFlowVersion] = useState(isCreateMode ? '0.1' : '0.1');
+  const [baseVersion, setBaseVersion] = useState('');
   const [currentStatus, setCurrentStatus] = useState(isCreateMode ? 'draft' : '');
   const [showYaml, setShowYaml] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [versionOptions, setVersionOptions] = useState([]);
   const [rulesCatalog, setRulesCatalog] = useState([]);
   const [skillsCatalog, setSkillsCatalog] = useState([]);
   const [flowInstance, setFlowInstance] = useState(null);
@@ -441,14 +492,25 @@ export default function FlowEditor() {
   const [nodeIdDraft, setNodeIdDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
+  const currentParsed = parseMajorMinor(flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
+  const currentMajor = currentParsed.valid ? currentParsed.major : parseMajorMinor(DEFAULT_VERSION).major;
+  const maxMinorForMajor = getMaxPublishedMinorForMajor(versionOptions, currentMajor);
+  const nextDraftVersion = maxMinorForMajor !== null
+    ? `${currentMajor}.${maxMinorForMajor + 1}`
+    : (currentMajor === parseMajorMinor(DEFAULT_VERSION).major && !latestPublishedVersion
+      ? DEFAULT_VERSION
+      : `${currentMajor}.0`);
+  const draftForMajor = getDraftForMajor(versionOptions, currentMajor);
+  const publishVersion = draftForMajor ? draftForMajor.value : nextDraftVersion;
+  const publishLabel = `Опубликовать версию → ${publishVersion}`;
+  const maxPublishedMajor = getMaxPublishedMajor(versionOptions);
+  const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
+  const releaseVersion = `${releaseMajor}.0`;
+  const releaseLabel = `Несовместимое обновление (major) → ${releaseVersion}`;
   const flowVersionLabel = currentStatus === 'draft' || isCreateMode
     ? 'черновик'
     : (flowVersion || '0.0.0');
-  const publishVersion = currentStatus === 'draft' || isCreateMode
-    ? (flowVersion || DEFAULT_VERSION)
-    : nextMinorVersion(flowVersion || DEFAULT_VERSION);
-  const publishLabel = `Опубликовать версию → ${publishVersion}`;
-  const releaseLabel = `Несовместимое обновление (major) → ${nextMajorVersion(publishVersion)}`;
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
   const nodeIdOptions = useMemo(
     () => nodes.map((node) => ({ value: node.id, label: node.id })),
@@ -774,6 +836,21 @@ export default function FlowEditor() {
     }
   };
 
+  const loadFlowVersions = async (id) => {
+    try {
+      const versions = await apiRequest(`/flows/${id}/versions`);
+      const mapped = versions.map((item) => ({
+        label: `v${item.version} · ${item.status === 'draft' ? 'черновик' : item.status === 'published' ? 'опубликовано' : item.status}`,
+        value: item.version,
+        status: item.status,
+        resourceVersion: item.resource_version,
+      }));
+      setVersionOptions(mapped);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить версии Flow');
+    }
+  };
+
   const loadFlow = async (id) => {
     try {
       const data = await apiRequest(`/flows/${id}`);
@@ -792,6 +869,7 @@ export default function FlowEditor() {
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
       }));
       setFlowVersion(data.version || flowVersion);
+      setBaseVersion(data.version || flowVersion);
       setCurrentStatus(data.status || '');
       setResourceVersion(data.resource_version ?? 0);
       setNodes(parsedNodes);
@@ -940,6 +1018,7 @@ export default function FlowEditor() {
           flow_yaml: flowYaml,
           publish,
           release,
+          base_version: baseVersion || undefined,
           resource_version: resourceVersion,
         }),
       });
@@ -960,8 +1039,12 @@ export default function FlowEditor() {
       }));
       setFlowVersion(response.version || flowVersion);
       setCurrentStatus(response.status || currentStatus);
+      setBaseVersion(response.version || baseVersion);
       setResourceVersion(response.resource_version ?? resourceVersion);
       message.success(publish ? 'Flow опубликован' : 'Черновик сохранён');
+      if (response.flow_id || flowMeta.flowId) {
+        loadFlowVersions(response.flow_id || flowMeta.flowId);
+      }
       return true;
     } catch (err) {
       message.error(toRussianError(err?.message, 'Не удалось сохранить Flow'));
@@ -975,8 +1058,10 @@ export default function FlowEditor() {
       setNodes([]);
       setSelectedNodeId(null);
       setFlowVersion('0.1');
+      setBaseVersion('0.1');
       setCurrentStatus('draft');
       setResourceVersion(0);
+      setVersionOptions([]);
       setIsEditing(true);
       return;
     }
@@ -987,6 +1072,7 @@ export default function FlowEditor() {
     setSelectedNodeId(null);
     setIsEditing(false);
     loadFlow(flowId);
+    loadFlowVersions(flowId);
   }, [flowId, isCreateMode, setNodes]);
 
   useEffect(() => {
@@ -1039,15 +1125,35 @@ export default function FlowEditor() {
     );
   };
 
+  const startDraftFromPublished = () => {
+    const sourceVersion = flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    setBaseVersion(sourceVersion);
+    setCurrentStatus('draft');
+    setIsEditing(true);
+    if (draftForMajor) {
+      setResourceVersion(draftForMajor.resourceVersion ?? 0);
+      setFlowVersion(draftForMajor.value || nextDraftVersion);
+      return;
+    }
+    setResourceVersion(0);
+    setFlowVersion(nextDraftVersion);
+  };
+
   return (
     <div className="flow-editor-page">
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Редактор Flow</Title>
         <Space>
           {!isEditing ? (
-            <Button type="default" onClick={() => setIsEditing(true)}>
-              Редактировать
-            </Button>
+            currentStatus === 'draft' ? (
+              <Button type="default" onClick={() => setIsEditing(true)}>
+                Редактировать
+              </Button>
+            ) : (
+              <Button type="default" onClick={startDraftFromPublished}>
+                {`Создать новую версию ${nextDraftVersion}`}
+              </Button>
+            )
           ) : (
             <Button
               type="default"
@@ -1071,7 +1177,7 @@ export default function FlowEditor() {
                 if (key === 'release') {
                   Modal.confirm({
                     title: 'Подтвердить major-обновление?',
-                    content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                    content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
                     okText: 'Выпустить',
                     cancelText: 'Отмена',
                     onOk: () => saveFlow({ publish: true, release: true }),

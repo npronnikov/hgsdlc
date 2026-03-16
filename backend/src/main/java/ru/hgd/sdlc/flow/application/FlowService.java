@@ -144,18 +144,22 @@ public class FlowService {
             validateReferences(model);
         }
 
-        FlowVersion existingDraft = repository.findFirstByFlowIdAndStatusOrderBySavedAtDesc(flowId, FlowStatus.DRAFT)
-                .orElse(null);
-        FlowVersion latestPublished = repository
-                .findFirstByFlowIdAndStatusOrderBySavedAtDesc(flowId, FlowStatus.PUBLISHED)
-                .orElse(null);
+        List<FlowVersion> allVersions = repository.findByFlowIdOrderBySavedAtDesc(flowId);
+        List<FlowVersion> publishedVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == FlowStatus.PUBLISHED)
+                .toList();
+        List<FlowVersion> draftVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == FlowStatus.DRAFT)
+                .toList();
+        int baseMajor = resolveBaseMajor(request.baseVersion(), publishedVersions);
+        FlowVersion existingDraft = findDraftForMajor(draftVersions, baseMajor);
+        FlowVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
+        Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
+        Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
         if (publish) {
-            FlowVersion base = existingDraft != null ? existingDraft : latestPublished;
-            if (base != null) {
-                if (base.getStatus() == FlowStatus.PUBLISHED
-                        && base.getResourceVersion() != request.resourceVersion()) {
-                    throw new ConflictException("resource_version mismatch for publish");
-                }
+            FlowVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
+            if (base != null && base.getResourceVersion() != request.resourceVersion()) {
+                throw new ConflictException("resource_version mismatch for publish");
             }
         } else {
             if (existingDraft != null) {
@@ -168,8 +172,8 @@ public class FlowService {
         }
 
         String version = publish
-                ? resolvePublishVersion(existingDraft, latestPublished, release)
-                : resolveDraftVersion(existingDraft, latestPublished);
+                ? resolvePublishVersion(existingDraft, maxMinorForMajor, maxPublishedMajor, release, baseMajor)
+                : resolveDraftVersion(existingDraft, maxMinorForMajor, baseMajor, publishedVersions.isEmpty());
         String canonicalName = flowId + "@" + version;
         String updatedYaml = request.flowYaml();
 
@@ -245,20 +249,45 @@ public class FlowService {
         }
     }
 
-    private String resolveDraftVersion(FlowVersion existingDraft, FlowVersion latestPublished) {
+    private String resolveDraftVersion(
+            FlowVersion existingDraft,
+            Integer maxMinorForMajor,
+            int baseMajor,
+            boolean publishedEmpty
+    ) {
         if (existingDraft != null) {
             return existingDraft.getVersion();
         }
-        if (latestPublished == null) {
+        if (maxMinorForMajor != null) {
+            return baseMajor + "." + (maxMinorForMajor + 1);
+        }
+        if (publishedEmpty && baseMajor == parseVersion(INITIAL_VERSION)[0]) {
             return INITIAL_VERSION;
         }
-        return nextMinor(latestPublished.getVersion());
+        return baseMajor + ".0";
     }
 
-    private String resolvePublishVersion(FlowVersion existingDraft, FlowVersion latestPublished, boolean release) {
-        String baseVersion = existingDraft != null ? existingDraft.getVersion()
-                : (latestPublished == null ? INITIAL_VERSION : nextMinor(latestPublished.getVersion()));
-        return release ? releaseVersion(baseVersion) : baseVersion;
+    private String resolvePublishVersion(
+            FlowVersion existingDraft,
+            Integer maxMinorForMajor,
+            Integer maxPublishedMajor,
+            boolean release,
+            int baseMajor
+    ) {
+        if (release) {
+            int nextMajor = maxPublishedMajor == null ? 1 : maxPublishedMajor + 1;
+            return nextMajor + ".0";
+        }
+        if (existingDraft != null) {
+            return existingDraft.getVersion();
+        }
+        if (maxMinorForMajor != null) {
+            return baseMajor + "." + (maxMinorForMajor + 1);
+        }
+        if (maxPublishedMajor == null && baseMajor == parseVersion(INITIAL_VERSION)[0]) {
+            return INITIAL_VERSION;
+        }
+        return baseMajor + ".0";
     }
 
     private void bumpDraftVersion(FlowVersion draft, String publishedVersion) {
@@ -267,6 +296,68 @@ public class FlowService {
         draft.setCanonicalName(draft.getFlowId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
         repository.saveAndFlush(draft);
+    }
+
+    private int resolveBaseMajor(String baseVersion, List<FlowVersion> publishedVersions) {
+        if (baseVersion != null && !baseVersion.isBlank()) {
+            int[] parsed = parseVersionSafe(baseVersion);
+            if (parsed != null) {
+                return parsed[0];
+            }
+        }
+        Integer maxMajor = findMaxPublishedMajor(publishedVersions);
+        if (maxMajor != null) {
+            return maxMajor;
+        }
+        return parseVersion(INITIAL_VERSION)[0];
+    }
+
+    private FlowVersion findDraftForMajor(List<FlowVersion> drafts, int major) {
+        for (FlowVersion draft : drafts) {
+            int[] parsed = parseVersionSafe(draft.getVersion());
+            if (parsed != null && parsed[0] == major) {
+                return draft;
+            }
+        }
+        return null;
+    }
+
+    private FlowVersion findPublishedForMajor(List<FlowVersion> published, int major) {
+        for (FlowVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed != null && parsed[0] == major) {
+                return version;
+            }
+        }
+        return null;
+    }
+
+    private Integer findMaxPublishedMajor(List<FlowVersion> published) {
+        Integer maxMajor = null;
+        for (FlowVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed == null) {
+                continue;
+            }
+            if (maxMajor == null || parsed[0] > maxMajor) {
+                maxMajor = parsed[0];
+            }
+        }
+        return maxMajor;
+    }
+
+    private Integer findMaxPublishedMinorForMajor(List<FlowVersion> published, int major) {
+        Integer maxMinor = null;
+        for (FlowVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed == null || parsed[0] != major) {
+                continue;
+            }
+            if (maxMinor == null || parsed[1] > maxMinor) {
+                maxMinor = parsed[1];
+            }
+        }
+        return maxMinor;
     }
 
     private String resolveSavedBy(User user) {
@@ -282,6 +373,14 @@ public class FlowService {
         }
         String[] parts = version.split("\\.");
         return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+    }
+
+    private int[] parseVersionSafe(String version) {
+        try {
+            return parseVersion(version);
+        } catch (ValidationException ex) {
+            return null;
+        }
     }
 
     private String nextMinor(String version) {

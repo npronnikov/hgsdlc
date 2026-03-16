@@ -10,6 +10,7 @@ public record SkillSaveRequest(
         @JsonProperty("skill_markdown") String skillMarkdown,
         @JsonProperty("publish") Boolean publish,
         @JsonProperty("release") Boolean release,
+        @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion
 ) {
 }

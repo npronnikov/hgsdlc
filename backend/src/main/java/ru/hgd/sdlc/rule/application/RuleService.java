@@ -124,18 +124,22 @@ public class RuleService {
             validateCodingAgentFrontmatter(codingAgent, parsed.frontmatter());
         }
 
-        RuleVersion existingDraft = repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.DRAFT)
-                .orElse(null);
-        RuleVersion latestPublished = repository
-                .findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.PUBLISHED)
-                .orElse(null);
+        List<RuleVersion> allVersions = repository.findByRuleIdOrderBySavedAtDesc(ruleId);
+        List<RuleVersion> publishedVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == RuleStatus.PUBLISHED)
+                .toList();
+        List<RuleVersion> draftVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == RuleStatus.DRAFT)
+                .toList();
+        int baseMajor = resolveBaseMajor(request.baseVersion(), publishedVersions);
+        RuleVersion existingDraft = findDraftForMajor(draftVersions, baseMajor);
+        RuleVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
+        Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
+        Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
         if (publish) {
-            RuleVersion base = existingDraft != null ? existingDraft : latestPublished;
-            if (base != null) {
-                if (base.getStatus() == RuleStatus.PUBLISHED
-                        && base.getResourceVersion() != request.resourceVersion()) {
-                    throw new ConflictException("resource_version mismatch for publish");
-                }
+            RuleVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
+            if (base != null && base.getResourceVersion() != request.resourceVersion()) {
+                throw new ConflictException("resource_version mismatch for publish");
             }
         } else {
             if (existingDraft != null) {
@@ -148,8 +152,8 @@ public class RuleService {
         }
 
         String version = publish
-                ? resolvePublishVersion(existingDraft, latestPublished, release)
-                : resolveDraftVersion(existingDraft, latestPublished);
+                ? resolvePublishVersion(existingDraft, maxMinorForMajor, maxPublishedMajor, release, baseMajor)
+                : resolveDraftVersion(existingDraft, maxMinorForMajor, baseMajor, publishedVersions.isEmpty());
         String canonicalName = ruleId + "@" + version;
         String updatedMarkdown = request.ruleMarkdown();
 
@@ -190,20 +194,45 @@ public class RuleService {
         return saved;
     }
 
-    private String resolveDraftVersion(RuleVersion existingDraft, RuleVersion latestPublished) {
+    private String resolveDraftVersion(
+            RuleVersion existingDraft,
+            Integer maxMinorForMajor,
+            int baseMajor,
+            boolean publishedEmpty
+    ) {
         if (existingDraft != null) {
             return existingDraft.getVersion();
         }
-        if (latestPublished == null) {
+        if (maxMinorForMajor != null) {
+            return baseMajor + "." + (maxMinorForMajor + 1);
+        }
+        if (publishedEmpty && baseMajor == parseVersion(INITIAL_VERSION)[0]) {
             return INITIAL_VERSION;
         }
-        return nextMinor(latestPublished.getVersion());
+        return baseMajor + ".0";
     }
 
-    private String resolvePublishVersion(RuleVersion existingDraft, RuleVersion latestPublished, boolean release) {
-        String baseVersion = existingDraft != null ? existingDraft.getVersion()
-                : (latestPublished == null ? INITIAL_VERSION : nextMinor(latestPublished.getVersion()));
-        return release ? releaseVersion(baseVersion) : baseVersion;
+    private String resolvePublishVersion(
+            RuleVersion existingDraft,
+            Integer maxMinorForMajor,
+            Integer maxPublishedMajor,
+            boolean release,
+            int baseMajor
+    ) {
+        if (release) {
+            int nextMajor = maxPublishedMajor == null ? 1 : maxPublishedMajor + 1;
+            return nextMajor + ".0";
+        }
+        if (existingDraft != null) {
+            return existingDraft.getVersion();
+        }
+        if (maxMinorForMajor != null) {
+            return baseMajor + "." + (maxMinorForMajor + 1);
+        }
+        if (maxPublishedMajor == null && baseMajor == parseVersion(INITIAL_VERSION)[0]) {
+            return INITIAL_VERSION;
+        }
+        return baseMajor + ".0";
     }
 
     private void bumpDraftVersion(RuleVersion draft, String publishedVersion) {
@@ -212,6 +241,68 @@ public class RuleService {
         draft.setCanonicalName(draft.getRuleId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
         repository.saveAndFlush(draft);
+    }
+
+    private int resolveBaseMajor(String baseVersion, List<RuleVersion> publishedVersions) {
+        if (baseVersion != null && !baseVersion.isBlank()) {
+            int[] parsed = parseVersionSafe(baseVersion);
+            if (parsed != null) {
+                return parsed[0];
+            }
+        }
+        Integer maxMajor = findMaxPublishedMajor(publishedVersions);
+        if (maxMajor != null) {
+            return maxMajor;
+        }
+        return parseVersion(INITIAL_VERSION)[0];
+    }
+
+    private RuleVersion findDraftForMajor(List<RuleVersion> drafts, int major) {
+        for (RuleVersion draft : drafts) {
+            int[] parsed = parseVersionSafe(draft.getVersion());
+            if (parsed != null && parsed[0] == major) {
+                return draft;
+            }
+        }
+        return null;
+    }
+
+    private RuleVersion findPublishedForMajor(List<RuleVersion> published, int major) {
+        for (RuleVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed != null && parsed[0] == major) {
+                return version;
+            }
+        }
+        return null;
+    }
+
+    private Integer findMaxPublishedMajor(List<RuleVersion> published) {
+        Integer maxMajor = null;
+        for (RuleVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed == null) {
+                continue;
+            }
+            if (maxMajor == null || parsed[0] > maxMajor) {
+                maxMajor = parsed[0];
+            }
+        }
+        return maxMajor;
+    }
+
+    private Integer findMaxPublishedMinorForMajor(List<RuleVersion> published, int major) {
+        Integer maxMinor = null;
+        for (RuleVersion version : published) {
+            int[] parsed = parseVersionSafe(version.getVersion());
+            if (parsed == null || parsed[0] != major) {
+                continue;
+            }
+            if (maxMinor == null || parsed[1] > maxMinor) {
+                maxMinor = parsed[1];
+            }
+        }
+        return maxMinor;
     }
 
     private String resolveSavedBy(User user) {
@@ -260,6 +351,14 @@ public class RuleService {
         }
         String[] parts = version.split("\\.");
         return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+    }
+
+    private int[] parseVersionSafe(String version) {
+        try {
+            return parseVersion(version);
+        } catch (ValidationException ex) {
+            return null;
+        }
     }
 
     private String nextMinor(String version) {

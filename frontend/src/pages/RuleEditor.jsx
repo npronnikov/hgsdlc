@@ -76,6 +76,37 @@ const getLatestVersion = (versions, status) => {
   });
   return best ? best.value : '';
 };
+const getMaxPublishedMajor = (versions) => {
+  let maxMajor = null;
+  versions.forEach((item) => {
+    if (item.status !== 'published') return;
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid) return;
+    if (maxMajor === null || parsed.major > maxMajor) {
+      maxMajor = parsed.major;
+    }
+  });
+  return maxMajor;
+};
+const getMaxPublishedMinorForMajor = (versions, major) => {
+  let maxMinor = null;
+  versions.forEach((item) => {
+    if (item.status !== 'published') return;
+    const parsed = parseMajorMinor(item.value);
+    if (!parsed.valid || parsed.major !== major) return;
+    if (maxMinor === null || parsed.minor > maxMinor) {
+      maxMinor = parsed.minor;
+    }
+  });
+  return maxMinor;
+};
+const getDraftForMajor = (versions, major) => (
+  versions.find((item) => {
+    if (item.status !== 'draft') return false;
+    const parsed = parseMajorMinor(item.value);
+    return parsed.valid && parsed.major === major;
+  })
+);
 
 export default function RuleEditor() {
   const { ruleId: ruleIdParam } = useParams();
@@ -85,6 +116,7 @@ export default function RuleEditor() {
   const [editorValue, setEditorValue] = useState('');
   const [resourceVersion, setResourceVersion] = useState(0);
   const [ruleVersion, setRuleVersion] = useState('');
+  const [baseVersion, setBaseVersion] = useState('');
   const [versionOptions, setVersionOptions] = useState([]);
   const [hasDraft, setHasDraft] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('');
@@ -107,6 +139,7 @@ export default function RuleEditor() {
       setEditorValue(data.rule_markdown || '');
       setResourceVersion(data.resource_version ?? 0);
       setRuleVersion(data.version || '');
+      setBaseVersion(data.version || '');
       setCurrentStatus(data.status || '');
       setTitle(data.title || '');
       setDescription(data.description || '');
@@ -134,6 +167,7 @@ export default function RuleEditor() {
         canonical: item.canonical_name,
         ruleId: item.rule_id,
         status: item.status,
+        resourceVersion: item.resource_version,
       }));
       setVersionOptions(mapped);
       setHasDraft(mapped.some((item) => item.status === 'draft'));
@@ -155,6 +189,7 @@ export default function RuleEditor() {
       setEditorValue(data.rule_markdown || '');
       setResourceVersion(data.resource_version ?? 0);
       setRuleVersion(data.version || value);
+      setBaseVersion(data.version || value);
       setCurrentStatus(data.status || '');
       setTitle(data.title || '');
       setDescription(data.description || '');
@@ -172,13 +207,7 @@ export default function RuleEditor() {
     }
   };
 
-  const beginEdit = async () => {
-    const draft = versionOptions.find((item) => item.status === 'draft');
-    if (draft) {
-      await handleVersionSelect(draft.value, { keepEditing: true });
-      return;
-    }
-    setResourceVersion(0);
+  const beginEditDraft = () => {
     setIsEditing(true);
   };
 
@@ -252,12 +281,14 @@ export default function RuleEditor() {
           rule_markdown: editorValue,
           publish,
           release,
+          base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
         }),
       });
       setEditorValue(response.rule_markdown || editorValue);
       setResourceVersion(response.resource_version ?? resourceVersion);
       setRuleVersion(response.version || ruleVersion);
+      setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
       setSelectedRuleId(response.rule_id || ruleId);
       setIsNewRule(false);
@@ -278,6 +309,7 @@ export default function RuleEditor() {
     setEditorValue('');
     setResourceVersion(0);
     setRuleVersion('');
+    setBaseVersion('');
     setCurrentStatus('');
     setVersionOptions([]);
     setFrontmatterSummary([]);
@@ -296,12 +328,36 @@ export default function RuleEditor() {
     }
   }, [ruleIdParam, isCreateRoute]);
 
-  const latestDraftVersion = getLatestVersion(versionOptions, 'draft');
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
-  const publishVersion = latestDraftVersion
-    || (latestPublishedVersion ? nextMinorVersion(latestPublishedVersion) : (ruleVersion || DEFAULT_VERSION));
+  const currentParsed = parseMajorMinor(ruleVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
+  const currentMajor = currentParsed.valid ? currentParsed.major : parseMajorMinor(DEFAULT_VERSION).major;
+  const maxMinorForMajor = getMaxPublishedMinorForMajor(versionOptions, currentMajor);
+  const nextDraftVersion = maxMinorForMajor !== null
+    ? `${currentMajor}.${maxMinorForMajor + 1}`
+    : (currentMajor === parseMajorMinor(DEFAULT_VERSION).major && !latestPublishedVersion
+      ? DEFAULT_VERSION
+      : `${currentMajor}.0`);
+  const draftForMajor = getDraftForMajor(versionOptions, currentMajor);
+  const publishVersion = draftForMajor ? draftForMajor.value : nextDraftVersion;
   const publishLabel = `Опубликовать версию → ${publishVersion}`;
-  const releaseLabel = `Несовместимое обновление (major) → ${nextMajorVersion(publishVersion)}`;
+  const maxPublishedMajor = getMaxPublishedMajor(versionOptions);
+  const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
+  const releaseVersion = `${releaseMajor}.0`;
+  const releaseLabel = `Несовместимое обновление (major) → ${releaseVersion}`;
+
+  const startDraftFromPublished = () => {
+    const sourceVersion = ruleVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    setBaseVersion(sourceVersion);
+    setCurrentStatus('draft');
+    setIsEditing(true);
+    if (draftForMajor) {
+      setResourceVersion(draftForMajor.resourceVersion ?? 0);
+      setRuleVersion(draftForMajor.value || nextDraftVersion);
+      return;
+    }
+    setResourceVersion(0);
+    setRuleVersion(nextDraftVersion);
+  };
 
   return (
     <div className="rule-editor-page">
@@ -311,7 +367,7 @@ export default function RuleEditor() {
           {!isEditing && (
             currentStatus === 'draft' ? (
               <>
-                <Button type="default" onClick={beginEdit}>Редактировать</Button>
+                <Button type="default" onClick={beginEditDraft}>Редактировать</Button>
                 <Dropdown
                   menu={{
                     items: [
@@ -322,7 +378,7 @@ export default function RuleEditor() {
                       if (key === 'release') {
                         Modal.confirm({
                           title: 'Подтвердить major-обновление?',
-                          content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                          content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
                           okText: 'Выпустить',
                           cancelText: 'Отмена',
                           onOk: () => saveRule({ publish: true, release: true }),
@@ -337,7 +393,9 @@ export default function RuleEditor() {
                 </Dropdown>
               </>
             ) : (
-              <Button type="default" onClick={beginEdit}>Редактировать</Button>
+              <Button type="default" onClick={startDraftFromPublished}>
+                {`Создать новую версию ${nextDraftVersion}`}
+              </Button>
             )
           )}
           {isEditing && (
@@ -353,7 +411,7 @@ export default function RuleEditor() {
                     if (key === 'release') {
                       Modal.confirm({
                         title: 'Подтвердить major-обновление?',
-                        content: `Будет выпущена несовместимая версия → ${nextMajorVersion(publishVersion)}.`,
+                        content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
                         okText: 'Выпустить',
                         cancelText: 'Отмена',
                         onOk: () => saveRule({ publish: true, release: true }),

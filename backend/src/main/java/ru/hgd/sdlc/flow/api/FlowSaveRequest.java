@@ -7,6 +7,7 @@ public record FlowSaveRequest(
         @JsonProperty("flow_yaml") String flowYaml,
         @JsonProperty("publish") Boolean publish,
         @JsonProperty("release") Boolean release,
+        @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion
 ) {
 }

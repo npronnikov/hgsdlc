@@ -4,7 +4,16 @@ import { EditOutlined, EyeOutlined, InboxOutlined, MoreOutlined, PlayCircleOutli
 import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
-import { Handle, MarkerType, Position, ReactFlow } from 'reactflow';
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  applyNodeChanges,
+  getSmoothStepPath,
+} from 'reactflow';
 import 'reactflow/dist/style.css';
 import { parse as parseYaml } from 'yaml';
 import dagre from 'dagre';
@@ -26,6 +35,50 @@ function PreviewNode({ data, sourcePosition, targetPosition }) {
         style={{ opacity: 0, pointerEvents: 'none' }}
       />
     </div>
+  );
+}
+
+function PreviewEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  markerEnd,
+  data,
+}) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    borderRadius: 16,
+  });
+  const offsetX = data?.labelOffsetX || 0;
+  const offsetY = data?.labelOffsetY || 0;
+  const label = data?.label || '';
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
+      {label ? (
+        <EdgeLabelRenderer>
+          <div
+            className="flow-preview-edge-label"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX + offsetX}px, ${labelY + offsetY}px)`,
+            }}
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
   );
 }
 
@@ -196,29 +249,68 @@ export default function Projects() {
         data: { label: node.title || node.id || `node-${index + 1}` },
       }));
       const edges = [];
+      const EDGE_STYLES = {
+        success: { stroke: '#16a34a', marker: '#16a34a' },
+        failure: { stroke: '#dc2626', marker: '#dc2626' },
+        submit: { stroke: '#2563eb', marker: '#2563eb' },
+        approve: { stroke: '#f59e0b', marker: '#f59e0b' },
+        rework: { stroke: '#64748b', marker: '#64748b' },
+        default: { stroke: '#94a3b8', marker: '#94a3b8' },
+      };
+      const EDGE_LABELS = {
+        success: 'on_success',
+        failure: 'on_failure',
+        submit: 'on_submit',
+        approve: 'on_approve',
+        rework: 'on_rework',
+      };
+      const getLabelOffset = (index, total) => {
+        if (total <= 1) {
+          return direction === 'LR' ? { x: 12, y: 0 } : { x: 0, y: -12 };
+        }
+        const spread = index - (total - 1) / 2;
+        if (direction === 'LR') {
+          return { x: 12, y: spread * 20 };
+        }
+        return { x: spread * 36, y: -12 };
+      };
       rawNodes.forEach((node) => {
         const source = node.id;
         if (!source) return;
-        const addEdge = (target, suffix) => {
+        const addEdge = (target, suffix, index, total) => {
           if (!target || !nodeIds.has(target)) return;
+          const style = EDGE_STYLES[suffix] || EDGE_STYLES.default;
+          const offset = getLabelOffset(index, total);
           edges.push({
             id: `${source}-${target}-${suffix}`,
             source,
             target,
-            type: 'smoothstep',
-            style: { stroke: '#94a3b8', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
+            type: 'preview',
+            className: `flow-preview-edge flow-preview-edge-${suffix}`,
+            style: { stroke: style.stroke, strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: style.marker },
+            data: {
+              label: EDGE_LABELS[suffix] || '',
+              labelOffsetX: offset.x,
+              labelOffsetY: offset.y,
+            },
           });
         };
-        addEdge(node.on_success, 'success');
-        addEdge(node.on_failure, 'failure');
-        addEdge(node.on_submit, 'submit');
-        addEdge(node.on_approve, 'approve');
+        const outgoing = [];
+        if (node.on_success) outgoing.push({ target: node.on_success, suffix: 'success' });
+        if (node.on_failure) outgoing.push({ target: node.on_failure, suffix: 'failure' });
+        if (node.on_submit) outgoing.push({ target: node.on_submit, suffix: 'submit' });
+        if (node.on_approve) outgoing.push({ target: node.on_approve, suffix: 'approve' });
         if (node.on_rework?.next_node) {
-          addEdge(node.on_rework.next_node, 'rework');
+          outgoing.push({ target: node.on_rework.next_node, suffix: 'rework' });
         } else if (node.on_rework_routes) {
-          Object.values(node.on_rework_routes).forEach((target) => addEdge(target, 'rework'));
+          Object.values(node.on_rework_routes).forEach((target) =>
+            outgoing.push({ target, suffix: 'rework' })
+          );
         }
+        outgoing.forEach((edge, index) => {
+          addEdge(edge.target, edge.suffix, index, outgoing.length);
+        });
       });
       if (nodes.length === 0) {
         return { nodes, edges, rawNodes };
@@ -227,7 +319,7 @@ export default function Projects() {
       const NODE_HEIGHT = 56;
       const graph = new dagre.graphlib.Graph();
       graph.setDefaultEdgeLabel(() => ({}));
-      graph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 80 });
+      graph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120 });
       nodes.forEach((node) => {
         graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
       });
@@ -515,12 +607,19 @@ export default function Projects() {
                   nodes={launchConfig.nodes}
                   edges={launchConfig.edges}
                   nodeTypes={{ preview: PreviewNode }}
-                  nodesDraggable={false}
+                  edgeTypes={{ preview: PreviewEdge }}
+                  nodesDraggable
+                  onNodesChange={(changes) =>
+                    setLaunchConfig((prev) => ({
+                      ...prev,
+                      nodes: applyNodeChanges(changes, prev?.nodes || []),
+                    }))
+                  }
                   nodesConnectable={false}
                   zoomOnScroll={false}
                   panOnScroll={false}
                   fitView
-                  fitViewOptions={{ padding: 0.2 }}
+                  fitViewOptions={{ padding: 0.35 }}
                   proOptions={{ hideAttribution: true }}
                 />
               </div>
