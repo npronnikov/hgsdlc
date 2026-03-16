@@ -214,7 +214,9 @@ export default function Projects() {
         addEdge(node.on_failure, 'failure');
         addEdge(node.on_submit, 'submit');
         addEdge(node.on_approve, 'approve');
-        if (node.on_rework_routes) {
+        if (node.on_rework?.next_node) {
+          addEdge(node.on_rework.next_node, 'rework');
+        } else if (node.on_rework_routes) {
           Object.values(node.on_rework_routes).forEach((target) => addEdge(target, 'rework'));
         }
       });

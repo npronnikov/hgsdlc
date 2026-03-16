@@ -80,7 +80,7 @@ const RULES = [
   { re: /Executor node requires on_success: (.+)/i, msg: (_, id) => `Executor-нода требует on_success: ${id}` },
   { re: /human_input gate requires on_submit: (.+)/i, msg: (_, id) => `human_input gate требует on_submit: ${id}` },
   { re: /human_approval gate requires on_approve: (.+)/i, msg: (_, id) => `human_approval gate требует on_approve: ${id}` },
-  { re: /human_approval gate requires on_rework_routes: (.+)/i, msg: (_, id) => `human_approval gate требует on_rework_routes: ${id}` },
+  { re: /human_approval gate requires on_rework: (.+)/i, msg: (_, id) => `human_approval gate требует on_rework: ${id}` },
   { re: /Invalid transition target for (.+) on node: (.+)/i, msg: (_, route, id) => `Некорректный переход ${route} в ноде: ${id}` },
   {
     re: /Transition target not found for (.+) on node: (.+) -> (.+)/i,

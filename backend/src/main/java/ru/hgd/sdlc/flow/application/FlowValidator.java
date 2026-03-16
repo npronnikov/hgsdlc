@@ -149,8 +149,11 @@ public class FlowValidator {
             } else {
                 assertTarget(node.getId(), "on_approve", node.getOnApprove(), nodesById, errors);
             }
-            if (node.getOnReworkRoutes() == null || node.getOnReworkRoutes().isEmpty()) {
-                errors.add("human_approval gate requires on_rework_routes: " + node.getId());
+            var onRework = node.getOnRework();
+            if (onRework != null && onRework.getNextNode() != null && !onRework.getNextNode().isBlank()) {
+                assertTarget(node.getId(), "on_rework", onRework.getNextNode(), nodesById, errors);
+            } else if (node.getOnReworkRoutes() == null || node.getOnReworkRoutes().isEmpty()) {
+                errors.add("human_approval gate requires on_rework: " + node.getId());
             } else {
                 for (Map.Entry<String, String> entry : node.getOnReworkRoutes().entrySet()) {
                     assertTarget(node.getId(), "on_rework:" + entry.getKey(), entry.getValue(), nodesById, errors);
@@ -204,7 +207,9 @@ public class FlowValidator {
         if (node.getOnApprove() != null) {
             targets.add(node.getOnApprove());
         }
-        if (node.getOnReworkRoutes() != null) {
+        if (node.getOnRework() != null && node.getOnRework().getNextNode() != null) {
+            targets.add(node.getOnRework().getNextNode());
+        } else if (node.getOnReworkRoutes() != null) {
             targets.addAll(node.getOnReworkRoutes().values());
         }
         return targets;

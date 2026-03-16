@@ -194,8 +194,9 @@ nodes:
     produced_artifacts: []
     expected_mutations: []
     on_approve: complete
-    on_rework_routes:
-      keep_current_changes: analyze-architecture
+    on_rework:
+      keep_changes: true
+      next_node: analyze-architecture
   - id: complete
     title: Complete flow
     type: terminal

@@ -12,6 +12,7 @@ import 'reactflow/dist/style.css';
 import {
   Button,
   Card,
+  Checkbox,
   Dropdown,
   Divider,
   Input,
@@ -98,7 +99,7 @@ const NODE_TYPE_OPTIONS = [
   { key: 'terminal', label: 'Terminal' },
 ];
 
-const APPROVAL_REWORK_MODES = ['keep_current_changes', 'discard_current_changes'];
+const DEFAULT_REWORK = { keepChanges: false, nextNode: '' };
 
 function FlowNode({ data, selected }) {
   const visuals = NODE_KIND_META[data.nodeKind] || {};
@@ -166,10 +167,9 @@ function buildEdges(nodes) {
     if (data.onApprove) {
       addEdge(node.id, data.onApprove, 'on_approve', 'main');
     }
-    if (data.onReworkRoutes) {
-      Object.entries(data.onReworkRoutes).forEach(([mode, target]) => {
-        addEdge(node.id, target, `rework: ${mode}`, 'rework');
-      });
+    if (data.onRework && data.onRework.nextNode) {
+      const keepChanges = !!data.onRework.keepChanges;
+      addEdge(node.id, data.onRework.nextNode, `rework: keep_changes=${keepChanges}`, 'rework');
     }
   });
 
@@ -178,6 +178,22 @@ function buildEdges(nodes) {
 
 function toNodeData(node, isStart) {
   const kind = node.node_kind || node.nodeKind || node.type || '';
+  const rawRework = node.on_rework || node.onRework || null;
+  let onRework = null;
+  if (rawRework) {
+    onRework = {
+      keepChanges: rawRework.keep_changes ?? rawRework.keepChanges ?? false,
+      nextNode: rawRework.next_node || rawRework.nextNode || '',
+    };
+  }
+  const legacyRoutes = node.on_rework_routes || node.onReworkRoutes || null;
+  if (!onRework && legacyRoutes && typeof legacyRoutes === 'object') {
+    if (legacyRoutes.keep_current_changes) {
+      onRework = { keepChanges: true, nextNode: legacyRoutes.keep_current_changes };
+    } else if (legacyRoutes.discard_current_changes) {
+      onRework = { keepChanges: false, nextNode: legacyRoutes.discard_current_changes };
+    }
+  }
   return {
     id: node.id || '',
     title: node.title || '',
@@ -194,7 +210,7 @@ function toNodeData(node, isStart) {
     onFailure: node.on_failure || node.onFailure || '',
     onSubmit: node.on_submit || node.onSubmit || '',
     onApprove: node.on_approve || node.onApprove || '',
-    onReworkRoutes: node.on_rework_routes || node.onReworkRoutes || {},
+    onRework: onRework || { ...DEFAULT_REWORK },
     isStart: !!isStart,
   };
 }
@@ -337,8 +353,8 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     if (data.onFailure) transitions.push(['on_failure', data.onFailure]);
     if (data.onSubmit) transitions.push(['on_submit', data.onSubmit]);
     if (data.onApprove) transitions.push(['on_approve', data.onApprove]);
-    if (data.onReworkRoutes) {
-      Object.entries(data.onReworkRoutes).forEach(([key, value]) => transitions.push([`rework:${key}`, value]));
+    if (data.onRework && data.onRework.nextNode) {
+      transitions.push(['on_rework', data.onRework.nextNode]);
     }
     transitions.forEach(([label, target]) => {
       if (target && !uniqueIds.has(target)) {
@@ -369,14 +385,8 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       if (!data.onApprove) {
         errors.push(`human_approval требует on_approve: ${node.id}`);
       }
-      if (!data.onReworkRoutes || Object.keys(data.onReworkRoutes).length === 0) {
-        errors.push(`human_approval требует on_rework_routes: ${node.id}`);
-      } else {
-        Object.entries(data.onReworkRoutes).forEach(([mode, target]) => {
-          if (!target) {
-            errors.push(`Невалидный rework route ${mode}: ${node.id}`);
-          }
-        });
+      if (!data.onRework || !data.onRework.nextNode) {
+        errors.push(`human_approval требует on_rework: ${node.id}`);
       }
     }
   });
@@ -508,13 +518,8 @@ export default function FlowEditor() {
         if (data.onFailure === selectedNodeId) nextData.onFailure = trimmed;
         if (data.onSubmit === selectedNodeId) nextData.onSubmit = trimmed;
         if (data.onApprove === selectedNodeId) nextData.onApprove = trimmed;
-        if (data.onReworkRoutes) {
-          nextData.onReworkRoutes = Object.fromEntries(
-            Object.entries(data.onReworkRoutes).map(([key, value]) => [
-              key,
-              value === selectedNodeId ? trimmed : value,
-            ])
-          );
+        if (data.onRework?.nextNode === selectedNodeId) {
+          nextData.onRework = { ...data.onRework, nextNode: trimmed };
         }
         return { ...node, data: nextData };
       })
@@ -568,10 +573,8 @@ export default function FlowEditor() {
           if (data.onFailure === nodeId) nextData.onFailure = '';
           if (data.onSubmit === nodeId) nextData.onSubmit = '';
           if (data.onApprove === nodeId) nextData.onApprove = '';
-          if (data.onReworkRoutes) {
-            nextData.onReworkRoutes = Object.fromEntries(
-              Object.entries(data.onReworkRoutes).filter(([, value]) => value !== nodeId)
-            );
+          if (data.onRework?.nextNode === nodeId) {
+            nextData.onRework = { ...data.onRework, nextNode: '' };
           }
           return { ...node, data: nextData };
         })
@@ -605,8 +608,7 @@ export default function FlowEditor() {
     if (kind === 'human_approval') {
       return [
         { value: 'on_approve', label: 'on_approve' },
-        { value: 'rework:keep_current_changes', label: 'rework: keep_current_changes' },
-        { value: 'rework:discard_current_changes', label: 'rework: discard_current_changes' },
+        { value: 'on_rework', label: 'on_rework' },
       ];
     }
     if (kind === 'terminal') {
@@ -636,10 +638,8 @@ export default function FlowEditor() {
           data.onSubmit = targetId;
         } else if (routeKey === 'on_approve') {
           data.onApprove = targetId;
-        } else if (routeKey.startsWith('rework:')) {
-          const mode = routeKey.split(':')[1];
-          data.onReworkRoutes = { ...(data.onReworkRoutes || {}) };
-          data.onReworkRoutes[mode] = targetId;
+        } else if (routeKey === 'on_rework') {
+          data.onRework = { ...(data.onRework || DEFAULT_REWORK), nextNode: targetId };
         }
         return { ...node, data };
       })
@@ -665,12 +665,9 @@ export default function FlowEditor() {
           data.onSubmit = null;
         } else if (label === 'on_approve') {
           data.onApprove = null;
-        } else if (label.startsWith('rework:')) {
-          const mode = label.split(':')[1].trim();
-          if (data.onReworkRoutes) {
-            const nextRoutes = { ...data.onReworkRoutes };
-            delete nextRoutes[mode];
-            data.onReworkRoutes = nextRoutes;
+        } else if (label === 'on_rework' || label.startsWith('rework')) {
+          if (data.onRework) {
+            data.onRework = { ...data.onRework, nextNode: '' };
           }
         }
         return { ...node, data };
@@ -696,7 +693,7 @@ export default function FlowEditor() {
       onFailure: '',
       onSubmit: '',
       onApprove: '',
-      onReworkRoutes: {},
+      onRework: { ...DEFAULT_REWORK },
     };
   };
 
@@ -905,11 +902,10 @@ export default function FlowEditor() {
       if (data.onApprove) {
         lines.push(`    on_approve: ${data.onApprove}`);
       }
-      if (data.onReworkRoutes && Object.keys(data.onReworkRoutes).length > 0) {
-        lines.push('    on_rework_routes:');
-        Object.entries(data.onReworkRoutes).forEach(([key, value]) => {
-          lines.push(`      ${key}: ${value}`);
-        });
+      if (data.onRework && data.onRework.nextNode) {
+        lines.push('    on_rework:');
+        lines.push(`      keep_changes: ${!!data.onRework.keepChanges}`);
+        lines.push(`      next_node: ${data.onRework.nextNode}`);
       }
     });
     return lines.join('\n');
@@ -1458,7 +1454,9 @@ export default function FlowEditor() {
                           skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
                           onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
                           onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
-                          onReworkRoutes: value === 'human_approval' ? selectedNode.data.onReworkRoutes || {} : {},
+                          onRework: value === 'human_approval'
+                            ? selectedNode.data.onRework || { ...DEFAULT_REWORK }
+                            : { ...DEFAULT_REWORK },
                           onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
                           onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
                         });
@@ -1754,33 +1752,43 @@ export default function FlowEditor() {
                               />
                             </div>
                           </div>
-                          <div className="transition-list">
-                            {APPROVAL_REWORK_MODES.map((mode) => {
-                              const target = (selectedNode.data.onReworkRoutes || {})[mode] || '';
-                              return (
-                                <div key={mode} className="transition-block">
-                                  <Text className="muted mono">rework:{mode}</Text>
-                                  <div className="field-control">
-                                    <Select
-                                      value={target || undefined}
-                                      disabled={isReadOnly}
-                                      allowClear
-                                      options={nodeIdOptions}
-                                      placeholder="Выберите ноду"
-                                      onChange={(value) => {
-                                        const nextRoutes = { ...(selectedNode.data.onReworkRoutes || {}) };
-                                        if (!value) {
-                                          delete nextRoutes[mode];
-                                        } else {
-                                          nextRoutes[mode] = value;
-                                        }
-                                        updateSelectedNode({ onReworkRoutes: nextRoutes });
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          <div className="transition-block">
+                            <Space size="middle" align="center">
+                              <Text className="muted mono">on_rework</Text>
+                              <Checkbox
+                                checked={!!(selectedNode.data.onRework || DEFAULT_REWORK).keepChanges}
+                                disabled={isReadOnly}
+                                onChange={(event) => {
+                                  const current = selectedNode.data.onRework || DEFAULT_REWORK;
+                                  updateSelectedNode({
+                                    onRework: {
+                                      ...current,
+                                      keepChanges: event.target.checked,
+                                    },
+                                  });
+                                }}
+                              >
+                                keep_changes
+                              </Checkbox>
+                            </Space>
+                            <div className="field-control">
+                              <Select
+                                value={(selectedNode.data.onRework || DEFAULT_REWORK).nextNode || undefined}
+                                disabled={isReadOnly}
+                                allowClear
+                                options={nodeIdOptions}
+                                placeholder="Выберите ноду"
+                                onChange={(value) => {
+                                  const current = selectedNode.data.onRework || DEFAULT_REWORK;
+                                  updateSelectedNode({
+                                    onRework: {
+                                      ...current,
+                                      nextNode: value || '',
+                                    },
+                                  });
+                                }}
+                              />
+                            </div>
                           </div>
                         </>
                       )}

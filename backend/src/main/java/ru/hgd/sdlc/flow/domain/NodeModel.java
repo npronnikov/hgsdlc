@@ -55,6 +55,22 @@ public class NodeModel {
     @JsonProperty("on_approve")
     private String onApprove;
 
+    @JsonProperty("on_rework")
+    private OnRework onRework;
+
     @JsonProperty("on_rework_routes")
     private Map<String, String> onReworkRoutes;
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OnRework {
+        @JsonProperty("keep_changes")
+        private Boolean keepChanges;
+
+        @JsonProperty("next_node")
+        private String nextNode;
+    }
 }
