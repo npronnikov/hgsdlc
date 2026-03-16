@@ -77,7 +77,7 @@ public class FlowValidator {
             return;
         }
 
-        validateExecutionContext(node, errors);
+        validateExecutionContext(node, nodeKind, errors);
         validateDeclaredOutputs(node, errors);
 
         if (node.getSkillRefs() != null && !node.getSkillRefs().isEmpty() && !"ai".equals(nodeKind)) {
@@ -215,7 +215,10 @@ public class FlowValidator {
         return targets;
     }
 
-    private void validateExecutionContext(NodeModel node, List<String> errors) {
+    private void validateExecutionContext(NodeModel node, String nodeKind, List<String> errors) {
+        if ("command".equals(nodeKind)) {
+            return;
+        }
         if (node.getExecutionContext() == null) {
             errors.add("execution_context is required: " + node.getId());
             return;

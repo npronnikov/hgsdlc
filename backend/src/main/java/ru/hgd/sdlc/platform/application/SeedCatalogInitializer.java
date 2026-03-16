@@ -70,7 +70,7 @@ public class SeedCatalogInitializer implements ApplicationRunner {
     private void seedRules() {
         seedRule(
                 "project-architecture-rule",
-                "1.0.0",
+                "1.0",
                 RuleStatus.PUBLISHED,
                 RuleProvider.QWEN,
                 "Project architecture guidance",
@@ -78,8 +78,8 @@ public class SeedCatalogInitializer implements ApplicationRunner {
                 """
 ---
 id: project-architecture-rule
-version: 1.0.0
-canonical_name: project-architecture-rule@1.0.0
+version: 1.0
+canonical_name: project-architecture-rule@1.0
 title: Project architecture guidance
 description: Describe where to find documentation and architecture materials.
 allowed_paths:
@@ -100,7 +100,7 @@ Use `docs/` for product and engineering documentation. Architecture references l
     private void seedSkills() {
         seedSkill(
                 "restore-c4-architecture",
-                "1.0.0",
+                "1.0",
                 SkillStatus.PUBLISHED,
                 SkillProvider.QWEN,
                 "Restore C4 architecture",
@@ -108,8 +108,8 @@ Use `docs/` for product and engineering documentation. Architecture references l
                 """
 ---
 id: restore-c4-architecture
-version: 1.0.0
-canonical_name: restore-c4-architecture@1.0.0
+version: 1.0
+canonical_name: restore-c4-architecture@1.0
 name: Restore C4 architecture
 description: Reconstruct C4 architecture view from the codebase.
 ---
@@ -121,7 +121,7 @@ Include context, containers, and key components with responsibilities.
 
         seedSkill(
                 "restore-sequence-diagrams",
-                "1.0.0",
+                "1.0",
                 SkillStatus.PUBLISHED,
                 SkillProvider.QWEN,
                 "Restore sequence diagrams",
@@ -129,8 +129,8 @@ Include context, containers, and key components with responsibilities.
                 """
 ---
 id: restore-sequence-diagrams
-version: 1.0.0
-canonical_name: restore-sequence-diagrams@1.0.0
+version: 1.0
+canonical_name: restore-sequence-diagrams@1.0
 name: Restore sequence diagrams
 description: Reconstruct UML sequence diagrams for integrations from the codebase.
 ---
@@ -144,23 +144,23 @@ Focus on external systems, message flows, and error handling.
     private void seedFlows() {
         seedFlow(
                 "restore-architecture-flow",
-                "1.0.0",
+                "1.0",
                 FlowStatus.PUBLISHED,
                 "Restore architecture flow",
                 "Flow to reconstruct architecture artifacts from code.",
                 "analyze-architecture",
-                List.of("project-architecture-rule@1.0.0"),
+                List.of("project-architecture-rule@1.0"),
                 """
 id: restore-architecture-flow
-version: "1.0.0"
-canonical_name: restore-architecture-flow@1.0.0
+version: "1.0"
+canonical_name: restore-architecture-flow@1.0
 title: Restore architecture flow
 description: Flow to reconstruct architecture artifacts from code.
 status: published
 start_node_id: analyze-architecture
 coding_agent: qwen
 rule_refs:
-  - project-architecture-rule@1.0.0
+  - project-architecture-rule@1.0
 fail_on_missing_declared_output: true
 fail_on_missing_expected_mutation: true
 
@@ -175,8 +175,8 @@ nodes:
       Reconstruct architecture from the codebase.
       Produce C4 and sequence diagram summaries.
     skill_refs:
-      - restore-c4-architecture@1.0.0
-      - restore-sequence-diagrams@1.0.0
+      - restore-c4-architecture@1.0
+      - restore-sequence-diagrams@1.0
     produced_artifacts:
       - scope: run
         path: c-4.md

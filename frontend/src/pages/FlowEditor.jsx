@@ -350,30 +350,32 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       });
     }
 
-    if (!Array.isArray(data.executionContext)) {
-      errors.push(`execution_context не задан: ${node.id}`);
-    } else {
-      data.executionContext.forEach((entry) => {
-        if (!entry?.type) {
-          errors.push(`execution_context type не задан: ${node.id}`);
-          return;
-        }
-        if (!EXECUTION_CONTEXT_TYPES.some((item) => item.value === entry.type)) {
-          errors.push(`execution_context type не поддерживается: ${node.id}`);
-        }
-        if (entry.required === undefined || entry.required === null) {
-          errors.push(`execution_context required не задан: ${node.id}`);
-        }
-        if (entry.type !== 'user_request' && !entry.path) {
-          errors.push(`execution_context path не задан: ${node.id}`);
-        }
-        if (entry.type === 'user_request' && entry.path) {
-          errors.push(`user_request не должен иметь path: ${node.id}`);
-        }
-        if (entry.type !== 'user_request' && !entry.scope) {
-          errors.push(`execution_context scope не задан: ${node.id}`);
-        }
-      });
+    if (kind !== 'command') {
+      if (!Array.isArray(data.executionContext)) {
+        errors.push(`execution_context не задан: ${node.id}`);
+      } else {
+        data.executionContext.forEach((entry) => {
+          if (!entry?.type) {
+            errors.push(`execution_context type не задан: ${node.id}`);
+            return;
+          }
+          if (!EXECUTION_CONTEXT_TYPES.some((item) => item.value === entry.type)) {
+            errors.push(`execution_context type не поддерживается: ${node.id}`);
+          }
+          if (entry.required === undefined || entry.required === null) {
+            errors.push(`execution_context required не задан: ${node.id}`);
+          }
+          if (entry.type !== 'user_request' && !entry.path) {
+            errors.push(`execution_context path не задан: ${node.id}`);
+          }
+          if (entry.type === 'user_request' && entry.path) {
+            errors.push(`user_request не должен иметь path: ${node.id}`);
+          }
+          if (entry.type !== 'user_request' && !entry.scope) {
+            errors.push(`execution_context scope не задан: ${node.id}`);
+          }
+        });
+      }
     }
 
     const checkPathList = (items, label) => {
@@ -843,6 +845,7 @@ export default function FlowEditor() {
         label: `v${item.version} · ${item.status === 'draft' ? 'черновик' : item.status === 'published' ? 'опубликовано' : item.status}`,
         value: item.version,
         status: item.status,
+        flowId: item.flow_id,
         resourceVersion: item.resource_version,
       }));
       setVersionOptions(mapped);
@@ -876,6 +879,40 @@ export default function FlowEditor() {
       setSelectedNodeId(parsedNodes[0]?.id || null);
     } catch (err) {
       message.error(err.message || 'Не удалось загрузить Flow');
+    }
+  };
+
+  const handleVersionSelect = async (value, { keepEditing = false } = {}) => {
+    const selected = versionOptions.find((option) => option.value === value);
+    const targetFlowId = selected?.flowId || flowMeta.flowId;
+    if (!targetFlowId) {
+      return;
+    }
+    try {
+      const data = await apiRequest(`/flows/${targetFlowId}/versions/${value}`);
+      const parsedNodes = parseFlowYaml(data.flow_yaml, data.start_node_id || '');
+      setFlowMeta((prev) => ({
+        ...prev,
+        flowId: data.flow_id || targetFlowId,
+        title: data.title || prev.title,
+        description: data.description || prev.description,
+        status: data.status || prev.status,
+        startNodeId: data.start_node_id || prev.startNodeId,
+        codingAgent: data.coding_agent || prev.codingAgent,
+        ruleRefs: data.rule_refs || [],
+        failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
+        failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
+        responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
+      }));
+      setFlowVersion(data.version || value);
+      setBaseVersion(data.version || value);
+      setCurrentStatus(data.status || '');
+      setResourceVersion(data.resource_version ?? 0);
+      setNodes(parsedNodes);
+      setSelectedNodeId(parsedNodes[0]?.id || null);
+      setIsEditing(keepEditing);
+    } catch (err) {
+      message.error(err.message || 'Не удалось загрузить выбранную версию');
     }
   };
 
@@ -915,20 +952,22 @@ export default function FlowEditor() {
         lines.push(`    description: ${data.description}`);
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
-      if (data.executionContext && data.executionContext.length > 0) {
-        lines.push('    execution_context:');
-        data.executionContext.forEach((entry) => {
-          lines.push(`      - type: ${entry.type}`);
-          lines.push(`        required: ${!!entry.required}`);
-          if (entry.scope) {
-            lines.push(`        scope: ${entry.scope}`);
-          }
-          if (entry.path) {
-            lines.push(`        path: ${entry.path}`);
-          }
-        });
-      } else {
-        lines.push('    execution_context: []');
+      if ((data.nodeKind || data.type) !== 'command') {
+        if (data.executionContext && data.executionContext.length > 0) {
+          lines.push('    execution_context:');
+          data.executionContext.forEach((entry) => {
+            lines.push(`      - type: ${entry.type}`);
+            lines.push(`        required: ${!!entry.required}`);
+            if (entry.scope) {
+              lines.push(`        scope: ${entry.scope}`);
+            }
+            if (entry.path) {
+              lines.push(`        path: ${entry.path}`);
+            }
+          });
+        } else {
+          lines.push('    execution_context: []');
+        }
       }
       if (data.instruction) {
         lines.push('    instruction: |');
@@ -938,7 +977,7 @@ export default function FlowEditor() {
         lines.push('    skill_refs:');
         data.skillRefs.forEach((ref) => lines.push(`      - ${ref}`));
       }
-      if (data.responseSchema && data.responseSchema.trim()) {
+      if ((data.nodeKind || data.type) !== 'command' && data.responseSchema && data.responseSchema.trim()) {
         lines.push('    response_schema:');
         data.responseSchema.trim().split('\n').forEach((line) => lines.push(`      ${line}`));
       }
@@ -1359,7 +1398,21 @@ export default function FlowEditor() {
         <div className="flow-right-panel">
           {!selectedNode ? (
             <Card className="flow-panel-card">
-              <Title level={5}>Данные Flow</Title>
+              <div className="rule-fields-header">
+                <Title level={5} style={{ margin: 0 }}>Данные Flow</Title>
+                {flowMeta.flowId ? (
+                  <Select
+                    value={flowVersion || undefined}
+                    options={versionOptions}
+                    onChange={(value) => handleVersionSelect(value)}
+                    className="rule-version-select"
+                    placeholder="Версия"
+                    disabled={isEditing}
+                  />
+                ) : (
+                  <span className="rule-version-pill">новый</span>
+                )}
+              </div>
               <div className="form-stack">
               <div>
                 <Text className="muted">Название</Text>
@@ -1563,6 +1616,8 @@ export default function FlowEditor() {
                           onRework: value === 'human_approval'
                             ? selectedNode.data.onRework || { ...DEFAULT_REWORK }
                             : { ...DEFAULT_REWORK },
+                          executionContext: value === 'command' ? [] : (selectedNode.data.executionContext || []),
+                          responseSchema: value === 'command' ? '' : (selectedNode.data.responseSchema || ''),
                           onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
                           onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
                         });
@@ -1577,7 +1632,7 @@ export default function FlowEditor() {
                     />
                   </div>
                 </div>
-                {(selectedNodeKind !== 'human_input' && selectedNodeKind !== 'human_approval' && selectedNodeKind !== 'terminal') && (
+                {(selectedNodeKind === 'ai') && (
                   <>
                     <Divider />
                     <div>
@@ -1660,6 +1715,24 @@ export default function FlowEditor() {
                           placeholder="YAML/JSON schema"
                           disabled={isReadOnly}
                           onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {selectedNodeKind === 'command' && (
+                  <>
+                    <Divider />
+                    <div>
+                      <Text className="muted">Bash commands</Text>
+                      <div className="field-control">
+                        <Input.TextArea
+                          rows={4}
+                          value={selectedNode.data.instruction}
+                          placeholder={'#!/usr/bin/env bash\nset -euo pipefail\necho "Hello"'}
+                          disabled={isReadOnly}
+                          onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                         />
                       </div>
                     </div>
