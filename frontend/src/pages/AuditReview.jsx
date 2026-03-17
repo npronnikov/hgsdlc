@@ -1,14 +1,37 @@
-import React from 'react';
-import { Card, List, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Card, Empty, List, Typography, message } from 'antd';
+import { useSearchParams } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
+import { apiRequest } from '../api/request.js';
 
 const { Title } = Typography;
 
 export default function AuditReview() {
-  const items = [
-    { event: 'GATE_APPROVED', detail: 'approve-plan · tech_approver · 11:42', status: 'approved' },
-    { event: 'GATE_REWORK_REQUESTED', detail: 'approve-code · tech_approver · 12:10', status: 'rework_requested' },
-  ];
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!runId) {
+        return;
+      }
+      try {
+        const data = await apiRequest(`/runs/${runId}/audit`);
+        const reviewEvents = (data || []).filter(
+          (event) => event.event_type === 'gate_approved' || event.event_type === 'gate_rework_requested'
+        );
+        setItems(reviewEvents);
+      } catch (err) {
+        message.error(err.message || 'Не удалось загрузить review audit');
+      }
+    };
+    load();
+  }, [runId]);
+
+  if (!runId) {
+    return <Empty description="Добавьте runId: /audit-review?runId=..." />;
+  }
 
   return (
     <div>
@@ -20,8 +43,11 @@ export default function AuditReview() {
           dataSource={items}
           renderItem={(item) => (
             <List.Item>
-              <List.Item.Meta title={item.event} description={item.detail} />
-              <StatusTag value={item.status} />
+              <List.Item.Meta
+                title={item.event_type}
+                description={`${item.actor_id || 'unknown'} · ${item.event_time}`}
+              />
+              <StatusTag value={item.event_type === 'gate_approved' ? 'approved' : 'rework_requested'} />
             </List.Item>
           )}
         />

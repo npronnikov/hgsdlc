@@ -518,6 +518,54 @@ resolve latest `ArtifactVersion` by `artifact_key` and optional scope.
 Правило приоритета:
 
 1. explicit scope in node entry.
+2. default scope = `run`, если scope не задан.
+3. путь после нормализации не должен выходить за root соответствующего scope.
+
+## 19. План реализации v1 (execution plan)
+
+### 19.1 Backend этапы
+
+1. Data layer:
+   добавить таблицы `runs`, `node_executions`, `gate_instances`, `artifact_versions`, `audit_events`;
+   добавить optimistic lock через `resource_version` для `runs`, `node_executions`, `gate_instances`.
+2. Domain and repositories:
+   создать JPA-модели и репозитории для runtime-сущностей;
+   расширить модель node для `input_artifact`, `output_artifact`, `allowed_roles`, `review_artifacts`, `command_spec`.
+3. Runtime engine:
+   реализовать `start/tick` с state machine;
+   реализовать executors для `ai`, `command`, `human_input`, `human_approval`, `terminal`;
+   реализовать validation `execution_context`, `produced_artifacts`, `expected_mutations`.
+4. Gate handling:
+   `submit-input`, `approve`, `request-rework` с проверкой `expected_gate_version` и роли.
+5. Audit:
+   append-only события с `sequence_no` внутри run;
+   покрыть все переходы run/node/gate и создание artifact versions.
+6. Recovery:
+   при startup обрабатывать `running|waiting_gate` runs;
+   писать `run_recovered`.
+
+### 19.2 Frontend этапы
+
+1. Run Launch:
+   форма запуска `POST /api/runs` с `idempotency_key`;
+   переход в console по `runId`.
+2. Run Console:
+   загрузка `/api/runs/{runId}`, `/nodes`, `/artifacts`, `/audit`;
+   действия `resume`, `cancel`, переход в текущий gate.
+3. Gates UI:
+   inbox через `/api/gates/inbox`;
+   human input submit через `/api/gates/{gateId}/submit-input`;
+   approval/rework через `/api/gates/{gateId}/approve|request-rework`.
+4. Audit UI:
+   runtime/agent/review представления из `/api/runs/{runId}/audit`.
+
+### 19.3 Definition of Done для v1
+
+1. Сквозной сценарий `ai -> human_input -> ai -> terminal` завершается в `completed`.
+2. При missing required output node уходит в `failed` или `on_failure` (для AI), и есть `node_validation_failed`.
+3. Gate optimistic lock работает: неверный `expected_gate_version` возвращает conflict.
+4. После restart `waiting_gate` не теряется и доступен в inbox/console.
+5. По audit endpoint видна непрерывная последовательность событий runtime.
 2. default scope from node schema.
 3. если ambiguity, ошибка `CONTEXT_AMBIGUOUS`.
 

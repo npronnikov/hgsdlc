@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Card, Form, Input, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -58,20 +58,6 @@ export default function Login() {
             </Button>
           </Form>
         </Card>
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Card size="small">
-            <Tag color="#0891b2">FLOW_CONFIGURATOR</Tag>
-            <Text type="secondary">Configure flows, rules and skills.</Text>
-          </Card>
-          <Card size="small">
-            <Tag color="#d97706">PRODUCT_OWNER</Tag>
-            <Text type="secondary">Launch runs and respond to input gates.</Text>
-          </Card>
-          <Card size="small">
-            <Tag color="#16a34a">TECH_APPROVER</Tag>
-            <Text type="secondary">Approve or rework gates.</Text>
-          </Card>
-        </div>
       </div>
       <div className="login-bg">
         <div className="login-grid"></div>

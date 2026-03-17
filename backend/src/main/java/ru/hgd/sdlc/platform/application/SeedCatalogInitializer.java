@@ -60,7 +60,7 @@ public class SeedCatalogInitializer implements ApplicationRunner {
         project.setId(UUID.randomUUID());
         project.setName("Logos");
         project.setRepoUrl(repoUrl);
-        project.setDefaultBranch("main");
+        project.setDefaultBranch("logos");
         project.setStatus(ProjectStatus.ACTIVE);
         project.setCreatedAt(now);
         project.setUpdatedAt(now);
@@ -114,7 +114,7 @@ name: Restore C4 architecture
 description: Reconstruct C4 architecture view from the codebase.
 ---
 
-Analyze the codebase and produce a C4 summary in `c-4.md`.
+Analyze the codebase and produce a C4 summary in `docs/c-4.md`.
 Include context, containers, and key components with responsibilities.
 """
         );
@@ -135,7 +135,7 @@ name: Restore sequence diagrams
 description: Reconstruct UML sequence diagrams for integrations from the codebase.
 ---
 
-Analyze integration flows and produce UML sequence diagrams in `sequence.md`.
+Analyze integration flows and produce UML sequence diagrams in `docs/sequence.md`.
 Focus on external systems, message flows, and error handling.
 """
         );
@@ -178,11 +178,11 @@ nodes:
       - restore-c4-architecture@1.0
       - restore-sequence-diagrams@1.0
     produced_artifacts:
-      - scope: run
-        path: c-4.md
+      - scope: project
+        path: docs/c-4.md
         required: true
-      - scope: run
-        path: sequence.md
+      - scope: project
+        path: docs/sequence.md
         required: true
     expected_mutations: []
     on_success: check-artefacts

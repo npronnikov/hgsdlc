@@ -1,33 +1,63 @@
-import React from 'react';
-import { Card, Input, Space, Typography } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Card, Empty, Input, List, Space, Typography, message } from 'antd';
+import { useSearchParams } from 'react-router-dom';
+import { apiRequest } from '../api/request.js';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 export default function AuditAgent() {
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const [events, setEvents] = useState([]);
+  const [nodeFilter, setNodeFilter] = useState('');
+
+  useEffect(() => {
+    const load = async () => {
+      if (!runId) {
+        return;
+      }
+      try {
+        const data = await apiRequest(`/runs/${runId}/audit`);
+        setEvents((data || []).filter((item) => item.actor_type === 'agent'));
+      } catch (err) {
+        message.error(err.message || 'Не удалось загрузить agent audit');
+      }
+    };
+    load();
+  }, [runId]);
+
+  const filtered = useMemo(() => {
+    if (!nodeFilter.trim()) {
+      return events;
+    }
+    const query = nodeFilter.trim().toLowerCase();
+    return events.filter((event) => String(event.payload?.node_id || '').toLowerCase().includes(query));
+  }, [events, nodeFilter]);
+
+  if (!runId) {
+    return <Empty description="Добавьте runId: /audit-agent?runId=..." />;
+  }
+
   return (
     <div>
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Agent Audit</Title>
         <Space>
-          <Input placeholder="Node id" />
+          <Input placeholder="Node id" value={nodeFilter} onChange={(e) => setNodeFilter(e.target.value)} />
         </Space>
       </div>
       <Card>
-        <div>
-          <Text className="muted">Node id</Text>
-          <div className="mono">process-answers</div>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <Text className="muted">Attempt</Text>
-          <div className="mono">1</div>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <Text className="muted">Prompt checksum</Text>
-          <div className="mono">d0a1f...c92</div>
-        </div>
-        <div style={{ marginTop: 16 }} className="card-muted">
-          Declared/injected/used skills: feature-intake@1.0.0, update-requirements@1.2.0
-        </div>
+        <List
+          dataSource={filtered}
+          renderItem={(item) => (
+            <List.Item>
+              <List.Item.Meta
+                title={item.event_type}
+                description={`seq ${item.sequence_no} · ${item.event_time}`}
+              />
+            </List.Item>
+          )}
+        />
       </Card>
     </div>
   );

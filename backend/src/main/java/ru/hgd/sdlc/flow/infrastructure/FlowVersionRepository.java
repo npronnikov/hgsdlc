@@ -8,6 +8,8 @@ import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 
 public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> {
+    Optional<FlowVersion> findFirstByCanonicalNameAndStatus(String canonicalName, FlowStatus status);
+
     Optional<FlowVersion> findFirstByFlowIdAndStatusOrderBySavedAtDesc(String flowId, FlowStatus status);
 
     Optional<FlowVersion> findFirstByFlowIdAndVersionOrderBySavedAtDesc(String flowId, String version);

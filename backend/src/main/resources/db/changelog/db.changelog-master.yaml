@@ -21,3 +21,5 @@ databaseChangeLog:
       file: db/changelog/015-rules-description.sql
   - include:
       file: db/changelog/016-projects.sql
+  - include:
+      file: db/changelog/017-runtime.sql

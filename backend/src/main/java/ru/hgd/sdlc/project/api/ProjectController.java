@@ -1,6 +1,5 @@
 package ru.hgd.sdlc.project.api;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -18,14 +17,17 @@ import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.project.application.ProjectService;
+import ru.hgd.sdlc.runtime.application.RuntimeService;
 
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectController {
     private final ProjectService projectService;
+    private final RuntimeService runtimeService;
 
-    public ProjectController(ProjectService projectService) {
+    public ProjectController(ProjectService projectService, RuntimeService runtimeService) {
         this.projectService = projectService;
+        this.runtimeService = runtimeService;
     }
 
     @GetMapping
@@ -62,7 +64,14 @@ public class ProjectController {
             @RequestParam(name = "limit", defaultValue = "10") int limit
     ) {
         projectService.get(projectId);
-        return Collections.emptyList();
+        return runtimeService.listRunsByProject(projectId, limit).stream()
+                .map((run) -> new RunSummaryResponse(
+                        run.getId(),
+                        run.getStatus().name().toLowerCase(),
+                        run.getFlowCanonicalName(),
+                        run.getCreatedAt()
+                ))
+                .toList();
     }
 
     @ExceptionHandler(ValidationException.class)

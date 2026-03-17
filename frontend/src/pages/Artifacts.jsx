@@ -1,13 +1,40 @@
-import React from 'react';
-import { Card, Col, List, Row, Typography } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Card, Col, Empty, List, Row, Typography, message } from 'antd';
+import { useSearchParams } from 'react-router-dom';
+import { apiRequest } from '../api/request.js';
 
 const { Title } = Typography;
 
 export default function Artifacts() {
-  const artifacts = [
-    { name: 'requirements-draft.md', detail: 'process-answers · v3' },
-    { name: 'questions.md', detail: 'intake-analysis · v2' },
-  ];
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const [artifacts, setArtifacts] = useState([]);
+  const [selectedArtifactId, setSelectedArtifactId] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!runId) {
+        return;
+      }
+      try {
+        const data = await apiRequest(`/runs/${runId}/artifacts`);
+        setArtifacts(data || []);
+        setSelectedArtifactId((data || [])[0]?.artifact_version_id || null);
+      } catch (err) {
+        message.error(err.message || 'Не удалось загрузить артефакты');
+      }
+    };
+    load();
+  }, [runId]);
+
+  const selected = useMemo(
+    () => artifacts.find((item) => item.artifact_version_id === selectedArtifactId) || null,
+    [artifacts, selectedArtifactId]
+  );
+
+  if (!runId) {
+    return <Empty description="Добавьте runId: /artifacts?runId=..." />;
+  }
 
   return (
     <div>
@@ -20,8 +47,11 @@ export default function Artifacts() {
             <List
               dataSource={artifacts}
               renderItem={(item) => (
-                <List.Item>
-                  <List.Item.Meta title={item.name} description={item.detail} />
+                <List.Item onClick={() => setSelectedArtifactId(item.artifact_version_id)} style={{ cursor: 'pointer' }}>
+                  <List.Item.Meta
+                    title={item.artifact_key}
+                    description={`${item.node_id} · ${item.kind}`}
+                  />
                 </List.Item>
               )}
             />
@@ -30,9 +60,7 @@ export default function Artifacts() {
         <Col xs={24} lg={14}>
           <Card>
             <Title level={5}>Preview</Title>
-            <pre className="code-block"># Requirements Draft
-- Add partial refund support
-- Store refund history</pre>
+            <pre className="code-block">{JSON.stringify(selected || {}, null, 2)}</pre>
           </Card>
         </Col>
       </Row>

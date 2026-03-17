@@ -93,10 +93,16 @@ public class FlowYamlParser {
             }
             String type = text(node.get("type"));
             String nodeKind = text(node.get("node_kind"));
+            String normalizedType = normalize(type);
+            if ((nodeKind == null || nodeKind.isBlank()) && "executor".equals(normalizedType)) {
+                nodeKind = text(node.get("executor_kind"));
+            }
+            if ((nodeKind == null || nodeKind.isBlank()) && "gate".equals(normalizedType)) {
+                nodeKind = text(node.get("gate_kind"));
+            }
             if (nodeKind == null || nodeKind.isBlank()) {
                 continue;
             }
-            String normalizedType = normalize(type);
             if ("executor".equals(normalizedType) || "gate".equals(normalizedType)) {
                 ((ObjectNode) node).put("type", nodeKind);
             }
