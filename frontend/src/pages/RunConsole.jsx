@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   Descriptions,
   Empty,
   List,
@@ -28,6 +29,193 @@ function formatDate(value) {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(new Date(value));
+}
+
+function formatAuditValue(value) {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function prettifyKey(key) {
+  return String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function renderAuditData(value, path = 'root') {
+  if (value === null || value === undefined) {
+    return <Text type="secondary">—</Text>;
+  }
+
+  if (typeof value === 'string') {
+    const multiline = value.includes('\n') || value.length > 160;
+    return multiline ? <pre className="code-block">{value}</pre> : <span>{value}</span>;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return <span>{String(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <Text type="secondary">—</Text>;
+    }
+    const allPrimitive = value.every((item) => item === null || ['string', 'number', 'boolean'].includes(typeof item));
+    if (allPrimitive) {
+      return (
+        <List
+          size="small"
+          dataSource={value}
+          renderItem={(item, index) => (
+            <List.Item key={`${path}-${index}`}>
+              <span>{formatAuditValue(item)}</span>
+            </List.Item>
+          )}
+        />
+      );
+    }
+    return <pre className="code-block">{JSON.stringify(value, null, 2)}</pre>;
+  }
+
+  if (isPlainObject(value)) {
+    return (
+      <Descriptions bordered size="small" column={1}>
+        {Object.entries(value).map(([key, nestedValue]) => (
+          <Descriptions.Item key={`${path}-${key}`} label={prettifyKey(key)}>
+            {renderAuditData(nestedValue, `${path}-${key}`)}
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    );
+  }
+
+  return <pre className="code-block">{JSON.stringify(value, null, 2)}</pre>;
+}
+
+function renderAgentInputSection(agentInput) {
+  if (!isPlainObject(agentInput)) {
+    return null;
+  }
+
+  return (
+    <Card size="small" title="Agent Input">
+      <Descriptions bordered size="small" column={1}>
+        <Descriptions.Item label="Start Node">
+          {agentInput.startNode ? 'true' : 'false'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Task">
+          {agentInput.task ? <pre className="code-block">{agentInput.task}</pre> : <Text type="secondary">—</Text>}
+        </Descriptions.Item>
+        <Descriptions.Item label="Node Instruction">
+          {agentInput.nodeInstruction
+            ? <pre className="code-block">{agentInput.nodeInstruction}</pre>
+            : <Text type="secondary">—</Text>}
+        </Descriptions.Item>
+        <Descriptions.Item label="Inputs">
+          {renderAuditData(agentInput.inputs, 'agent-inputs')}
+        </Descriptions.Item>
+        <Descriptions.Item label="Expected Results">
+          {renderAuditData(agentInput.expectedResults, 'agent-expected')}
+        </Descriptions.Item>
+      </Descriptions>
+    </Card>
+  );
+}
+
+function renderAuditSections(item) {
+  const payload = item.payload || {};
+  const sections = [];
+
+  sections.push(
+    <Card key="meta" size="small" title="Event">
+      <Descriptions bordered size="small" column={1}>
+        <Descriptions.Item label="Sequence No">{item.sequence_no}</Descriptions.Item>
+        <Descriptions.Item label="Event Type">{item.event_type}</Descriptions.Item>
+        <Descriptions.Item label="Time">{formatDate(item.event_time)}</Descriptions.Item>
+        <Descriptions.Item label="Actor">{item.actor_id || item.actor_type}</Descriptions.Item>
+        <Descriptions.Item label="Node Execution Id">{item.node_execution_id || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Gate Id">{item.gate_id || '—'}</Descriptions.Item>
+      </Descriptions>
+    </Card>,
+  );
+
+  if (payload.agent_input) {
+    sections.push(<div key="agent-input">{renderAgentInputSection(payload.agent_input)}</div>);
+  }
+
+  if (payload.rendered_prompt) {
+    sections.push(
+      <Card key="prompt" size="small" title="Prompt Package">
+        <pre className="code-block">{payload.rendered_prompt}</pre>
+      </Card>,
+    );
+  }
+
+  if (payload.resolved_context) {
+    sections.push(
+      <Card key="context" size="small" title="Resolved Context">
+        {renderAuditData(payload.resolved_context, 'resolved-context')}
+      </Card>,
+    );
+  }
+
+  if (payload.runtime_files) {
+    sections.push(
+      <Card key="runtime-files" size="small" title="Runtime Files">
+        {renderAuditData(payload.runtime_files, 'runtime-files')}
+      </Card>,
+    );
+  }
+
+  const remainingPayload = Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !['agent_input', 'rendered_prompt', 'resolved_context', 'runtime_files'].includes(key)),
+  );
+
+  if (Object.keys(remainingPayload).length > 0) {
+    sections.push(
+      <Card key="details" size="small" title="Details">
+        {renderAuditData(remainingPayload, 'remaining-payload')}
+      </Card>,
+    );
+  }
+
+  return <Space direction="vertical" size={12} style={{ width: '100%' }}>{sections}</Space>;
+}
+
+function AuditEventList({ audit }) {
+  if (!audit.length) {
+    return <Empty description="Нет событий аудита" />;
+  }
+
+  const items = audit.map((item) => ({
+    key: item.event_id,
+    label: (
+      <Space size={12} wrap>
+        <Text strong>{item.event_type}</Text>
+        <StatusTag value={item.actor_type} />
+        <Text type="secondary">seq {item.sequence_no}</Text>
+        <Text type="secondary">{formatDate(item.event_time)}</Text>
+      </Space>
+    ),
+    children: renderAuditSections(item),
+  }));
+
+  return <Collapse items={items} accordion />;
 }
 
 function RunListView({ navigate }) {
@@ -346,21 +534,10 @@ function RunDetailView({ navigate, runId }) {
                   ),
                 },
                 {
-                  key: 'timeline',
-                  label: 'Timeline',
+                  key: 'audit',
+                  label: 'Audit',
                   children: (
-                    <List
-                      dataSource={audit}
-                      renderItem={(item) => (
-                        <List.Item>
-                          <Space direction="vertical" size={0}>
-                            <Text strong>{item.event_type}</Text>
-                            <Text type="secondary">{item.actor_type} · seq {item.sequence_no}</Text>
-                          </Space>
-                          <StatusTag value={item.actor_type} />
-                        </List.Item>
-                      )}
-                    />
+                    <AuditEventList audit={audit} />
                   ),
                 },
                 {
@@ -374,13 +551,6 @@ function RunDetailView({ navigate, runId }) {
                         </Descriptions.Item>
                       ))}
                     </Descriptions>
-                  ),
-                },
-                {
-                  key: 'audit',
-                  label: 'Audit JSON',
-                  children: (
-                    <pre className="code-block">{JSON.stringify(audit, null, 2)}</pre>
                   ),
                 },
               ]}
