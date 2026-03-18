@@ -66,6 +66,7 @@ import ru.hgd.sdlc.runtime.infrastructure.AuditEventRepository;
 import ru.hgd.sdlc.runtime.infrastructure.GateInstanceRepository;
 import ru.hgd.sdlc.runtime.infrastructure.NodeExecutionRepository;
 import ru.hgd.sdlc.runtime.infrastructure.RunRepository;
+import ru.hgd.sdlc.settings.application.SettingsService;
 
 @Service
 public class RuntimeService {
@@ -96,7 +97,7 @@ public class RuntimeService {
     private final ExecutionTraceBuilder executionTraceBuilder;
     private final FlowYamlParser flowYamlParser;
     private final ObjectMapper objectMapper;
-    private final Path workspaceRoot;
+    private final SettingsService settingsService;
     private final int maxTickIterations;
     private final int aiTimeoutSeconds;
 
@@ -115,7 +116,7 @@ public class RuntimeService {
             ExecutionTraceBuilder executionTraceBuilder,
             FlowYamlParser flowYamlParser,
             ObjectMapper objectMapper,
-            @Value("${runtime.workspace-root:/tmp/runtime}") String workspaceRoot,
+            SettingsService settingsService,
             @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations,
             @Value("${runtime.ai-timeout-seconds:900}") Integer aiTimeoutSeconds
     ) {
@@ -133,7 +134,7 @@ public class RuntimeService {
         this.executionTraceBuilder = executionTraceBuilder;
         this.flowYamlParser = flowYamlParser;
         this.objectMapper = objectMapper;
-        this.workspaceRoot = Path.of(workspaceRoot).toAbsolutePath().normalize();
+        this.settingsService = settingsService;
         this.maxTickIterations = maxTickIterations == null ? DEFAULT_MAX_TICK_ITERATIONS : maxTickIterations;
         this.aiTimeoutSeconds = aiTimeoutSeconds == null ? 900 : aiTimeoutSeconds;
     }
@@ -166,7 +167,7 @@ public class RuntimeService {
         }
 
         UUID runId = UUID.randomUUID();
-        Path runWorkspaceRoot = resolveRunWorkspaceRoot(runId);
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), runId);
         createDirectories(runWorkspaceRoot);
 
         List<String> manifestEntries = List.of();
@@ -199,9 +200,9 @@ public class RuntimeService {
     }
 
     private void ensureWorkspacePrepared(RunEntity run) {
-        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run.getId());
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
         Path projectRoot = resolveProjectScopeRoot(runWorkspaceRoot);
-        Path runScopeRoot = resolveRunScopeRoot(runWorkspaceRoot, run.getId());
+        Path runScopeRoot = resolveRunScopeRoot(runWorkspaceRoot);
         createDirectories(runWorkspaceRoot);
 
         boolean checkoutCompleted = Files.exists(projectRoot.resolve(".git"));
@@ -232,7 +233,7 @@ public class RuntimeService {
                         mapOf(
                                 "project_root", projectRoot.toString(),
                                 "target_branch", run.getTargetBranch(),
-                                "head", readGitHead(projectRoot),
+                                "head", readGitHead(run, projectRoot),
                                 "stdout_path", checkoutResult.stdoutPath(),
                                 "stderr_path", checkoutResult.stderrPath(),
                                 "stdout", truncate(checkoutResult.stdout(), 12000),
@@ -744,7 +745,7 @@ public class RuntimeService {
             writeFile(stderrPath, new byte[0]);
             return new CommandResult(0, "", "", stdoutPath.toString(), stderrPath.toString());
         }
-        Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run.getId()));
+        Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         try {
             CommandResult commandResult = runProcess(
                     List.of("zsh", "-lc", instruction),
@@ -1409,7 +1410,7 @@ public class RuntimeService {
 
     private CommandResult runGitCheckout(RunEntity run, Path projectRoot) {
         Project project = resolveProject(run.getProjectId());
-        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run.getId());
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
         Path checkoutStdout = runWorkspaceRoot.resolve("checkout.stdout.log");
         Path checkoutStderr = runWorkspaceRoot.resolve("checkout.stderr.log");
         String repoUrl = trimToNull(project.getRepoUrl());
@@ -1489,9 +1490,10 @@ public class RuntimeService {
         }
     }
 
-    private String readGitHead(Path projectRoot) {
-        Path stdoutPath = projectRoot.resolve(".hgsdlc").resolve("git-head.stdout.log");
-        Path stderrPath = projectRoot.resolve(".hgsdlc").resolve("git-head.stderr.log");
+    private String readGitHead(RunEntity run, Path projectRoot) {
+        Path runScopeRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run));
+        Path stdoutPath = runScopeRoot.resolve("logs").resolve("git-head.stdout.log");
+        Path stderrPath = runScopeRoot.resolve("logs").resolve("git-head.stderr.log");
         try {
             CommandResult result = runProcess(
                     List.of("git", "-C", projectRoot.toString(), "rev-parse", "HEAD"),
@@ -1509,25 +1511,33 @@ public class RuntimeService {
         }
     }
 
-    private Path resolveRunWorkspaceRoot(UUID runId) {
-        return workspaceRoot.resolve(runId.toString()).toAbsolutePath().normalize();
+    private Path resolveRunWorkspaceRoot(String workspaceRoot, UUID runId) {
+        return Path.of(workspaceRoot).resolve(runId.toString()).toAbsolutePath().normalize();
     }
 
     private Path resolveProjectScopeRoot(Path runWorkspaceRoot) {
-        return runWorkspaceRoot.resolve("project").toAbsolutePath().normalize();
+        return runWorkspaceRoot.resolve("repo").toAbsolutePath().normalize();
     }
 
-    private Path resolveRunScopeRoot(Path runWorkspaceRoot, UUID runId) {
-        return resolveProjectScopeRoot(runWorkspaceRoot).resolve(".hgsdlc").resolve(runId.toString()).toAbsolutePath().normalize();
+    private Path resolveRunScopeRoot(Path runWorkspaceRoot) {
+        return runWorkspaceRoot.resolve("runtime").toAbsolutePath().normalize();
+    }
+
+    private Path resolveRunWorkspaceRoot(RunEntity run) {
+        String storedRoot = trimToNull(run.getWorkspaceRoot());
+        if (storedRoot != null) {
+            return Path.of(storedRoot).toAbsolutePath().normalize();
+        }
+        return resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), run.getId());
     }
 
     private Path resolveProjectRoot(RunEntity run) {
-        return resolveProjectScopeRoot(resolveRunWorkspaceRoot(run.getId()));
+        return resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
     }
 
     private Path resolveNodeExecutionRoot(RunEntity run, NodeExecutionEntity execution) {
         String dirName = execution.getNodeId() + "-attempt-" + execution.getAttemptNo();
-        Path path = resolveRunScopeRoot(resolveRunWorkspaceRoot(run.getId()), run.getId()).resolve("nodes").resolve(dirName);
+        Path path = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
         createDirectories(path);
         return path;
     }
@@ -1539,10 +1549,10 @@ public class RuntimeService {
         if (Path.of(value).isAbsolute()) {
             throw new NodeFailureException("PATH_POLICY_VIOLATION", "Absolute path is forbidden: " + value, false);
         }
-        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run.getId());
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
         Path root = "project".equals(defaultScope(scopeRaw))
                 ? resolveProjectScopeRoot(runWorkspaceRoot)
-                : resolveRunScopeRoot(runWorkspaceRoot, run.getId());
+                : resolveRunScopeRoot(runWorkspaceRoot);
         Path resolved = root.resolve(value).normalize();
         if (!resolved.startsWith(root)) {
             throw new NodeFailureException("PATH_POLICY_VIOLATION", "Path escapes root: " + value, false);

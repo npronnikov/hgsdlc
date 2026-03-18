@@ -189,63 +189,247 @@ Runtime обязан:
 7. Обновить `run.current_node_id` или terminal status.
 8. Записать audit events.
 
-### 8.2 `ai` node
+### 8.1.1 Подготовка workspace и checkout
 
-1. Собрать `execution_context`.
-2. Подготовить prompt package.
-3. Вызвать coding agent.
-4. Синхронизировать созданные/измененные файлы в artifact registry.
-5. Проверить `produced_artifacts` и `expected_mutations`.
-6. При успехе идти `on_success`, при ошибке `on_failure`.
+Перед выполнением первой node runtime подготавливает workspace run:
 
-### 8.3 `command` node
+1. Корень run workspace:
+`{runtime.workspace-root}/{runId}`.
+`runtime.workspace-root` читается из системной настройки `runtime.workspace_root`;
+если не задана, используется `/tmp`.
+2. Корень checked out репозитория:
+`{runtime.workspace-root}/{runId}/repo`.
+3. Run-scoped root:
+`{runtime.workspace-root}/{runId}/runtime`.
+4. Внутри run-scoped root создаются:
+`context/`, `nodes/`, `logs/`.
+5. Если checkout еще не выполнен, runtime делает:
+`git clone --branch {target_branch} --single-branch {repo_url} {project_root}`.
+6. После checkout runtime пишет audit:
+`checkout_started`, `checkout_finished` или `checkout_failed`.
+7. В `context/context-manifest.json` записываются:
+`context_root_dir`, `context_file_manifest`, `feature_request`.
 
-1. Выполнить process в workspace.
-2. Собрать результат stdout/stderr/exit code.
-3. Проверить декларации outputs.
-4. При успехе `on_success`.
+### 8.1.2 Как вычисляются пути
+
+Во всех node runtime использует общую path policy:
+
+1. Абсолютные пути запрещены.
+2. Scope `project` резолвится относительно:
+`{runtime.workspace-root}/{runId}/repo`.
+3. Scope `run` резолвится относительно:
+`{runtime.workspace-root}/{runId}/runtime`.
+4. Если scope не задан, используется `run`.
+5. После `normalize()` путь обязан оставаться внутри своего root.
+6. Выход за root завершает node с `PATH_POLICY_VIOLATION`.
+
+### 8.2 `ai` node: чем runtime вызывает agent
+
+#### 8.2.1 Подготовка agent workspace
+
+Перед вызовом `ai` node runtime:
+
+1. Разрешает `execution_context`.
+2. Резолвит flow-level rules из published rule versions.
+3. Резолвит node-level skills из published skill versions.
+4. Проверяет, что `coding_agent= qwen` и что rules/skills тоже для `qwen`.
+5. Materialize-ит `.qwen/QWEN.md` в project root.
+6. Materialize-ит `.qwen/skills/{skillCanonicalName}/SKILL.md`.
+7. Создает node execution root:
+`{runtime.workspace-root}/{runId}/runtime/nodes/{nodeId}-attempt-{attemptNo}`.
+8. Внутри него пишет `prompt.md`, `agent.stdout.log`, `agent.stderr.log`.
+
+#### 8.2.2 Как собирается prompt package сейчас
+
+Текущая реализация строит минимальный agent-facing prompt, а полный технический контекст сохраняет в audit.
+
+Prompt содержит:
+
+1. `Task`:
+только для start node, из `run.feature_request`.
+2. `Node instruction`:
+из `node.instruction`.
+3. `Available inputs`:
+краткий summary по `execution_context`, без runtime-путей.
+4. `Expected result`:
+краткое описание required artifacts / required mutations.
+5. Финальную инструкцию:
+использовать repository rules и installed skills, уже materialized в `.qwen`.
+
+Prompt не содержит:
+
+1. `prompt_path`, `rules_path`, `skills_root`.
+2. Абсолютные runtime-пути.
+3. Raw JSON `execution_context`.
+4. Raw JSON `produced_artifacts`.
+5. Raw JSON `expected_mutations`.
+
+#### 8.2.3 Как вызывается agent
+
+Runtime запускает agent из checked out project root командой:
+
+```text
+qwen --approval-mode yolo --output-format json --channel CI "<rendered prompt>"
+```
+
+В audit при этом сохраняются:
+
+1. `agent_input`
+2. `rendered_prompt`
+3. `prompt_checksum`
+4. `resolved_context`
+5. `rule_refs`
+6. `skill_refs`
+7. `working_directory`
+8. `command`
+
+#### 8.2.4 Что runtime проверяет после вызова `ai` node
+
+После успешного завершения процесса (`exit_code = 0`) runtime:
+
+1. Снимает post-state для всех `expected_mutations`.
+2. Проверяет required `produced_artifacts`:
+файл должен существовать по указанному `path`.
+3. Для каждого существующего produced artifact пишет `ArtifactVersion(kind=produced)`.
+4. Проверяет required `expected_mutations`:
+checksum после node должен отличаться от checksum до node.
+5. Для каждой подтвержденной mutation пишет `ArtifactVersion(kind=mutation)`.
+6. Если required artifact отсутствует или required mutation не подтверждена:
+node получает `NODE_VALIDATION_FAILED`.
+7. Если сам agent завершился non-zero exit code:
+node получает `AGENT_EXECUTION_FAILED`.
+8. При успехе runtime идет в `on_success`, при ошибке — в `on_failure`, если он задан; иначе fail run.
+
+### 8.3 `command` node: чем runtime вызывает process
+
+#### 8.3.1 Как вызывается `command`
+
+1. Working directory всегда равен checked out project root.
+2. Runtime берет строку из `node.instruction`.
+3. Если `instruction` пустая:
+runtime создает пустые `command.stdout.log` / `command.stderr.log`
+и считает execution успешным с `exit_code = 0`.
+4. Если `instruction` не пустая:
+runtime выполняет `zsh -lc "{instruction}"`.
+5. Success codes:
+`node.success_exit_codes`, либо `{0}` по умолчанию.
+
+#### 8.3.2 Что runtime делает после вызова `command`
+
+После завершения process runtime:
+
+1. Проверяет `exit_code` против `success_exit_codes`.
+2. Если код неразрешенный:
+node получает `COMMAND_EXECUTION_FAILED`.
+3. Перед проверкой outputs runtime materialize-ит declared artifacts:
+для каждого entry в `produced_artifacts` пишет markdown-файл с metadata run/node и stdout/stderr команды.
+4. Затем выполняет те же post-checks, что и для `ai` node:
+required `produced_artifacts` и required `expected_mutations`.
+5. При успехе идет в `on_success`.
 
 ### 8.4 `human_input` gate
 
-1. Открыть gate instance.
-2. Перевести run в `waiting_gate`.
-3. На `submit-input` сохранить входные файлы как `ArtifactVersion(kind=human_input)`.
-4. Проверить декларации outputs этой node.
-5. При успехе закрыть gate и продолжить по `on_submit`.
-6. При неуспехе `failed_validation`, gate остается переоткрываемым.
+#### 8.4.1 Как runtime открывает `human_input`
+
+1. Создает `GateInstance(kind=human_input, status=awaiting_input)`.
+2. Ставит `NodeExecution.status = waiting_gate`.
+3. Переводит run в `waiting_gate`.
+4. В gate пишет `assignee_role = firstAllowedRole(node.allowed_roles)`.
+
+#### 8.4.2 Что происходит на `submit-input`
+
+Runtime ожидает payload:
+
+1. `expected_gate_version`
+2. список `artifacts`
+3. optional `comment`
+
+Для каждого submitted artifact runtime:
+
+1. Проверяет `artifact_key`, `path`, `scope`, `content_base64`.
+2. Декодирует base64.
+3. Резолвит path по scope.
+4. Пишет файл в workspace.
+5. Создает `ArtifactVersion(kind=human_input)`.
+
+#### 8.4.3 Что runtime проверяет после `submit-input`
+
+После записи всех файлов runtime:
+
+1. Если задан `node.output_artifact`, проверяет, что среди submitted artifacts есть такой `artifact_key`.
+2. Проверяет required `produced_artifacts`:
+файлы должны существовать по configured paths.
+3. Если проверка не проходит:
+gate получает `failed_validation`, а run не продолжает execution.
+4. Если проверка проходит:
+runtime пишет `gate_input_submitted`, закрывает gate, помечает node execution как `succeeded`,
+применяет `on_submit` и возвращает run в `running`.
 
 ### 8.5 `human_approval` gate
 
-1. Открыть gate instance.
-2. Перевести run в `waiting_gate`.
-3. На `approve` перейти по `on_approve`.
-4. На `rework` перейти по `on_rework` или `on_rework_routes[mode]`.
-5. Зафиксировать comment и reviewed artifact versions.
+#### 8.5.1 Как runtime открывает `human_approval`
+
+1. Создает `GateInstance(kind=human_approval, status=awaiting_decision)`.
+2. Переводит node execution в `waiting_gate`.
+3. Переводит run в `waiting_gate`.
+
+#### 8.5.2 Что runtime проверяет на `approve` / `request-rework`
+
+Перед действием runtime проверяет:
+
+1. gate существует;
+2. gate имеет нужный kind;
+3. gate находится в ожидаемом status;
+4. `expected_gate_version` совпадает;
+5. actor role входит в `node.allowed_roles`, если список задан.
+
+#### 8.5.3 Что runtime делает после решения
+
+1. На `approve` gate получает `approved`, сохраняет `comment` и `reviewed_artifact_version_ids`,
+node execution помечается `succeeded`, применяется `on_approve`.
+2. На `request-rework` gate получает `rework_requested`, сохраняет `mode`, `comment`,
+`reviewed_artifact_version_ids`, node execution помечается `succeeded`,
+transition выбирается из `on_rework_routes[mode]` или `on_rework.next_node`.
+3. Дополнительных checks по files/artifacts после approval runtime не выполняет.
 
 ### 8.6 `terminal` node
 
 1. Нода не имеет transitions.
 2. Run переводится в `completed`.
+3. Дополнительные проверки outputs для `terminal` node не выполняются.
 
 ## 9. Проверки конфигурации в рантайме
 
 ### 9.1 Проверка `execution_context`
 
-1. Для каждого `file_ref` и `directory_ref` путь должен существовать.
-2. Для `artifact_ref` должна существовать последняя `ArtifactVersion` по ключу.
-3. Для `required=true` отсутствие контекста приводит к ошибке node.
+1. `user_request`:
+всегда резолвится из `run.feature_request`.
+2. `file_ref`:
+путь резолвится по scope, файл должен существовать и не быть directory.
+3. `directory_ref`:
+путь резолвится по scope, directory должна существовать.
+4. `artifact_ref`:
+runtime берет последнюю `ArtifactVersion` по `artifact_key` в рамках run.
+5. Для `required=true` отсутствие контекста приводит к `MISSING_EXECUTION_CONTEXT`.
 
 ### 9.2 Проверка `produced_artifacts`
 
-1. Для каждого required entry файл должен существовать по `path` после выполнения node.
-2. Каждое найденное значение фиксируется как новая `ArtifactVersion`.
-3. Отсутствие required entry завершает node как `failed`.
+1. Для `ai` и `command` проверка запускается после успешного завершения process.
+2. Для `human_input` проверка запускается после записи submitted artifacts.
+3. Для `human_approval` и `terminal` эта проверка не выполняется.
+4. Для каждого required entry файл должен существовать по configured `path`.
+5. Каждое найденное значение фиксируется как новая `ArtifactVersion`.
+6. Отсутствие required entry завершает node как `NODE_VALIDATION_FAILED`
+или gate как `failed_validation` для `human_input`.
 
 ### 9.3 Проверка `expected_mutations`
 
-1. Для каждой required mutation runtime должен обнаружить фактическое изменение цели (`path`) относительно snapshot до начала node.
-2. Если mutation не подтверждена, node завершается `failed`.
-3. Подтвержденные mutations пишутся в `ArtifactVersion(kind=mutation)`.
+1. Для `ai` и `command` runtime до вызова снимает checksum snapshot по каждому configured path.
+2. После вызова runtime повторно читает checksum.
+3. Mutation подтверждена, если checksum changed, либо файл появился там, где его не было.
+4. Для required mutation отсутствие изменения завершает node как `NODE_VALIDATION_FAILED`.
+5. Подтвержденные mutations пишутся в `ArtifactVersion(kind=mutation)`.
+6. Для `human_input`, `human_approval`, `terminal` runtime `expected_mutations` не проверяет.
 
 Примечание v1:
 Поддерживается только `ALL required`. Логика `OR` между выходами не поддерживается моделью v1.
@@ -501,7 +685,7 @@ explicit cancel command and run not terminal.
 ### 18.1 Path policy
 
 1. Все пути нормализуются (`/`, `..`, symlink resolution).
-2. Путь должен оставаться внутри разрешенного root (`project` scope root или `.hgsdlc/{runId}`).
+2. Путь должен оставаться внутри разрешенного root (`project` scope root или `runtime` scope root).
 3. Нарушение policy приводит к `failed` с `error_code=PATH_POLICY_VIOLATION`.
 
 ### 18.2 `execution_context` resolution
