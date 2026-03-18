@@ -1,100 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Dropdown, Form, Input, Modal, Row, Segmented, Select, Typography, message } from 'antd';
-import { EditOutlined, EyeOutlined, InboxOutlined, MoreOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Dropdown, Form, Input, Modal, Typography, message } from 'antd';
+import { EditOutlined, EyeOutlined, InboxOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  applyNodeChanges,
-  getSmoothStepPath,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { parse as parseYaml } from 'yaml';
-import dagre from 'dagre';
 
-const { Title, Text } = Typography;
-
-function PreviewNode({ data, sourcePosition, targetPosition }) {
-  return (
-    <div className="flow-preview-node">
-      <Handle
-        type="target"
-        position={targetPosition || Position.Top}
-        style={{ opacity: 0, pointerEvents: 'none' }}
-      />
-      {data?.label || ''}
-      <Handle
-        type="source"
-        position={sourcePosition || Position.Bottom}
-        style={{ opacity: 0, pointerEvents: 'none' }}
-      />
-    </div>
-  );
-}
-
-function PreviewEdge({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  style,
-  markerEnd,
-  data,
-}) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    borderRadius: 16,
-  });
-  const offsetX = data?.labelOffsetX || 0;
-  const offsetY = data?.labelOffsetY || 0;
-  const label = data?.label || '';
-
-  return (
-    <>
-      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
-      {label ? (
-        <EdgeLabelRenderer>
-          <div
-            className="flow-preview-edge-label"
-            style={{
-              transform: `translate(-50%, -50%) translate(${labelX + offsetX}px, ${labelY + offsetY}px)`,
-            }}
-          >
-            {label}
-          </div>
-        </EdgeLabelRenderer>
-      ) : null}
-    </>
-  );
-}
+const { Title } = Typography;
 
 export default function Projects() {
-  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [viewingProject, setViewingProject] = useState(null);
-  const [launchProject, setLaunchProject] = useState(null);
-  const [launchConfig, setLaunchConfig] = useState(null);
-  const [flowOptions, setFlowOptions] = useState([]);
-  const [selectedFlowId, setSelectedFlowId] = useState(null);
-  const [layoutDirection, setLayoutDirection] = useState('TB');
   const [form] = Form.useForm();
 
   const loadProjects = async () => {
@@ -195,12 +113,6 @@ export default function Projects() {
 
   const projectMenuItems = (project) => ([
     { key: 'open', label: 'Открыть', icon: <EyeOutlined /> },
-    {
-      key: 'launch',
-      label: 'Запустить',
-      icon: <PlayCircleOutlined />,
-      disabled: project.status === 'archived',
-    },
     { key: 'edit', label: 'Редактировать', icon: <EditOutlined /> },
     {
       key: 'archive',
@@ -213,11 +125,6 @@ export default function Projects() {
   const handleMenuClick = (project, key) => {
     if (key === 'open') {
       openView(project);
-      return;
-    }
-    if (key === 'launch') {
-      setLaunchProject(project);
-      setLaunchConfig({ loading: true, flow: null, rules: [], skills: [], nodes: [], edges: [] });
       return;
     }
     if (key === 'edit') {
@@ -234,187 +141,6 @@ export default function Projects() {
     }
   };
 
-  const buildFlowPreview = (flowYaml, direction = 'TB') => {
-    if (!flowYaml) {
-      return { nodes: [], edges: [], rawNodes: [] };
-    }
-    try {
-      const parsed = parseYaml(flowYaml);
-      const rawNodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
-      const nodeIds = new Set(rawNodes.map((node) => node.id).filter(Boolean));
-      const nodes = rawNodes.map((node, index) => ({
-        id: node.id || `node-${index + 1}`,
-        type: 'preview',
-        position: { x: index * 220, y: 0 },
-        data: { label: node.title || node.id || `node-${index + 1}` },
-      }));
-      const edges = [];
-      const EDGE_STYLES = {
-        success: { stroke: '#16a34a', marker: '#16a34a' },
-        failure: { stroke: '#dc2626', marker: '#dc2626' },
-        submit: { stroke: '#2563eb', marker: '#2563eb' },
-        approve: { stroke: '#f59e0b', marker: '#f59e0b' },
-        rework: { stroke: '#64748b', marker: '#64748b' },
-        default: { stroke: '#94a3b8', marker: '#94a3b8' },
-      };
-      const EDGE_LABELS = {
-        success: 'on_success',
-        failure: 'on_failure',
-        submit: 'on_submit',
-        approve: 'on_approve',
-        rework: 'on_rework',
-      };
-      const getLabelOffset = (index, total) => {
-        if (total <= 1) {
-          return direction === 'LR' ? { x: 12, y: 0 } : { x: 0, y: -12 };
-        }
-        const spread = index - (total - 1) / 2;
-        if (direction === 'LR') {
-          return { x: 12, y: spread * 20 };
-        }
-        return { x: spread * 36, y: -12 };
-      };
-      rawNodes.forEach((node) => {
-        const source = node.id;
-        if (!source) return;
-        const addEdge = (target, suffix, index, total) => {
-          if (!target || !nodeIds.has(target)) return;
-          const style = EDGE_STYLES[suffix] || EDGE_STYLES.default;
-          const offset = getLabelOffset(index, total);
-          edges.push({
-            id: `${source}-${target}-${suffix}`,
-            source,
-            target,
-            type: 'preview',
-            className: `flow-preview-edge flow-preview-edge-${suffix}`,
-            style: { stroke: style.stroke, strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: style.marker },
-            data: {
-              label: EDGE_LABELS[suffix] || '',
-              labelOffsetX: offset.x,
-              labelOffsetY: offset.y,
-            },
-          });
-        };
-        const outgoing = [];
-        if (node.on_success) outgoing.push({ target: node.on_success, suffix: 'success' });
-        if (node.on_failure) outgoing.push({ target: node.on_failure, suffix: 'failure' });
-        if (node.on_submit) outgoing.push({ target: node.on_submit, suffix: 'submit' });
-        if (node.on_approve) outgoing.push({ target: node.on_approve, suffix: 'approve' });
-        if (node.on_rework?.next_node) {
-          outgoing.push({ target: node.on_rework.next_node, suffix: 'rework' });
-        } else if (node.on_rework_routes) {
-          Object.values(node.on_rework_routes).forEach((target) =>
-            outgoing.push({ target, suffix: 'rework' })
-          );
-        }
-        outgoing.forEach((edge, index) => {
-          addEdge(edge.target, edge.suffix, index, outgoing.length);
-        });
-      });
-      if (nodes.length === 0) {
-        return { nodes, edges, rawNodes };
-      }
-      const NODE_WIDTH = 180;
-      const NODE_HEIGHT = 56;
-      const graph = new dagre.graphlib.Graph();
-      graph.setDefaultEdgeLabel(() => ({}));
-      graph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120 });
-      nodes.forEach((node) => {
-        graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-      });
-      edges.forEach((edge) => {
-        graph.setEdge(edge.source, edge.target);
-      });
-      dagre.layout(graph);
-      const layoutedNodes = nodes.map((node) => {
-        const layout = graph.node(node.id);
-        const isHorizontal = direction === 'LR';
-        return {
-          ...node,
-          targetPosition: isHorizontal ? Position.Left : Position.Top,
-          sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-          position: {
-            x: layout.x - NODE_WIDTH / 2,
-            y: layout.y - NODE_HEIGHT / 2,
-          },
-        };
-      });
-      return { nodes: layoutedNodes, edges, rawNodes };
-    } catch (err) {
-      return { nodes: [], edges: [], rawNodes: [] };
-    }
-  };
-
-  const loadLaunchConfig = async (flowIdOverride) => {
-    try {
-      let flowId = flowIdOverride || selectedFlowId;
-      if (!flowId) {
-        setLaunchConfig({ loading: false, flow: null, rules: [], skills: [], nodes: [], edges: [] });
-        return;
-      }
-      const flow = await apiRequest(`/flows/${flowId}`);
-      const flowPreview = buildFlowPreview(flow.flow_yaml, layoutDirection);
-      const nodes = flowPreview.rawNodes || [];
-      const skills = Array.from(new Set(
-        nodes.flatMap((node) => node.skill_refs || [])
-      ));
-      setLaunchConfig({
-        loading: false,
-        flow,
-        rules: flow.rule_refs || [],
-        skills,
-        nodes: flowPreview.nodes,
-        edges: flowPreview.edges,
-        nodeList: nodes,
-      });
-    } catch (err) {
-      message.error(err.message || 'Не удалось загрузить конфигурацию запуска');
-      setLaunchConfig({ loading: false, flow: null, rules: [], skills: [], nodes: [], edges: [], nodeList: [] });
-    }
-  };
-
-  const loadFlowOptions = async () => {
-    try {
-      const flows = await apiRequest('/flows');
-      const options = (flows || []).map((flow) => ({
-        value: flow.flow_id,
-        label: flow.canonical_name || flow.flow_id,
-        status: flow.status,
-      }));
-      setFlowOptions(options);
-      if (!selectedFlowId && options.length > 0) {
-        const published = options.find((flow) => flow.status === 'published');
-        setSelectedFlowId((published || options[0]).value);
-      }
-    } catch (err) {
-      message.error(err.message || 'Не удалось загрузить список Flow');
-    }
-  };
-
-  useEffect(() => {
-    if (launchProject) {
-      loadFlowOptions();
-    }
-  }, [launchProject]);
-
-  useEffect(() => {
-    if (launchProject && selectedFlowId) {
-      setLaunchConfig((prev) => ({ ...(prev || {}), loading: true }));
-      loadLaunchConfig(selectedFlowId);
-    }
-  }, [launchProject, selectedFlowId]);
-
-  useEffect(() => {
-    if (launchProject && launchConfig?.flow?.flow_yaml) {
-      const flowPreview = buildFlowPreview(launchConfig.flow.flow_yaml, layoutDirection);
-      setLaunchConfig((prev) => ({
-        ...(prev || {}),
-        nodes: flowPreview.nodes,
-        edges: flowPreview.edges,
-      }));
-    }
-  }, [launchProject, layoutDirection]);
 
   return (
     <div className="cards-page">
@@ -534,99 +260,6 @@ export default function Projects() {
         )}
       </Modal>
 
-      <Modal
-        title={launchProject ? `Запуск флоу для проекта ${launchProject.name}` : 'Запуск флоу'}
-        open={!!launchProject}
-        onOk={() => {
-          setLaunchProject(null);
-          setLaunchConfig(null);
-          setSelectedFlowId(null);
-          setFlowOptions([]);
-          setLayoutDirection('TB');
-        }}
-        onCancel={() => {
-          setLaunchProject(null);
-          setLaunchConfig(null);
-          setSelectedFlowId(null);
-          setFlowOptions([]);
-          setLayoutDirection('TB');
-        }}
-        okText="Запустить"
-        cancelText="Отмена"
-        width={980}
-        bodyStyle={{ height: '65vh', overflow: 'hidden' }}
-        className="flow-launch-modal"
-      >
-        {launchProject && (
-          <div className="flow-launch-dialog">
-            <div className="flow-launch-toolbar">
-              <div className="flow-launch-select">
-                <Text className="muted">Выберите Flow для запуска</Text>
-                <Select
-                  value={selectedFlowId || undefined}
-                  options={flowOptions}
-                  placeholder="Выберите Flow для запуска"
-                  onChange={(value) => setSelectedFlowId(value)}
-                />
-              </div>
-              <Segmented
-                value={layoutDirection}
-                onChange={(value) => setLayoutDirection(value)}
-                options={[
-                  { value: 'TB', label: 'Вертикально' },
-                  { value: 'LR', label: 'Горизонтально' },
-                ]}
-                disabled={!selectedFlowId}
-              />
-            </div>
-            {launchConfig?.loading && <div className="card-muted">Загрузка конфигурации...</div>}
-            {!launchConfig?.loading && !selectedFlowId && (
-              <div className="flow-preview-placeholder card-muted">Выберите Flow для запуска.</div>
-            )}
-            {!launchConfig?.loading && selectedFlowId && !launchConfig?.flow && (
-              <div className="flow-preview-placeholder card-muted">Нет доступных Flow для запуска.</div>
-            )}
-            {!launchConfig?.loading && launchConfig?.flow && (
-              <div className="flow-preview-canvas card-muted">
-                <div className="flow-preview-info">
-                  <div className="muted">Rules</div>
-                  <div className="mono flow-preview-list">
-                    {(launchConfig.rules || []).length > 0
-                      ? launchConfig.rules.map((rule) => `> ${rule}`).join('\n')
-                      : '—'}
-                  </div>
-                  <div className="muted">Expected skills</div>
-                  <div className="mono flow-preview-list">
-                    {(launchConfig.skills || []).length > 0
-                      ? launchConfig.skills.map((skill) => `> ${skill}`).join('\n')
-                      : '—'}
-                  </div>
-                </div>
-                <ReactFlow
-                  style={{ width: '100%', height: '100%' }}
-                  nodes={launchConfig.nodes}
-                  edges={launchConfig.edges}
-                  nodeTypes={{ preview: PreviewNode }}
-                  edgeTypes={{ preview: PreviewEdge }}
-                  nodesDraggable
-                  onNodesChange={(changes) =>
-                    setLaunchConfig((prev) => ({
-                      ...prev,
-                      nodes: applyNodeChanges(changes, prev?.nodes || []),
-                    }))
-                  }
-                  nodesConnectable={false}
-                  zoomOnScroll={false}
-                  panOnScroll={false}
-                  fitView
-                  fitViewOptions={{ padding: 0.35 }}
-                  proOptions={{ hideAttribution: true }}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }

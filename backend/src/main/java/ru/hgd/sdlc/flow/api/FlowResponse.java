@@ -32,7 +32,7 @@ public record FlowResponse(
                 model.getDescription(),
                 model.getStartNodeId(),
                 model.getRuleRefs(),
-                model.getCodingAgent(),
+                version.getCodingAgent(),
                 model.getFailOnMissingDeclaredOutput(),
                 model.getFailOnMissingExpectedMutation(),
                 model.getResponseSchema(),

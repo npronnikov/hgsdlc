@@ -1,8 +1,13 @@
 package ru.hgd.sdlc.runtime.application;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.flow.domain.FlowModel;
@@ -12,6 +17,21 @@ import ru.hgd.sdlc.runtime.domain.RunEntity;
 
 @Service
 public class AgentPromptBuilder {
+    private static final String TASK_SECTION_TOKEN = "{{TASK_SECTION}}";
+    private static final String REQUEST_CLARIFICATION_SECTION_TOKEN = "{{REQUEST_CLARIFICATION_SECTION}}";
+    private static final String NODE_INSTRUCTION_SECTION_TOKEN = "{{NODE_INSTRUCTION_SECTION}}";
+    private static final String INPUTS_SECTION_TOKEN = "{{INPUTS_SECTION}}";
+    private static final String EXPECTED_RESULTS_SECTION_TOKEN = "{{EXPECTED_RESULTS_SECTION}}";
+    private static final String FOOTER_SECTION_TOKEN = "{{FOOTER_SECTION}}";
+
+    private final String promptTemplate;
+
+    public AgentPromptBuilder(
+            @Value("classpath:runtime/prompt-template.md") Resource promptTemplateResource
+    ) {
+        this.promptTemplate = readTemplate(promptTemplateResource);
+    }
+
     public AgentPromptPackage build(
             RunEntity run,
             FlowModel flowModel,
@@ -20,40 +40,91 @@ public class AgentPromptBuilder {
     ) {
         boolean startNode = isStartNode(flowModel, node);
         String task = startNode ? trimToNull(run.getFeatureRequest()) : null;
+        String requestClarification = trimToNull(run.getPendingReworkInstruction());
         String instruction = trimToNull(node.getInstruction());
         List<String> inputs = summarizePromptInputs(resolvedContext, startNode);
         List<String> expectedResults = summarizeExpectedResults(node);
-        AgentInput agentInput = new AgentInput(startNode, task, instruction, inputs, expectedResults);
+        AgentInput agentInput = new AgentInput(startNode, task, requestClarification, instruction, inputs, expectedResults);
         String prompt = renderPrompt(agentInput);
         return new AgentPromptPackage(agentInput, prompt, ChecksumUtil.sha256(prompt));
     }
 
     private String renderPrompt(AgentInput agentInput) {
+        String taskSection = buildTaskSection(agentInput.task());
+        String clarificationSection = buildRequestClarificationSection(agentInput.requestClarification());
+        String instructionSection = buildNodeInstructionSection(agentInput.nodeInstruction());
+        String inputsSection = buildInputsSection(agentInput.inputs());
+        String expectedResultsSection = buildExpectedResultsSection(agentInput.expectedResults());
+        String footerSection = "Use repository rules and installed skills already prepared for this run.\n";
+
+        String rendered = promptTemplate
+                .replace(TASK_SECTION_TOKEN, taskSection)
+                .replace(REQUEST_CLARIFICATION_SECTION_TOKEN, clarificationSection)
+                .replace(NODE_INSTRUCTION_SECTION_TOKEN, instructionSection)
+                .replace(INPUTS_SECTION_TOKEN, inputsSection)
+                .replace(EXPECTED_RESULTS_SECTION_TOKEN, expectedResultsSection)
+                .replace(FOOTER_SECTION_TOKEN, footerSection);
+        return normalizePrompt(rendered);
+    }
+
+    private String buildTaskSection(String task) {
+        if (task == null) {
+            return "";
+        }
+        return "Task:\n" + task + "\n\n";
+    }
+
+    private String buildRequestClarificationSection(String clarification) {
+        if (clarification == null) {
+            return "";
+        }
+        return "Уточнение запроса:\n" + clarification + "\n\n";
+    }
+
+    private String buildNodeInstructionSection(String instruction) {
+        if (instruction == null) {
+            return "";
+        }
+        return "Node instruction:\n" + instruction + "\n\n";
+    }
+
+    private String buildInputsSection(List<String> inputs) {
+        if (inputs.isEmpty()) {
+            return "";
+        }
         StringBuilder sb = new StringBuilder();
-        if (agentInput.task() != null) {
-            sb.append("Task:\n");
-            sb.append(agentInput.task()).append("\n\n");
+        sb.append("Available inputs:\n");
+        for (String input : inputs) {
+            sb.append("- ").append(input).append("\n");
         }
-        if (agentInput.nodeInstruction() != null) {
-            sb.append("Node instruction:\n");
-            sb.append(agentInput.nodeInstruction()).append("\n\n");
-        }
-        if (!agentInput.inputs().isEmpty()) {
-            sb.append("Available inputs:\n");
-            for (String input : agentInput.inputs()) {
-                sb.append("- ").append(input).append("\n");
-            }
-            sb.append("\n");
-        }
-        if (!agentInput.expectedResults().isEmpty()) {
-            sb.append("Expected result:\n");
-            for (String expectedResult : agentInput.expectedResults()) {
-                sb.append("- ").append(expectedResult).append("\n");
-            }
-            sb.append("\n");
-        }
-        sb.append("Use repository rules and installed skills already prepared for this run.\n");
+        sb.append("\n");
         return sb.toString();
+    }
+
+    private String buildExpectedResultsSection(List<String> expectedResults) {
+        if (expectedResults.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Expected result:\n");
+        for (String expectedResult : expectedResults) {
+            sb.append("- ").append(expectedResult).append("\n");
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
+    private String normalizePrompt(String prompt) {
+        String normalized = prompt.replace("\r\n", "\n");
+        return normalized.replaceAll("\n{3,}", "\n\n");
+    }
+
+    private String readTemplate(Resource templateResource) {
+        try (InputStream inputStream = templateResource.getInputStream()) {
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load runtime prompt template", exception);
+        }
     }
 
     private List<String> summarizePromptInputs(List<Map<String, Object>> resolvedContext, boolean includeUserRequest) {
@@ -174,6 +245,7 @@ public class AgentPromptBuilder {
     public record AgentInput(
             boolean startNode,
             String task,
+            String requestClarification,
             String nodeInstruction,
             List<String> inputs,
             List<String> expectedResults

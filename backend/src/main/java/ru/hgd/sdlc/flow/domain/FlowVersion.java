@@ -56,6 +56,9 @@ public class FlowVersion {
     @Column(name = "rule_refs", columnDefinition = "TEXT")
     private List<String> ruleRefs;
 
+    @Column(name = "coding_agent", nullable = false, length = 64)
+    private String codingAgent;
+
     @Column(name = "flow_yaml", nullable = false, columnDefinition = "TEXT")
     private String flowYaml;
 

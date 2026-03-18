@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Col, Input, Row, Select, Tabs, Typography, message } from 'antd';
+import { Button, Card, Col, Input, Row, Tabs, Typography, message } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -14,7 +14,7 @@ export default function GateApproval() {
   const [run, setRun] = useState(null);
   const [gate, setGate] = useState(null);
   const [comment, setComment] = useState('');
-  const [mode, setMode] = useState('keep_current_changes');
+  const [instruction, setInstruction] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
@@ -73,8 +73,8 @@ export default function GateApproval() {
         method: 'POST',
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
-          mode,
           comment,
+          instruction,
           reviewed_artifact_version_ids: [],
         }),
       });
@@ -135,19 +135,10 @@ export default function GateApproval() {
         </Col>
         <Col xs={24} lg={8}>
           <Card title="Decision">
-            <Text className="muted">Comment</Text>
+            <Text className="muted">Комментарий</Text>
             <Input.TextArea rows={5} style={{ marginTop: 8 }} value={comment} onChange={(e) => setComment(e.target.value)} />
-            <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Rework mode</Text>
-            <Select
-              style={{ width: '100%', marginTop: 8 }}
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value: 'keep_current_changes', label: 'keep_current_changes' },
-                { value: 'discard_current_changes', label: 'discard_current_changes' },
-                { value: 'requirements', label: 'requirements' },
-              ]}
-            />
+            <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Инструкция</Text>
+            <Input.TextArea rows={5} style={{ marginTop: 8 }} value={instruction} onChange={(e) => setInstruction(e.target.value)} />
             <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
               <Button type="primary" onClick={approve} loading={submitting}>Approve</Button>
               <Button type="default" style={{ borderColor: '#d97706', color: '#d97706' }} onClick={rework} loading={submitting}>Rework</Button>

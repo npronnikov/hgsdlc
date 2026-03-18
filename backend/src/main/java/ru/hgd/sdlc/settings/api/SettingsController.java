@@ -2,7 +2,6 @@ package ru.hgd.sdlc.settings.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
-import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,7 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.settings.application.SettingsService;
-import ru.hgd.sdlc.settings.domain.SystemSetting;
 
 @RestController
 @RequestMapping("/api/settings")
@@ -27,12 +25,12 @@ public class SettingsController {
 
     @GetMapping("/runtime")
     public RuntimeSettingsResponse getRuntimeSettings() {
-        Optional<SystemSetting> setting = settingsService.getWorkspaceRootSetting();
-        String workspaceRoot = setting.map(SystemSetting::getSettingValue).orElse(settingsService.getWorkspaceRoot());
+        SettingsService.RuntimeSettings settings = settingsService.getRuntimeSettings();
         return new RuntimeSettingsResponse(
-                workspaceRoot,
-                setting.map(SystemSetting::getUpdatedAt).orElse(null),
-                setting.map(SystemSetting::getUpdatedBy).orElse(null)
+                settings.workspaceRoot(),
+                settings.codingAgent(),
+                settings.updatedAt(),
+                settings.updatedBy()
         );
     }
 
@@ -44,21 +42,31 @@ public class SettingsController {
         if (request == null || request.workspaceRoot() == null || request.workspaceRoot().isBlank()) {
             throw new ValidationException("workspace_root is required");
         }
-        SystemSetting updated = settingsService.updateWorkspaceRoot(request.workspaceRoot(), user == null ? "system" : user.getUsername());
+        if (request.codingAgent() == null || request.codingAgent().isBlank()) {
+            throw new ValidationException("coding_agent is required");
+        }
+        SettingsService.RuntimeSettings updated = settingsService.updateRuntimeSettings(
+                request.workspaceRoot(),
+                request.codingAgent(),
+                user == null ? "system" : user.getUsername()
+        );
         RuntimeSettingsResponse response = new RuntimeSettingsResponse(
-                updated.getSettingValue(),
-                updated.getUpdatedAt(),
-                updated.getUpdatedBy()
+                updated.workspaceRoot(),
+                updated.codingAgent(),
+                updated.updatedAt(),
+                updated.updatedBy()
         );
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
     public record RuntimeSettingsRequest(
-            @JsonProperty("workspace_root") String workspaceRoot
+            @JsonProperty("workspace_root") String workspaceRoot,
+            @JsonProperty("coding_agent") String codingAgent
     ) {}
 
     public record RuntimeSettingsResponse(
             @JsonProperty("workspace_root") String workspaceRoot,
+            @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("updated_at") Instant updatedAt,
             @JsonProperty("updated_by") String updatedBy
     ) {}

@@ -165,7 +165,7 @@ Flow хранится и валидируется по JSON Schema (`flow.schema
 - `description`, `instruction`, `response_schema`
 - `skill_refs` (только для `ai`)
 - `produced_artifacts`, `expected_mutations`
-- `on_success`, `on_failure`, `on_submit`, `on_approve`, `on_rework_routes`
+- `on_success`, `on_failure`, `on_submit`, `on_approve`, `on_rework`
 - `command_engine`, `command_spec`, `success_exit_codes`, `retry_policy`, `idempotent` (для `command`)
 
 ### 5.4 Правила переходов
@@ -173,7 +173,7 @@ Flow хранится и валидируется по JSON Schema (`flow.schema
 - `ai` требует `on_success` и `on_failure`
 - `command` требует `on_success` (и **не допускает** `on_failure`)
 - `human_input` требует `on_submit`
-- `human_approval` требует `on_approve` и **минимум один** `on_rework_routes`
+- `human_approval` требует `on_approve` и `on_rework.next_node`
 - `terminal` **не допускает** переходы
 
 Все целевые ноды должны существовать. Ноды, недостижимые от `start_node_id`, запрещены.
@@ -208,7 +208,7 @@ Flow хранится и валидируется по JSON Schema (`flow.schema
 - Frontmatter — YAML object.
 - Обязательные поля зависят от `coding_agent`:
 
-`qwen`, `platform-native`:
+`qwen`:
 
 - `description`
 - `allowed_paths`
@@ -278,7 +278,7 @@ Flow хранится и валидируется по JSON Schema (`flow.schema
 - `GET /api/rule-templates/{provider}`
 - `GET /api/skill-templates/{provider}`
 
-`provider`: `qwen`, `claude`, `cursor`, `platform-native` (регистр и дефисы нормализуются).
+`provider`: `qwen`, `claude`, `cursor` (регистр и дефисы нормализуются).
 
 ### 6.6 Ошибки
 

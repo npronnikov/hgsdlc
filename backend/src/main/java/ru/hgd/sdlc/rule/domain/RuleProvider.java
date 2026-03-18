@@ -3,8 +3,7 @@ package ru.hgd.sdlc.rule.domain;
 public enum RuleProvider {
     QWEN,
     CLAUDE,
-    CURSOR,
-    PLATFORM_NATIVE;
+    CURSOR;
 
     public static RuleProvider from(String value) {
         if (value == null) {

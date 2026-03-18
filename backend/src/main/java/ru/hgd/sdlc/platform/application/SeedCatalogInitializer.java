@@ -149,6 +149,7 @@ Focus on external systems, message flows, and error handling.
                 "Restore architecture flow",
                 "Flow to reconstruct architecture artifacts from code.",
                 "analyze-architecture",
+                "qwen",
                 List.of("project-architecture-rule@1.0"),
                 """
 id: restore-architecture-flow
@@ -158,7 +159,6 @@ title: Restore architecture flow
 description: Flow to reconstruct architecture artifacts from code.
 status: published
 start_node_id: analyze-architecture
-coding_agent: qwen
 rule_refs:
   - project-architecture-rule@1.0
 fail_on_missing_declared_output: true
@@ -274,6 +274,7 @@ nodes:
             String title,
             String description,
             String startNodeId,
+            String codingAgent,
             List<String> ruleRefs,
             String flowYaml
     ) {
@@ -291,6 +292,7 @@ nodes:
         entity.setDescription(description);
         entity.setStartNodeId(startNodeId);
         entity.setRuleRefs(ruleRefs);
+        entity.setCodingAgent(codingAgent);
         entity.setFlowYaml(flowYaml.trim());
         entity.setChecksum(status == FlowStatus.PUBLISHED ? ChecksumUtil.sha256(flowYaml) : null);
         entity.setSavedBy("seed");

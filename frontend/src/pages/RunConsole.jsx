@@ -121,6 +121,11 @@ function renderAgentInputSection(agentInput) {
         <Descriptions.Item label="Task">
           {agentInput.task ? <pre className="code-block">{agentInput.task}</pre> : <Text type="secondary">—</Text>}
         </Descriptions.Item>
+        <Descriptions.Item label="Уточнение запроса">
+          {agentInput.requestClarification
+            ? <pre className="code-block">{agentInput.requestClarification}</pre>
+            : <Text type="secondary">—</Text>}
+        </Descriptions.Item>
         <Descriptions.Item label="Node Instruction">
           {agentInput.nodeInstruction
             ? <pre className="code-block">{agentInput.nodeInstruction}</pre>
@@ -328,6 +333,7 @@ function RunDetailView({ navigate, runId }) {
   const [nodes, setNodes] = useState([]);
   const [artifacts, setArtifacts] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [runtimeSettings, setRuntimeSettings] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const load = async ({ silent = false } = {}) => {
@@ -336,11 +342,12 @@ function RunDetailView({ navigate, runId }) {
     }
     setLoading(true);
     try {
-      const [runResult, nodeResult, artifactResult, auditResult] = await Promise.allSettled([
+      const [runResult, nodeResult, artifactResult, auditResult, settingsResult] = await Promise.allSettled([
         apiRequest(`/runs/${runId}`),
         apiRequest(`/runs/${runId}/nodes`),
         apiRequest(`/runs/${runId}/artifacts`),
         apiRequest(`/runs/${runId}/audit`),
+        apiRequest('/settings/runtime'),
       ]);
 
       const errors = [];
@@ -368,7 +375,13 @@ function RunDetailView({ navigate, runId }) {
         errors.push(auditResult.reason);
       }
 
-      if (!silent && errors.length === 4) {
+      if (settingsResult.status === 'fulfilled') {
+        setRuntimeSettings(settingsResult.value || null);
+      } else {
+        errors.push(settingsResult.reason);
+      }
+
+      if (!silent && errors.length === 5) {
         message.error(errors[0]?.message || 'Не удалось загрузить run');
       }
     } finally {
@@ -468,6 +481,14 @@ function RunDetailView({ navigate, runId }) {
         <div>
           <Text className="muted">target branch</Text>
           <div className="mono">{run.target_branch}</div>
+        </div>
+        <div>
+          <Text className="muted">workspace_root</Text>
+          <div className="mono">{runtimeSettings?.workspace_root || '—'}</div>
+        </div>
+        <div>
+          <Text className="muted">runtime coding_agent</Text>
+          <div className="mono">{runtimeSettings?.coding_agent || '—'}</div>
         </div>
       </div>
 

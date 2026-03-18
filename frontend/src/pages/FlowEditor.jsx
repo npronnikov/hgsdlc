@@ -163,6 +163,7 @@ function FlowNode({ data, selected }) {
         {data.isStart && <span className="flow-node-start">Start</span>}
       </div>
       <div className="flow-node-id">{data.id}</div>
+      {data.isTerminal && <span className="flow-node-stop">Stop</span>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -235,14 +236,6 @@ function toNodeData(node, isStart) {
       nextNode: rawRework.next_node || rawRework.nextNode || '',
     };
   }
-  const legacyRoutes = node.on_rework_routes || node.onReworkRoutes || null;
-  if (!onRework && legacyRoutes && typeof legacyRoutes === 'object') {
-    if (legacyRoutes.keep_current_changes) {
-      onRework = { keepChanges: true, nextNode: legacyRoutes.keep_current_changes };
-    } else if (legacyRoutes.discard_current_changes) {
-      onRework = { keepChanges: false, nextNode: legacyRoutes.discard_current_changes };
-    }
-  }
   return {
     id: node.id || '',
     title: node.title || '',
@@ -261,6 +254,7 @@ function toNodeData(node, isStart) {
     onApprove: node.on_approve || node.onApprove || '',
     onRework: onRework || { ...DEFAULT_REWORK },
     isStart: !!isStart,
+    isTerminal: kind === 'terminal',
   };
 }
 
@@ -424,6 +418,9 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       if (!data.onSuccess) {
         errors.push(`Executor нода требует on_success: ${node.id}`);
       }
+    }
+    if (kind === 'ai' && node.id === meta.startNodeId && !String(data.instruction || '').trim()) {
+      errors.push(`Стартовая AI нода требует instruction: ${node.id}`);
     }
 
     if (kind === 'human_input') {
@@ -926,7 +923,6 @@ export default function FlowEditor() {
       `title: ${flowMeta.title}`,
       `description: ${flowMeta.description || ''}`,
       `start_node_id: ${flowMeta.startNodeId}`,
-      `coding_agent: ${flowMeta.codingAgent || ''}`,
     ];
     lines.push(`fail_on_missing_declared_output: ${!!flowMeta.failOnMissingDeclaredOutput}`);
     lines.push(`fail_on_missing_expected_mutation: ${!!flowMeta.failOnMissingExpectedMutation}`);
@@ -1054,6 +1050,7 @@ export default function FlowEditor() {
         },
         body: JSON.stringify({
           flow_id: flowMeta.flowId,
+          coding_agent: flowMeta.codingAgent,
           flow_yaml: flowYaml,
           publish,
           release,

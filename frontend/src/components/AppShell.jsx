@@ -28,7 +28,7 @@ const navItems = [
   { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
   { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Настройки' },
+  { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
   { key: '/versions', icon: <FileTextOutlined />, label: 'Versions / Snapshots' },
 ];
 
@@ -43,7 +43,7 @@ const routeMeta = {
   '/skill-editor': { title: 'Skill Editor', menuKey: '/skills' },
   '/run-launch': { title: 'Run Launch', menuKey: '/run-launch' },
   '/run-console': { title: 'Run Console', menuKey: '/run-console' },
-  '/settings': { title: 'Настройки', menuKey: '/settings' },
+  '/settings': { title: 'Runtime Settings', menuKey: '/settings' },
   '/gates-inbox': { title: 'Gates Inbox', menuKey: '/run-console' },
   '/gate-input': { title: 'Human Input Gate', menuKey: '/run-console' },
   '/gate-approval': { title: 'Human Approval Gate', menuKey: '/run-console' },
@@ -80,7 +80,7 @@ export default function AppShell() {
   const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
   const displayName = user?.username || 'Пользователь';
   const userMenuItems = [
-    { key: 'settings', icon: <SettingOutlined />, label: 'Настройки' },
+    { key: 'settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Выход' },
   ];
 

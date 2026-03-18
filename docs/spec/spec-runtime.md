@@ -389,7 +389,7 @@ runtime пишет `gate_input_submitted`, закрывает gate, помеча
 node execution помечается `succeeded`, применяется `on_approve`.
 2. На `request-rework` gate получает `rework_requested`, сохраняет `mode`, `comment`,
 `reviewed_artifact_version_ids`, node execution помечается `succeeded`,
-transition выбирается из `on_rework_routes[mode]` или `on_rework.next_node`.
+transition выбирается из `on_rework.next_node`.
 3. Дополнительных checks по files/artifacts после approval runtime не выполняет.
 
 ### 8.6 `terminal` node

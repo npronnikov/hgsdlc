@@ -75,7 +75,6 @@ public class RuntimeStepTxService {
             String flowSnapshotJson,
             String currentNodeId,
             String featureRequest,
-            String contextRootDir,
             String contextFileManifestJson,
             String workspaceRoot,
             String createdBy,
@@ -90,7 +89,6 @@ public class RuntimeStepTxService {
                 .status(RunStatus.CREATED)
                 .currentNodeId(currentNodeId)
                 .featureRequest(featureRequest)
-                .contextRootDir(contextRootDir)
                 .contextFileManifestJson(contextFileManifestJson)
                 .workspaceRoot(workspaceRoot)
                 .createdBy(createdBy)
@@ -364,6 +362,7 @@ public class RuntimeStepTxService {
             String actorId,
             String mode,
             String comment,
+            String instruction,
             List<UUID> reviewedArtifactVersionIds
     ) {
         GateInstanceEntity gate = getGate(gateId);
@@ -372,6 +371,7 @@ public class RuntimeStepTxService {
         gate.setPayloadJson(toJson(mapOf(
                 "mode", mode,
                 "comment", comment,
+                "instruction", instruction,
                 "reviewed_artifact_version_ids", reviewedArtifactVersionIds == null ? List.of() : reviewedArtifactVersionIds
         )));
         gateInstanceRepository.save(gate);
@@ -382,9 +382,81 @@ public class RuntimeStepTxService {
                 "gate_rework_requested",
                 ActorType.HUMAN,
                 actorId,
-                mapOf("mode", mode, "comment", comment)
+                mapOf("mode", mode, "comment", comment, "instruction", instruction)
         );
         return gate;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity replacePendingReworkInstruction(UUID runId, UUID gateId, String instruction) {
+        RunEntity run = getRun(runId);
+        String nextInstruction = trimToNull(instruction);
+        run.setPendingReworkInstruction(nextInstruction);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                gateId,
+                "rework_instruction_staged",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "instruction", nextInstruction,
+                        "action", nextInstruction == null ? "cleared" : "set"
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity appendFeatureRequestClarification(UUID runId, UUID gateId, String clarification) {
+        RunEntity run = getRun(runId);
+        String trimmedClarification = trimToNull(clarification);
+        if (trimmedClarification == null) {
+            return run;
+        }
+        String currentFeatureRequest = run.getFeatureRequest();
+        if (currentFeatureRequest == null || currentFeatureRequest.isBlank()) {
+            run.setFeatureRequest(trimmedClarification);
+        } else {
+            run.setFeatureRequest(currentFeatureRequest + "\n" + trimmedClarification);
+        }
+        run.setPendingReworkInstruction(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                gateId,
+                "feature_request_clarified",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf("clarification", trimmedClarification)
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity consumePendingReworkInstruction(UUID runId, UUID nodeExecutionId, String nodeId) {
+        RunEntity run = getRun(runId);
+        String instruction = trimToNull(run.getPendingReworkInstruction());
+        if (instruction == null) {
+            return run;
+        }
+        run.setPendingReworkInstruction(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                nodeExecutionId,
+                null,
+                "rework_instruction_consumed",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "node_id", nodeId,
+                        "instruction", instruction
+                )
+        );
+        return run;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -594,5 +666,13 @@ public class RuntimeStepTxService {
     private GateInstanceEntity getGate(UUID gateId) {
         return gateInstanceRepository.findById(gateId)
                 .orElseThrow(() -> new NotFoundException("Gate not found: " + gateId));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

@@ -49,8 +49,8 @@ public class RunEntity {
     @Column(name = "feature_request", nullable = false, columnDefinition = "TEXT")
     private String featureRequest;
 
-    @Column(name = "context_root_dir", length = 1024)
-    private String contextRootDir;
+    @Column(name = "pending_rework_instruction", columnDefinition = "TEXT")
+    private String pendingReworkInstruction;
 
     @Column(name = "context_file_manifest_json", columnDefinition = "TEXT")
     private String contextFileManifestJson;

@@ -16,10 +16,6 @@ export default function PromptPackage() {
           <div className="prompt-title">system_header</div>
           <pre className="code-block">You are a coding agent...</pre>
         </div>
-        <div className="prompt-section">
-          <div className="prompt-title">project_context</div>
-          <pre className="code-block">context_root_dir: src/main/java</pre>
-        </div>
       </Card>
     </div>
   );

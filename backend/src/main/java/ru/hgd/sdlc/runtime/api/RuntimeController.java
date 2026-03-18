@@ -7,8 +7,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -36,18 +39,23 @@ import ru.hgd.sdlc.runtime.domain.RunEntity;
 @RestController
 @RequestMapping("/api")
 public class RuntimeController {
+    private static final Logger log = LoggerFactory.getLogger(RuntimeController.class);
+
     private final RuntimeService runtimeService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor taskExecutor;
 
     public RuntimeController(
             RuntimeService runtimeService,
             IdempotencyService idempotencyService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TaskExecutor taskExecutor
     ) {
         this.runtimeService = runtimeService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
+        this.taskExecutor = taskExecutor;
     }
 
     @PostMapping("/runs")
@@ -77,7 +85,6 @@ public class RuntimeController {
                                     request.projectId(),
                                     request.targetBranch(),
                                     request.flowCanonicalName(),
-                                    request.contextRootDir(),
                                     request.featureRequest()
                             ),
                             user
@@ -93,16 +100,26 @@ public class RuntimeController {
                         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                             @Override
                             public void afterCommit() {
-                                runtimeService.startRun(createdRunId);
+                                startRunAsync(createdRunId);
                             }
                         });
                     } else {
-                        runtimeService.startRun(run.getId());
+                        startRunAsync(run.getId());
                     }
                     return created;
                 }
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    private void startRunAsync(UUID runId) {
+        taskExecutor.execute(() -> {
+            try {
+                runtimeService.startRun(runId);
+            } catch (Exception ex) {
+                log.error("Failed to start run {}", runId, ex);
+            }
+        });
     }
 
     @GetMapping("/runs/{runId}")
@@ -213,6 +230,7 @@ public class RuntimeController {
                         request.expectedGateVersion(),
                         request.mode(),
                         request.comment(),
+                        request.instruction(),
                         request.reviewedArtifactVersionIds()
                 ),
                 user
@@ -301,7 +319,6 @@ public class RuntimeController {
             @JsonProperty("project_id") UUID projectId,
             @JsonProperty("target_branch") String targetBranch,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
-            @JsonProperty("context_root_dir") String contextRootDir,
             @JsonProperty("feature_request") String featureRequest,
             @JsonProperty("idempotency_key") String idempotencyKey
     ) {}
@@ -321,7 +338,6 @@ public class RuntimeController {
             @JsonProperty("status") String status,
             @JsonProperty("current_node_id") String currentNodeId,
             @JsonProperty("feature_request") String featureRequest,
-            @JsonProperty("context_root_dir") String contextRootDir,
             @JsonProperty("workspace_root") String workspaceRoot,
             @JsonProperty("error_code") String errorCode,
             @JsonProperty("error_message") String errorMessage,
@@ -341,7 +357,6 @@ public class RuntimeController {
                     run.getStatus().name().toLowerCase(),
                     run.getCurrentNodeId(),
                     run.getFeatureRequest(),
-                    run.getContextRootDir(),
                     run.getWorkspaceRoot(),
                     run.getErrorCode(),
                     run.getErrorMessage(),
@@ -465,6 +480,7 @@ public class RuntimeController {
             @JsonProperty("expected_gate_version") Long expectedGateVersion,
             @JsonProperty("mode") String mode,
             @JsonProperty("comment") String comment,
+            @JsonProperty("instruction") String instruction,
             @JsonProperty("reviewed_artifact_version_ids") List<UUID> reviewedArtifactVersionIds
     ) {}
 

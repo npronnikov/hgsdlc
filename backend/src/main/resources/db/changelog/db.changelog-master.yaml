@@ -25,3 +25,7 @@ databaseChangeLog:
       file: db/changelog/017-runtime.sql
   - include:
       file: db/changelog/018-settings.sql
+  - include:
+      file: db/changelog/019-flow-runtime-settings.sql
+  - include:
+      file: db/changelog/020-runtime-rework-instruction.sql

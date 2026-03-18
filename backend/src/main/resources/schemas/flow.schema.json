@@ -8,7 +8,6 @@
     "canonical_name",
     "title",
     "start_node_id",
-    "coding_agent",
     "nodes"
   ],
   "properties": {
@@ -19,7 +18,6 @@
     "description": { "type": "string" },
     "status": { "type": "string", "minLength": 1 },
     "start_node_id": { "type": "string", "minLength": 1 },
-    "coding_agent": { "type": "string", "minLength": 1 },
     "rule_refs": {
       "type": "array",
       "items": { "type": "string" }

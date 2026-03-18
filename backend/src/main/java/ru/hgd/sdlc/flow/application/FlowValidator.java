@@ -48,7 +48,7 @@ public class FlowValidator {
         }
 
         for (NodeModel node : nodesById.values()) {
-            validateNode(node, nodesById, errors);
+            validateNode(node, nodesById, flow.getStartNodeId(), errors);
         }
 
         if (flow.getStartNodeId() != null && nodesById.containsKey(flow.getStartNodeId())) {
@@ -63,7 +63,7 @@ public class FlowValidator {
         return errors;
     }
 
-    private void validateNode(NodeModel node, Map<String, NodeModel> nodesById, List<String> errors) {
+    private void validateNode(NodeModel node, Map<String, NodeModel> nodesById, String startNodeId, List<String> errors) {
         String nodeKind = normalize(node.getNodeKind());
         if (nodeKind == null) {
             nodeKind = normalize(node.getType());
@@ -89,7 +89,7 @@ public class FlowValidator {
             return;
         }
         if ("ai".equals(nodeKind) || "command".equals(nodeKind)) {
-            validateExecutor(node, nodeKind, nodesById, errors);
+            validateExecutor(node, nodeKind, startNodeId, nodesById, errors);
             return;
         }
         validateGate(node, nodeKind, nodesById, errors);
@@ -100,7 +100,9 @@ public class FlowValidator {
                 || (node.getOnFailure() != null && !node.getOnFailure().isBlank())
                 || (node.getOnSubmit() != null && !node.getOnSubmit().isBlank())
                 || (node.getOnApprove() != null && !node.getOnApprove().isBlank())
-                || (node.getOnReworkRoutes() != null && !node.getOnReworkRoutes().isEmpty());
+                || (node.getOnRework() != null
+                && node.getOnRework().getNextNode() != null
+                && !node.getOnRework().getNextNode().isBlank());
         if (hasTransition) {
             errors.add("Terminal node cannot have transitions: " + node.getId());
         }
@@ -112,6 +114,7 @@ public class FlowValidator {
     private void validateExecutor(
             NodeModel node,
             String nodeKind,
+            String startNodeId,
             Map<String, NodeModel> nodesById,
             List<String> errors
     ) {
@@ -121,6 +124,12 @@ public class FlowValidator {
         }
         if ("ai".equals(nodeKind) && (node.getOnFailure() == null || node.getOnFailure().isBlank())) {
             errors.add("AI executor requires on_failure: " + node.getId());
+        }
+        if ("ai".equals(nodeKind)
+                && node.getId() != null
+                && node.getId().equals(startNodeId)
+                && (node.getInstruction() == null || node.getInstruction().isBlank())) {
+            errors.add("Start AI node requires instruction: " + node.getId());
         }
         if (hasOnSuccess) {
             assertTarget(node.getId(), "on_success", node.getOnSuccess(), nodesById, errors);
@@ -152,12 +161,8 @@ public class FlowValidator {
             var onRework = node.getOnRework();
             if (onRework != null && onRework.getNextNode() != null && !onRework.getNextNode().isBlank()) {
                 assertTarget(node.getId(), "on_rework", onRework.getNextNode(), nodesById, errors);
-            } else if (node.getOnReworkRoutes() == null || node.getOnReworkRoutes().isEmpty()) {
-                errors.add("human_approval gate requires on_rework: " + node.getId());
             } else {
-                for (Map.Entry<String, String> entry : node.getOnReworkRoutes().entrySet()) {
-                    assertTarget(node.getId(), "on_rework:" + entry.getKey(), entry.getValue(), nodesById, errors);
-                }
+                errors.add("human_approval gate requires on_rework: " + node.getId());
             }
             return;
         }
@@ -209,8 +214,6 @@ public class FlowValidator {
         }
         if (node.getOnRework() != null && node.getOnRework().getNextNode() != null) {
             targets.add(node.getOnRework().getNextNode());
-        } else if (node.getOnReworkRoutes() != null) {
-            targets.addAll(node.getOnReworkRoutes().values());
         }
         return targets;
     }

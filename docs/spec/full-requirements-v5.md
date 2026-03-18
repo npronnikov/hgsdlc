@@ -524,8 +524,9 @@ nodes:
       - approve
       - rework
     on_approve: build-plan
-    on_rework_routes:
-      keep_current_changes: process-answers
+    on_rework:
+      keep_changes: true
+      next_node: process-answers
 
   - id: build-plan
     version: 1.0.0
@@ -558,8 +559,9 @@ nodes:
       - approve
       - rework
     on_approve: implement-feature
-    on_rework_routes:
-      keep_current_changes: build-plan
+    on_rework:
+      keep_changes: true
+      next_node: build-plan
 
   - id: implement-feature
     version: 1.0.0
@@ -600,9 +602,9 @@ nodes:
       - approve
       - rework
     on_approve: commit-result
-    on_rework_routes:
-      discard_current_changes: rollback-workspace
-      keep_current_changes: implement-feature
+    on_rework:
+      keep_changes: false
+      next_node: rollback-workspace
 
   - id: rollback-workspace
     version: 1.0.0
@@ -951,7 +953,7 @@ Human approval gate:
 * `External Command` node moves to `on_success`
 * `human_input` submit moves to `on_submit`
 * `human_approval approve` moves to `on_approve`
-* `human_approval rework` moves to `on_rework_routes[mode]`
+* `human_approval rework` moves to `on_rework.next_node`
 
 ### 11.7 DAG rule
 
@@ -965,7 +967,7 @@ Human approval gate:
 
 Backward edges разрешены только в:
 
-* `on_rework_routes`
+* `on_rework`
 
 ---
 
@@ -1034,7 +1036,7 @@ Backward edges разрешены только в:
 * `allowed_actions`
 * `allowed_roles`
 * `on_approve`
-* `on_rework_routes`
+* `on_rework`
 
 ### 12.6 `skill.schema.json`
 
@@ -1425,7 +1427,7 @@ Runtime:
 5. После решения:
 
    * `approve -> on_approve`
-   * `rework -> on_rework_routes[selected_mode]`
+   * `rework -> on_rework.next_node`
 6. Сохранить decision comment и reviewed artifact versions.
 7. Перевести gate в terminal status решения.
 8. Перевести run в `running`, если есть следующий node.
@@ -2434,7 +2436,7 @@ TECH_APPROVER открывает `approve-code`.
 * `allowed_actions`
 * `allowed_roles`
 * `on_approve`
-* `on_rework_routes`
+* `on_rework`
 
 ---
 

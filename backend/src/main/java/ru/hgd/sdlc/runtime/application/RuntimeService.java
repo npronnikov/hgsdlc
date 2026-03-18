@@ -156,6 +156,7 @@ public class RuntimeService {
         if (flowModel.getStartNodeId() == null || flowModel.getStartNodeId().isBlank()) {
             throw new ValidationException("Flow start_node_id is required");
         }
+        flowModel.setCodingAgent(flowVersion.getCodingAgent());
 
         boolean activeRunExists = runRepository.existsByProjectIdAndTargetBranchAndStatusIn(
                 project.getId(),
@@ -179,7 +180,6 @@ public class RuntimeService {
                 toJson(flowModel),
                 flowModel.getStartNodeId(),
                 command.featureRequest().trim(),
-                trimToNull(command.contextRootDir()),
                 toJson(manifestEntries),
                 runWorkspaceRoot.toString(),
                 resolveActorId(user),
@@ -267,7 +267,6 @@ public class RuntimeService {
 
         writeContextManifest(
                 runScopeRoot,
-                run.getContextRootDir(),
                 run.getFeatureRequest(),
                 parseContextManifestEntries(run.getContextFileManifestJson())
         );
@@ -508,7 +507,8 @@ public class RuntimeService {
         NodeModel node = requireNode(flowModel, gate.getNodeId());
         enforceGateRole(node, user);
 
-        String transitionTarget = resolveReworkTarget(node, command.mode());
+        String transitionTarget = resolveReworkTarget(node);
+        String reworkInstruction = trimToNull(command.instruction());
         GateInstanceEntity updatedGate = runtimeStepTxService.requestRework(
                 run.getId(),
                 gate.getId(),
@@ -516,8 +516,15 @@ public class RuntimeService {
                 resolveActorId(user),
                 trimToNull(command.mode()),
                 trimToNull(command.comment()),
+                reworkInstruction,
                 command.reviewedArtifactVersionIds()
         );
+        if (transitionTarget.equals(flowModel.getStartNodeId())) {
+            runtimeStepTxService.appendFeatureRequestClarification(run.getId(), gate.getId(), reworkInstruction);
+            runtimeStepTxService.replacePendingReworkInstruction(run.getId(), gate.getId(), null);
+        } else {
+            runtimeStepTxService.replacePendingReworkInstruction(run.getId(), gate.getId(), reworkInstruction);
+        }
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
         applyTransition(run, null, updatedGate, transitionTarget, "on_rework");
         tick(run.getId());
@@ -597,6 +604,7 @@ public class RuntimeService {
 
     private boolean executeAiNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
         FlowModel flowModel = parseFlowSnapshot(run);
+        String pendingReworkInstruction = trimToNull(run.getPendingReworkInstruction());
         List<Map<String, Object>> resolvedContext = resolveExecutionContext(run, node);
         AgentInvocationContext agentInvocationContext = materializeAgentWorkspace(run, flowModel, node, execution, resolvedContext);
         runtimeStepTxService.appendAudit(
@@ -670,6 +678,9 @@ public class RuntimeService {
         );
 
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId());
+        if (pendingReworkInstruction != null) {
+            runtimeStepTxService.consumePendingReworkInstruction(run.getId(), execution.getId(), node.getId());
+        }
         applyTransition(run, execution, null, node.getOnSuccess(), "on_success");
         return true;
     }
@@ -778,11 +789,19 @@ public class RuntimeService {
             NodeExecutionEntity execution,
             List<Map<String, Object>> resolvedContext
     ) {
-        String codingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
-        if (!"qwen".equals(codingAgent)) {
+        String flowCodingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
+        String runtimeCodingAgent = settingsService.getRuntimeCodingAgent();
+        if (!runtimeCodingAgent.equals(flowCodingAgent)) {
+            throw new NodeFailureException(
+                    "CODING_AGENT_MISMATCH",
+                    "Flow coding_agent does not match runtime settings: flow=" + flowCodingAgent + ", runtime=" + runtimeCodingAgent,
+                    false
+            );
+        }
+        if (!"qwen".equals(runtimeCodingAgent)) {
             throw new NodeFailureException(
                     "UNSUPPORTED_CODING_AGENT",
-                    "Only qwen coding_agent is supported in runtime",
+                    "Runtime coding_agent is not implemented: " + runtimeCodingAgent,
                     false
             );
         }
@@ -801,7 +820,7 @@ public class RuntimeService {
         deleteDirectoryContents(skillsRoot);
 
         List<RuleVersion> rules = resolveFlowRules(flowModel);
-        List<SkillVersion> skills = resolveNodeSkills(node);
+        List<SkillVersion> skills = resolveNodeSkills(flowModel, node);
 
         String renderedRules = renderQwenRules(flowModel, rules);
         writeFile(rulesPath, renderedRules.getBytes(StandardCharsets.UTF_8));
@@ -863,6 +882,7 @@ public class RuntimeService {
     }
 
     private List<RuleVersion> resolveFlowRules(FlowModel flowModel) {
+        String codingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
         List<String> refs = flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs();
         List<RuleVersion> rules = new ArrayList<>();
         for (String ref : refs) {
@@ -875,10 +895,10 @@ public class RuntimeService {
                             "Published rule not found: " + ref,
                             false
                     ));
-            if (!"QWEN".equals(rule.getCodingAgent().name())) {
+            if (!codingAgent.equals(normalize(rule.getCodingAgent().name()))) {
                 throw new NodeFailureException(
                         "RULE_PROVIDER_MISMATCH",
-                        "Rule provider must be qwen for qwen flow: " + ref,
+                        "Rule provider must match flow coding_agent " + codingAgent + ": " + ref,
                         false
                 );
             }
@@ -887,7 +907,8 @@ public class RuntimeService {
         return rules;
     }
 
-    private List<SkillVersion> resolveNodeSkills(NodeModel node) {
+    private List<SkillVersion> resolveNodeSkills(FlowModel flowModel, NodeModel node) {
+        String codingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
         List<String> refs = node.getSkillRefs() == null ? List.of() : node.getSkillRefs();
         List<SkillVersion> skills = new ArrayList<>();
         for (String ref : refs) {
@@ -900,10 +921,10 @@ public class RuntimeService {
                             "Published skill not found: " + ref,
                             false
                     ));
-            if (!"QWEN".equals(skill.getCodingAgent().name())) {
+            if (!codingAgent.equals(normalize(skill.getCodingAgent().name()))) {
                 throw new NodeFailureException(
                         "SKILL_PROVIDER_MISMATCH",
-                        "Skill provider must be qwen for qwen flow: " + ref,
+                        "Skill provider must match flow coding_agent " + codingAgent + ": " + ref,
                         false
                 );
             }
@@ -1282,20 +1303,7 @@ public class RuntimeService {
         }
     }
 
-    private String resolveReworkTarget(NodeModel node, String mode) {
-        if (node.getOnReworkRoutes() != null && !node.getOnReworkRoutes().isEmpty()) {
-            if (mode == null || mode.isBlank()) {
-                if (node.getOnReworkRoutes().size() == 1) {
-                    return node.getOnReworkRoutes().values().iterator().next();
-                }
-                throw new ValidationException("mode is required for on_rework_routes");
-            }
-            String target = node.getOnReworkRoutes().get(mode);
-            if (target == null || target.isBlank()) {
-                throw new ValidationException("Unknown rework mode: " + mode);
-            }
-            return target;
-        }
+    private String resolveReworkTarget(NodeModel node) {
         if (node.getOnRework() != null && node.getOnRework().getNextNode() != null && !node.getOnRework().getNextNode().isBlank()) {
             return node.getOnRework().getNextNode();
         }
@@ -1362,12 +1370,10 @@ public class RuntimeService {
 
     private void writeContextManifest(
             Path runScopeRoot,
-            String contextRootDir,
             String featureRequest,
             List<String> contextFileManifest
     ) {
         Map<String, Object> manifest = new LinkedHashMap<>();
-        manifest.put("context_root_dir", contextRootDir);
         manifest.put("context_file_manifest", contextFileManifest);
         manifest.put("feature_request", featureRequest);
         writeFile(runScopeRoot.resolve("context").resolve("context-manifest.json"), toJson(manifest).getBytes(StandardCharsets.UTF_8));
@@ -1736,7 +1742,6 @@ public class RuntimeService {
             UUID projectId,
             String targetBranch,
             String flowCanonicalName,
-            String contextRootDir,
             String featureRequest
     ) {}
 
@@ -1763,6 +1768,7 @@ public class RuntimeService {
             Long expectedGateVersion,
             String mode,
             String comment,
+            String instruction,
             List<UUID> reviewedArtifactVersionIds
     ) {}
 

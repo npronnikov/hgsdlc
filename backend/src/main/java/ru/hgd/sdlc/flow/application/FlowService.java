@@ -129,9 +129,11 @@ public class FlowService {
         if (model.getStartNodeId() == null || model.getStartNodeId().isBlank()) {
             throw new ValidationException("start_node_id is required in flow_yaml");
         }
-        if (model.getCodingAgent() == null || model.getCodingAgent().isBlank()) {
-            throw new ValidationException("coding_agent is required in flow_yaml");
+        String codingAgent = normalizeCodingAgent(request.codingAgent());
+        if (codingAgent == null) {
+            throw new ValidationException("coding_agent is required");
         }
+        model.setCodingAgent(codingAgent);
 
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
@@ -141,7 +143,7 @@ public class FlowService {
             throw new ValidationException(validationErrors.getFirst());
         }
         if (publish) {
-            validateReferences(model);
+            validateReferences(model, codingAgent);
         }
 
         List<FlowVersion> allVersions = repository.findByFlowIdOrderBySavedAtDesc(flowId);
@@ -201,6 +203,7 @@ public class FlowService {
         entity.setDescription(model.getDescription());
         entity.setStartNodeId(model.getStartNodeId().trim());
         entity.setRuleRefs(model.getRuleRefs());
+        entity.setCodingAgent(codingAgent);
         entity.setFlowYaml(updatedYaml);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedYaml) : null);
         entity.setSavedBy(resolveSavedBy(user));
@@ -215,16 +218,29 @@ public class FlowService {
         return saved;
     }
 
-    private void validateReferences(FlowModel model) {
+    private String normalizeCodingAgent(String codingAgent) {
+        if (codingAgent == null || codingAgent.isBlank()) {
+            return null;
+        }
+        return codingAgent.trim().toLowerCase().replace('-', '_');
+    }
+
+    private void validateReferences(FlowModel model, String codingAgent) {
         List<String> brokenRules = new ArrayList<>();
         List<String> brokenSkills = new ArrayList<>();
+        List<String> mismatchedRules = new ArrayList<>();
+        List<String> mismatchedSkills = new ArrayList<>();
         for (String ruleRef : model.getRuleRefs()) {
             if (ruleRef == null || ruleRef.isBlank()) {
                 continue;
             }
-            boolean exists = ruleRepository.findFirstByCanonicalNameAndStatus(ruleRef, RuleStatus.PUBLISHED).isPresent();
-            if (!exists) {
+            var rule = ruleRepository.findFirstByCanonicalNameAndStatus(ruleRef, RuleStatus.PUBLISHED).orElse(null);
+            if (rule == null) {
                 brokenRules.add(ruleRef);
+                continue;
+            }
+            if (!codingAgent.equals(rule.getCodingAgent().name().toLowerCase())) {
+                mismatchedRules.add(ruleRef);
             }
         }
         for (NodeModel node : model.getNodes()) {
@@ -235,9 +251,13 @@ public class FlowService {
                 if (skillRef == null || skillRef.isBlank()) {
                     continue;
                 }
-                boolean exists = skillRepository.findFirstByCanonicalNameAndStatus(skillRef, SkillStatus.PUBLISHED).isPresent();
-                if (!exists) {
+                var skill = skillRepository.findFirstByCanonicalNameAndStatus(skillRef, SkillStatus.PUBLISHED).orElse(null);
+                if (skill == null) {
                     brokenSkills.add(skillRef);
+                    continue;
+                }
+                if (!codingAgent.equals(skill.getCodingAgent().name().toLowerCase())) {
+                    mismatchedSkills.add(skillRef);
                 }
             }
         }
@@ -246,6 +266,12 @@ public class FlowService {
         }
         if (!brokenSkills.isEmpty()) {
             throw new ValidationException("Referenced skills not published: " + String.join(", ", brokenSkills));
+        }
+        if (!mismatchedRules.isEmpty()) {
+            throw new ValidationException("Referenced rules mismatch coding_agent: " + String.join(", ", mismatchedRules));
+        }
+        if (!mismatchedSkills.isEmpty()) {
+            throw new ValidationException("Referenced skills mismatch coding_agent: " + String.join(", ", mismatchedSkills));
         }
     }
 
