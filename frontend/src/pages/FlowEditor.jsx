@@ -29,6 +29,7 @@ import { useLocation, useParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { parse as parseYaml } from 'yaml';
+import Editor from '@monaco-editor/react';
 
 const { Title, Text } = Typography;
 
@@ -128,8 +129,6 @@ const getDraftForMajor = (versions, major) => (
 
 const EXECUTION_CONTEXT_TYPES = [
   { value: 'user_request', label: 'Запрос пользователя' },
-  { value: 'directory_ref', label: 'Каталог' },
-  { value: 'file_ref', label: 'Файл' },
   { value: 'artifact_ref', label: 'Артефакт' },
 ];
 
@@ -137,8 +136,6 @@ const SCOPE_OPTIONS = [
   { value: 'project', label: 'Scope:project' },
   { value: 'run', label: 'Scope:run' },
 ];
-
-const defaultScopeForContext = (type) => (type === 'artifact_ref' ? 'run' : 'project');
 
 const NODE_TYPE_OPTIONS = [
   { key: 'ai', label: 'AI Executor' },
@@ -359,14 +356,19 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
           if (entry.required === undefined || entry.required === null) {
             errors.push(`execution_context required не задан: ${node.id}`);
           }
-          if (entry.type !== 'user_request' && !entry.path) {
-            errors.push(`execution_context path не задан: ${node.id}`);
+          if (entry.type === 'artifact_ref') {
+            if (!entry.path) {
+              errors.push(`execution_context path не задан: ${node.id}`);
+            }
+            if (!entry.scope) {
+              errors.push(`execution_context scope не задан: ${node.id}`);
+            }
+            if (entry.scope === 'run' && !entry.node_id) {
+              errors.push(`execution_context node_id не задан для run-scope артефакта: ${node.id}`);
+            }
           }
           if (entry.type === 'user_request' && entry.path) {
             errors.push(`user_request не должен иметь path: ${node.id}`);
-          }
-          if (entry.type !== 'user_request' && !entry.scope) {
-            errors.push(`execution_context scope не задан: ${node.id}`);
           }
         });
       }
@@ -517,6 +519,7 @@ export default function FlowEditor() {
   );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedNodeKind = selectedNode?.data?.nodeKind || selectedNode?.data?.type || '';
+  const showExecutionContextEditor = ['ai', 'human_input', 'human_approval'].includes(selectedNodeKind);
   const validationErrors = validateFlow(nodes, flowMeta, rulesCatalog, skillsCatalog);
   const isReadOnly = !isEditing;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
@@ -956,6 +959,9 @@ export default function FlowEditor() {
             lines.push(`        required: ${!!entry.required}`);
             if (entry.scope) {
               lines.push(`        scope: ${entry.scope}`);
+            }
+            if (entry.node_id) {
+              lines.push(`        node_id: ${entry.node_id}`);
             }
             if (entry.path) {
               lines.push(`        path: ${entry.path}`);
@@ -1629,53 +1635,67 @@ export default function FlowEditor() {
                     />
                   </div>
                 </div>
-                {(selectedNodeKind === 'ai') && (
+                {showExecutionContextEditor && (
                   <>
                     <Divider />
                     <div>
-                      <Text className="muted">Контекст исполнения</Text>
-                      <div className="field-control">
-                        <div className="context-list">
+                      <Title level={5}>Контекст исполнения</Title>
+                      <Text className="muted">Входные данные ноды</Text>
+                      <div className="context-list">
                         {(selectedNode.data.executionContext || []).map((entry, index) => (
                           <div key={`${entry.type}-${index}`} className="context-row">
-                            <Select
-                              value={entry.type}
-                              options={EXECUTION_CONTEXT_TYPES}
-                              disabled={isReadOnly}
-                              onChange={(value) => updateSelectedNodeList(
-                                'executionContext',
-                                index,
-                                value === 'user_request'
-                                  ? { type: value, path: '', scope: undefined }
-                                  : { type: value, scope: entry.scope || defaultScopeForContext(value) }
-                              )}
-                              style={{ minWidth: 140 }}
-                            />
-                            {entry.type !== 'user_request' && (
+                            <div className="context-row-header">
                               <Select
-                                value={entry.scope || defaultScopeForContext(entry.type)}
-                                options={SCOPE_OPTIONS}
+                                value={entry.type}
+                                options={EXECUTION_CONTEXT_TYPES}
                                 disabled={isReadOnly}
-                                onChange={(value) => updateSelectedNodeList('executionContext', index, { scope: value })}
-                                style={{ minWidth: 140 }}
+                                onChange={(value) => updateSelectedNodeList(
+                                  'executionContext',
+                                  index,
+                                  value === 'user_request'
+                                    ? { type: value, path: '', scope: undefined, node_id: undefined }
+                                    : { type: value, scope: entry.scope || 'run' }
+                                )}
                               />
-                            )}
-                            {entry.type !== 'user_request' && (
-                              <Input
-                                value={entry.path || ''}
-                                placeholder="путь"
+                              <Button
+                                size="small"
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
-                                onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
+                                onClick={() => removeSelectedNodeListItem('executionContext', index)}
                               />
+                            </div>
+                            {entry.type === 'artifact_ref' && (
+                              <div className="context-row-fields">
+                                <Select
+                                  value={entry.scope || 'run'}
+                                  options={SCOPE_OPTIONS}
+                                  disabled={isReadOnly}
+                                  onChange={(value) => updateSelectedNodeList('executionContext', index, {
+                                    scope: value,
+                                    node_id: value === 'project' ? undefined : entry.node_id,
+                                  })}
+                                />
+                                {(entry.scope || 'run') === 'run' && (
+                                  <Select
+                                    value={entry.node_id || undefined}
+                                    options={nodeIdOptions.filter((opt) => opt.value !== selectedNode.id)}
+                                    placeholder="нода-источник"
+                                    disabled={isReadOnly}
+                                    allowClear
+                                    onChange={(value) => updateSelectedNodeList('executionContext', index, { node_id: value || '' })}
+                                  />
+                                )}
+                                <Input
+                                  className="context-field-full"
+                                  value={entry.path || ''}
+                                  placeholder="имя файла"
+                                  disabled={isReadOnly}
+                                  onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
+                                />
+                              </div>
                             )}
-                            <Button
-                              size="small"
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              disabled={isReadOnly}
-                              onClick={() => removeSelectedNodeListItem('executionContext', index)}
-                            />
                           </div>
                         ))}
                         <Button
@@ -1689,9 +1709,12 @@ export default function FlowEditor() {
                           Добавить контекст
                         </Button>
                         </div>
-                      </div>
                     </div>
+                  </>
+                )}
 
+                {selectedNodeKind === 'ai' && (
+                  <>
                     <div>
                       <Text className="muted">Инструкция</Text>
                       <div className="field-control">
@@ -1704,14 +1727,27 @@ export default function FlowEditor() {
                       </div>
                     </div>
                     <div>
-                      <Text className="muted">Схема ответа (опционально)</Text>
-                      <div className="field-control">
-                        <Input.TextArea
-                          rows={4}
-                          value={selectedNode.data.responseSchema}
-                          placeholder="YAML/JSON schema"
-                          disabled={isReadOnly}
-                          onChange={(event) => updateSelectedNode({ responseSchema: event.target.value })}
+                      <Text className="muted">Схема ответа (опционально, JSON)</Text>
+                      <div className="field-control schema-editor-wrap">
+                        <Editor
+                          height="120px"
+                          defaultLanguage="json"
+                          value={selectedNode.data.responseSchema || ''}
+                          onChange={(value) => updateSelectedNode({ responseSchema: value ?? '' })}
+                          options={{
+                            readOnly: isReadOnly,
+                            minimap: { enabled: false },
+                            lineNumbers: 'off',
+                            scrollBeyondLastLine: false,
+                            folding: false,
+                            fontSize: 12,
+                            tabSize: 2,
+                            automaticLayout: true,
+                            wordWrap: 'on',
+                            overviewRulerLanes: 0,
+                            hideCursorInOverviewRuler: true,
+                            scrollbar: { vertical: 'auto', horizontal: 'hidden' },
+                          }}
                         />
                       </div>
                     </div>
