@@ -1408,6 +1408,64 @@ body {
   background-size: 48px 48px;
 }
 
+.login-hero {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 24px;
+  padding: 48px;
+  z-index: 1;
+}
+
+.login-hero-kicker {
+  margin: 0;
+  padding-bottom: 16px;
+  font-size: clamp(13px, 1.3vw, 16px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--primary);
+  opacity: 0.98;
+  position: relative;
+}
+
+.login-hero-kicker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+.login-hero-title {
+  margin: 0;
+  max-width: 720px;
+  font-size: clamp(32px, 4.5vw, 56px);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 35%, #0f766e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-hero-text {
+  margin: 0;
+  max-width: 700px;
+  font-size: clamp(16px, 2vw, 24px);
+  line-height: 1.45;
+  color: #374151;
+}
+
 .node-log-pre {
   max-height: 520px;
   overflow: auto;
@@ -1435,5 +1493,14 @@ body {
   }
   .login-card {
     padding: 40px 24px;
+  }
+  .login-hero {
+    padding: 32px 24px;
+  }
+  .login-hero-title {
+    font-size: clamp(30px, 8vw, 44px);
+  }
+  .login-hero-text {
+    font-size: 16px;
   }
 }

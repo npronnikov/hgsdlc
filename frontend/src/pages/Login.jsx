@@ -61,6 +61,10 @@ export default function Login() {
       </div>
       <div className="login-bg">
         <div className="login-grid"></div>
+        <div className="login-hero">
+          <p className="login-hero-kicker">Human Guided Development</p>
+          <h1 className="login-hero-title">A new era of human-AI collaboration</h1>
+        </div>
       </div>
     </div>
   );
