@@ -587,9 +587,44 @@ function RunDetailView({ navigate, runId }) {
               <div>{run.current_gate ? <StatusTag value={run.current_gate.status} /> : '—'}</div>
             </div>
             <div style={{ marginTop: 12 }}>
+              <Text className="muted">Gate kind</Text>
+              <div className="mono">{run.current_gate?.gate_kind || '—'}</div>
+            </div>
+            <div style={{ marginTop: 12 }}>
               <Text className="muted">Gate id</Text>
               <div className="mono">{run.current_gate?.gate_id || '—'}</div>
             </div>
+            {run.current_gate?.payload?.user_instructions && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Instructions</Text>
+                <pre className="code-block" style={{ fontSize: 12, maxHeight: 120, overflow: 'auto' }}>
+                  {run.current_gate.payload.user_instructions}
+                </pre>
+              </div>
+            )}
+            {run.current_gate?.payload?.execution_context_artifacts?.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Context artifacts</Text>
+                <List
+                  size="small"
+                  dataSource={run.current_gate.payload.execution_context_artifacts}
+                  renderItem={(ctx) => (
+                    <List.Item>
+                      <Text className="mono">{ctx.artifact_key}</Text>
+                    </List.Item>
+                  )}
+                />
+              </div>
+            )}
+            {run.current_gate?.payload?.input_artifact_key && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Input artifact</Text>
+                <div className="mono">{run.current_gate.payload.input_artifact_key}</div>
+                {run.current_gate.payload.input_artifact_key === run.current_gate.payload.output_artifact_key && (
+                  <StatusTag value="edit-in-place" />
+                )}
+              </div>
+            )}
             <div style={{ marginTop: 16 }}>
               <Title level={5}>Latest artifacts</Title>
               <List

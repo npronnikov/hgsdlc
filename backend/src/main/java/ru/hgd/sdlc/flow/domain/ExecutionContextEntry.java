@@ -1,6 +1,7 @@
 package ru.hgd.sdlc.flow.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,4 +19,7 @@ public class ExecutionContextEntry {
     private String path;
     private String scope;
     private Boolean required;
+
+    @JsonProperty("node_id")
+    private String nodeId;
 }

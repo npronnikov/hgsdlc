@@ -322,7 +322,7 @@ body {
 }
 
 .flow-editor-layout {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 420px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -416,6 +416,12 @@ body {
 
 .field-control {
   margin-top: 6px;
+}
+
+.schema-editor-wrap {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .field-control .ant-input,
@@ -951,10 +957,33 @@ body {
 }
 
 .context-row {
-  display: grid;
-  grid-template-columns: 140px 140px 1fr auto;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.context-row-header {
+  display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.context-row-header .ant-select {
+  flex: 1;
+}
+
+.context-row-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.context-row-fields .context-field-full {
+  grid-column: 1 / -1;
 }
 
 .artifact-row {

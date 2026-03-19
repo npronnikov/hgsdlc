@@ -129,8 +129,6 @@ public class AgentPromptBuilder {
 
     private List<String> summarizePromptInputs(List<Map<String, Object>> resolvedContext, boolean includeUserRequest) {
         List<String> inputs = new ArrayList<>();
-        int fileRefs = 0;
-        int directoryRefs = 0;
         for (Map<String, Object> contextEntry : resolvedContext) {
             String type = normalize(asString(contextEntry.get("type")));
             switch (type) {
@@ -144,14 +142,6 @@ public class AgentPromptBuilder {
                     inputs.add(artifactKey == null
                             ? "Use the available upstream artifact."
                             : "Use upstream artifact '" + artifactKey + "'.");
-                }
-                case "file_ref" -> {
-                    fileRefs++;
-                    inputs.add("Use provided file input #" + fileRefs + ".");
-                }
-                case "directory_ref" -> {
-                    directoryRefs++;
-                    inputs.add("Use provided directory input #" + directoryRefs + ".");
                 }
                 default -> {
                 }

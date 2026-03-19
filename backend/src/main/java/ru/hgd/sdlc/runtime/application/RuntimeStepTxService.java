@@ -245,7 +245,8 @@ public class RuntimeStepTxService {
             String nodeId,
             GateKind gateKind,
             GateStatus initialStatus,
-            String assigneeRole
+            String assigneeRole,
+            String payloadJson
     ) {
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
         execution.setStatus(NodeExecutionStatus.WAITING_GATE);
@@ -259,6 +260,7 @@ public class RuntimeStepTxService {
                 .gateKind(gateKind)
                 .status(initialStatus)
                 .assigneeRole(assigneeRole)
+                .payloadJson(payloadJson)
                 .openedAt(Instant.now())
                 .build();
         gateInstanceRepository.save(gate);

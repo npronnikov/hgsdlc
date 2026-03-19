@@ -163,6 +163,21 @@ public class RuntimeController {
         return runtimeService.listArtifacts(runId).stream().map(ArtifactResponse::from).toList();
     }
 
+    @GetMapping("/runs/{runId}/artifacts/{artifactVersionId}/content")
+    public ArtifactContentResponse getArtifactContent(
+            @PathVariable UUID runId,
+            @PathVariable UUID artifactVersionId
+    ) {
+        RuntimeService.ArtifactContentResult result = runtimeService.getArtifactContent(runId, artifactVersionId);
+        return new ArtifactContentResponse(
+                result.artifact().getId(),
+                result.artifact().getRunId(),
+                result.artifact().getArtifactKey(),
+                result.artifact().getPath(),
+                result.content()
+        );
+    }
+
     @GetMapping("/runs/{runId}/gates/current")
     public GateSummaryResponse currentGate(@PathVariable UUID runId) {
         return runtimeService.findCurrentGate(runId)
@@ -482,6 +497,14 @@ public class RuntimeController {
             @JsonProperty("comment") String comment,
             @JsonProperty("instruction") String instruction,
             @JsonProperty("reviewed_artifact_version_ids") List<UUID> reviewedArtifactVersionIds
+    ) {}
+
+    public record ArtifactContentResponse(
+            @JsonProperty("artifact_version_id") UUID artifactVersionId,
+            @JsonProperty("run_id") UUID runId,
+            @JsonProperty("artifact_key") String artifactKey,
+            @JsonProperty("path") String path,
+            @JsonProperty("content") String content
     ) {}
 
     public record GateActionResponse(

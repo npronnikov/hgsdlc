@@ -318,6 +318,26 @@ public class RuntimeService {
     }
 
     @Transactional(readOnly = true)
+    public ArtifactContentResult getArtifactContent(UUID runId, UUID artifactVersionId) {
+        getRunEntity(runId);
+        ArtifactVersionEntity artifact = artifactVersionRepository.findById(artifactVersionId)
+                .orElseThrow(() -> new NotFoundException("Artifact version not found: " + artifactVersionId));
+        if (!artifact.getRunId().equals(runId)) {
+            throw new NotFoundException("Artifact version not found in run: " + artifactVersionId);
+        }
+        String content = readFileContent(Path.of(artifact.getPath()));
+        if (content == null) {
+            throw new NotFoundException("Artifact content not available: " + artifactVersionId);
+        }
+        return new ArtifactContentResult(artifact, content);
+    }
+
+    public record ArtifactContentResult(
+            ArtifactVersionEntity artifact,
+            String content
+    ) {}
+
+    @Transactional(readOnly = true)
     public Optional<GateInstanceEntity> findCurrentGate(UUID runId) {
         getRunEntity(runId);
         return gateInstanceRepository.findFirstByRunIdAndStatusInOrderByOpenedAtDesc(
@@ -733,15 +753,104 @@ public class RuntimeService {
             GateKind gateKind,
             GateStatus initialStatus
     ) {
+        String payloadJson = buildGatePayload(run, node);
         runtimeStepTxService.openGate(
                 run.getId(),
                 execution.getId(),
                 node.getId(),
                 gateKind,
                 initialStatus,
-                firstAllowedRole(node.getAllowedRoles())
+                firstAllowedRole(node.getAllowedRoles()),
+                payloadJson
         );
         return false;
+    }
+
+    private String buildGatePayload(RunEntity run, NodeModel node) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        List<Map<String, Object>> contextArtifacts = resolveGateContextArtifacts(run, node);
+        if (!contextArtifacts.isEmpty()) {
+            payload.put("execution_context_artifacts", contextArtifacts);
+        }
+        String inputArtifactKey = trimToNull(node.getInputArtifact());
+        if (inputArtifactKey != null) {
+            ArtifactVersionEntity inputArtifact = artifactVersionRepository
+                    .findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(run.getId(), inputArtifactKey)
+                    .orElse(null);
+            if (inputArtifact != null) {
+                String content = readFileContent(Path.of(inputArtifact.getPath()));
+                payload.put("input_artifact_key", inputArtifactKey);
+                payload.put("input_artifact_version_id", inputArtifact.getId().toString());
+                payload.put("input_artifact_path", inputArtifact.getPath());
+                if (content != null) {
+                    payload.put("input_artifact_content", content);
+                }
+            }
+        }
+        String outputArtifactKey = trimToNull(node.getOutputArtifact());
+        if (outputArtifactKey != null) {
+            payload.put("output_artifact_key", outputArtifactKey);
+        }
+        String userInstructions = trimToNull(node.getUserInstructions());
+        if (userInstructions != null) {
+            payload.put("user_instructions", userInstructions);
+        }
+        if (payload.isEmpty()) {
+            return null;
+        }
+        return toJson(payload);
+    }
+
+    private List<Map<String, Object>> resolveGateContextArtifacts(RunEntity run, NodeModel node) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of() : node.getExecutionContext();
+        for (ExecutionContextEntry entry : entries) {
+            if (entry == null || entry.getType() == null) {
+                continue;
+            }
+            String type = normalize(entry.getType());
+            if (!"artifact_ref".equals(type)) {
+                continue;
+            }
+            String fileName = trimToNull(entry.getPath());
+            if (fileName == null) {
+                continue;
+            }
+            Path path = resolveArtifactRefPath(run, entry.getNodeId(), entry.getScope(), fileName);
+            if (path == null || !Files.exists(path)) {
+                if (Boolean.TRUE.equals(entry.getRequired())) {
+                    log.warn("Required artifact_ref not found for gate context: node_id={}, path={}, run_id={}",
+                            entry.getNodeId(), fileName, run.getId());
+                }
+                continue;
+            }
+            String content = readFileContent(path);
+            Map<String, Object> artifactInfo = new LinkedHashMap<>();
+            artifactInfo.put("artifact_key", artifactKeyForPath(fileName));
+            artifactInfo.put("source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId());
+            artifactInfo.put("path", path.toString());
+            if (content != null) {
+                artifactInfo.put("content", content);
+            }
+            result.add(artifactInfo);
+        }
+        return result;
+    }
+
+    private String readFileContent(Path path) {
+        if (path == null || !Files.exists(path) || Files.isDirectory(path)) {
+            return null;
+        }
+        try {
+            long size = Files.size(path);
+            if (size > 512_000) {
+                return null;
+            }
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            log.warn("Failed to read artifact content: path={}", path, ex);
+            return null;
+        }
     }
 
     private boolean completeTerminalNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
@@ -1036,8 +1145,7 @@ public class RuntimeService {
             if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
                 continue;
             }
-            String scope = defaultScope(requirement.getScope());
-            Path path = resolvePath(run, scope, requirement.getPath());
+            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
             String content = renderArtifactContent(run, node, nodeKind, commandResult, requirement.getPath());
             writeFile(path, content.getBytes(StandardCharsets.UTF_8));
         }
@@ -1120,7 +1228,7 @@ public class RuntimeService {
             if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
                 continue;
             }
-            Path path = resolvePath(run, requirement.getScope(), requirement.getPath());
+            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
             boolean exists = Files.exists(path);
             if (Boolean.TRUE.equals(requirement.getRequired()) && !exists) {
                 throw new NodeFailureException(
@@ -1198,45 +1306,13 @@ public class RuntimeService {
             boolean required = Boolean.TRUE.equals(entry.getRequired());
             switch (type) {
                 case "user_request" -> resolved.add(Map.of("type", "user_request", "value", run.getFeatureRequest()));
-                case "file_ref" -> {
-                    Path path = resolvePath(run, entry.getScope(), entry.getPath());
-                    if (!Files.exists(path) || Files.isDirectory(path)) {
-                        if (required) {
-                            throw new NodeFailureException(
-                                    "MISSING_EXECUTION_CONTEXT",
-                                    "Missing required file_ref: " + entry.getPath(),
-                                    false
-                            );
-                        }
-                        continue;
-                    }
-                    resolved.add(Map.of("type", "file_ref", "path", path.toString()));
-                }
-                case "directory_ref" -> {
-                    Path path = resolvePath(run, entry.getScope(), entry.getPath());
-                    if (!Files.exists(path) || !Files.isDirectory(path)) {
-                        if (required) {
-                            throw new NodeFailureException(
-                                    "MISSING_EXECUTION_CONTEXT",
-                                    "Missing required directory_ref: " + entry.getPath(),
-                                    false
-                            );
-                        }
-                        continue;
-                    }
-                    resolved.add(Map.of("type", "directory_ref", "path", path.toString()));
-                }
                 case "artifact_ref" -> {
-                    ArtifactVersionEntity artifact = artifactVersionRepository.findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(
-                                    run.getId(),
-                                    entry.getPath()
-                            )
-                            .orElse(null);
-                    if (artifact == null) {
+                    Path path = resolveArtifactRefPath(run, entry.getNodeId(), entry.getScope(), entry.getPath());
+                    if (path == null || !Files.exists(path)) {
                         if (required) {
                             throw new NodeFailureException(
                                     "MISSING_EXECUTION_CONTEXT",
-                                    "Missing required artifact_ref: " + entry.getPath(),
+                                    "Missing required artifact_ref: node_id=" + entry.getNodeId() + ", path=" + entry.getPath(),
                                     false
                             );
                         }
@@ -1244,9 +1320,9 @@ public class RuntimeService {
                     }
                     resolved.add(Map.of(
                             "type", "artifact_ref",
-                            "artifact_key", artifact.getArtifactKey(),
-                            "path", artifact.getPath(),
-                            "artifact_version_id", artifact.getId()
+                            "artifact_key", artifactKeyForPath(entry.getPath()),
+                            "path", path.toString(),
+                            "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId()
                     ));
                 }
                 default -> {
@@ -1564,6 +1640,38 @@ public class RuntimeService {
             throw new NodeFailureException("PATH_POLICY_VIOLATION", "Path escapes root: " + value, false);
         }
         return resolved;
+    }
+
+    private Path resolveProducedArtifactPath(RunEntity run, NodeExecutionEntity execution, String scopeRaw, String fileName) {
+        if ("project".equals(defaultScope(scopeRaw))) {
+            return resolvePath(run, scopeRaw, fileName);
+        }
+        Path nodeDir = resolveNodeExecutionRoot(run, execution);
+        Path resolved = nodeDir.resolve(fileName).normalize();
+        if (!resolved.startsWith(nodeDir)) {
+            throw new NodeFailureException("PATH_POLICY_VIOLATION", "Path escapes node dir: " + fileName, false);
+        }
+        return resolved;
+    }
+
+    private Path resolveArtifactRefPath(RunEntity run, String sourceNodeId, String scopeRaw, String fileName) {
+        if ("project".equals(defaultScope(scopeRaw))) {
+            return resolvePath(run, "project", fileName);
+        }
+        if (sourceNodeId == null || sourceNodeId.isBlank()) {
+            throw new NodeFailureException("MISSING_EXECUTION_CONTEXT",
+                    "node_id is required for run-scoped artifact_ref", false);
+        }
+        NodeExecutionEntity sourceExecution = nodeExecutionRepository
+                .findFirstByRunIdAndNodeIdAndStatusOrderByAttemptNoDesc(
+                        run.getId(), sourceNodeId, NodeExecutionStatus.SUCCEEDED)
+                .orElse(null);
+        if (sourceExecution == null) {
+            return null;
+        }
+        String dirName = sourceExecution.getNodeId() + "-attempt-" + sourceExecution.getAttemptNo();
+        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
+        return nodeDir.resolve(fileName).normalize();
     }
 
     private byte[] decodeBase64(String value) {
