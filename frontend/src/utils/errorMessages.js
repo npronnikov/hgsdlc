@@ -88,6 +88,9 @@ const RULES = [
   { re: /human_input gate requires on_submit: (.+)/i, msg: (_, id) => `human_input gate требует on_submit: ${id}` },
   { re: /human_approval gate requires on_approve: (.+)/i, msg: (_, id) => `human_approval gate требует on_approve: ${id}` },
   { re: /human_approval gate requires on_rework: (.+)/i, msg: (_, id) => `human_approval gate требует on_rework: ${id}` },
+  { re: /checkpoint_before_run is only allowed for ai\/command nodes: (.+)/i, msg: (_, id) => `checkpoint_before_run разрешен только для ai/command: ${id}` },
+  { re: /CHECKPOINT_NOT_FOUND_FOR_REWORK:(.+)/i, msg: (_, detail) => `Checkpoint для rework не найден:${detail}` },
+  { re: /REWORK_RESET_FAILED:(.+)/i, msg: (_, detail) => `Не удалось откатить изменения перед rework:${detail}` },
   { re: /Invalid transition target for (.+) on node: (.+)/i, msg: (_, route, id) => `Некорректный переход ${route} в ноде: ${id}` },
   {
     re: /Transition target not found for (.+) on node: (.+) -> (.+)/i,

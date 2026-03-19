@@ -1,24 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Select, Space, Typography, message } from 'antd';
+import { Button, Card, Form, Input, InputNumber, Select, Space, Typography, message } from 'antd';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
 export default function Settings() {
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initialValues, setInitialValues] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const data = await apiRequest('/settings/runtime');
-      form.setFieldsValue({
-        workspace_root: data?.workspace_root || '/tmp',
+      const values = {
+        workspace_root: data?.workspace_root || '/tmp/workspace',
         coding_agent: data?.coding_agent || 'qwen',
-      });
+        ai_timeout_seconds: data?.ai_timeout_seconds ?? 900,
+      };
+      setInitialValues(values);
+      form.setFieldsValue(values);
     } catch (err) {
       message.error(err.message || 'Не удалось загрузить настройки');
+      setInitialValues({ workspace_root: '/tmp/workspace', coding_agent: 'qwen', ai_timeout_seconds: 900 });
     } finally {
       setLoading(false);
     }
@@ -27,6 +32,12 @@ export default function Settings() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (initialValues) {
+      form.setFieldsValue(initialValues);
+    }
+  }, [initialValues]);
 
   const handleSave = async () => {
     try {
@@ -37,6 +48,7 @@ export default function Settings() {
         body: JSON.stringify({
           workspace_root: values.workspace_root,
           coding_agent: values.coding_agent,
+          ai_timeout_seconds: values.ai_timeout_seconds,
         }),
       });
       message.success('Runtime Settings сохранены');
@@ -59,22 +71,22 @@ export default function Settings() {
           <Button type="primary" onClick={handleSave} loading={saving}>Сохранить</Button>
         </Space>
       </div>
-      <Card>
-        <Form layout="vertical" form={form}>
+      <Card loading={loading && !initialValues}>
+        {initialValues && (
+        <Form layout="vertical" form={form} initialValues={initialValues}>
           <Form.Item
             label="Runtime workspace root"
             name="workspace_root"
             rules={[{ required: true, message: 'Укажите абсолютный путь' }]}
+            extra="Абсолютный путь на сервере, где runtime создаёт run workspace. По умолчанию /tmp/workspace."
           >
-            <Input placeholder="/tmp" />
-            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Абсолютный путь на сервере, где runtime создаёт run workspace. По умолчанию используется `/tmp`.
-            </Text>
+            <Input placeholder="/tmp/workspace" />
           </Form.Item>
           <Form.Item
             label="Runtime coding agent"
             name="coding_agent"
             rules={[{ required: true, message: 'Выберите coding agent' }]}
+            extra="Выбранный coding_agent должен совпадать с coding_agent flow. Сейчас реальное выполнение реализовано только для qwen."
           >
             <Select
               options={[
@@ -83,11 +95,17 @@ export default function Settings() {
                 { value: 'cursor', label: 'cursor' },
               ]}
             />
-            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Выбранный `coding_agent` должен совпадать с `coding_agent` flow. Сейчас реальное выполнение реализовано только для `qwen`.
-            </Text>
+          </Form.Item>
+          <Form.Item
+            label="AI timeout (seconds)"
+            name="ai_timeout_seconds"
+            rules={[{ required: true, message: 'Укажите таймаут' }]}
+            extra="Максимальное время ожидания выполнения AI-ноды и команд (в секундах). По умолчанию 900 (15 минут)."
+          >
+            <InputNumber min={10} max={7200} style={{ width: '100%' }} placeholder="900" />
           </Form.Item>
         </Form>
+        )}
       </Card>
     </div>
   );

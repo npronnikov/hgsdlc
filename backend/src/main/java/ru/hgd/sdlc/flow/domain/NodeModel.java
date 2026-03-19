@@ -80,6 +80,9 @@ public class NodeModel {
 
     private Boolean idempotent;
 
+    @JsonProperty("checkpoint_before_run")
+    private Boolean checkpointBeforeRun;
+
     @JsonProperty("on_success")
     private String onSuccess;
 

@@ -52,8 +52,8 @@ public class ArtifactVersionEntity {
     @Column(name = "size_bytes")
     private Long sizeBytes;
 
-    @Column(name = "supersedes_artifact_version_id")
-    private UUID supersedesArtifactVersionId;
+    @Column(name = "version_no", nullable = false)
+    private int versionNo;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

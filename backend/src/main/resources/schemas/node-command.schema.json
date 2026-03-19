@@ -17,6 +17,7 @@
       "items": { "$ref": "#/$defs/execution_context_entry" }
     },
     "instruction": { "type": "string" },
+    "checkpoint_before_run": { "type": "boolean" },
     "response_schema": { "type": "object" },
     "produced_artifacts": {
       "type": "array",

@@ -112,6 +112,16 @@ public class RuntimeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    private void tickAsync(UUID runId) {
+        taskExecutor.execute(() -> {
+            try {
+                runtimeService.tick(runId);
+            } catch (Exception ex) {
+                log.error("Async tick failed for run {}", runId, ex);
+            }
+        });
+    }
+
     private void startRunAsync(UUID runId) {
         taskExecutor.execute(() -> {
             try {
@@ -212,6 +222,7 @@ public class RuntimeController {
                 ),
                 user
         );
+        tickAsync(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_submit");
     }
 
@@ -230,6 +241,7 @@ public class RuntimeController {
                 ),
                 user
         );
+        tickAsync(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_approve");
     }
 
@@ -250,6 +262,7 @@ public class RuntimeController {
                 ),
                 user
         );
+        tickAsync(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_rework");
     }
 
@@ -261,6 +274,32 @@ public class RuntimeController {
     @GetMapping("/runs/{runId}/audit/{eventId}")
     public AuditEventResponse getAuditEvent(@PathVariable UUID runId, @PathVariable UUID eventId) {
         return toAuditResponse(runtimeService.getAuditEvent(runId, eventId));
+    }
+
+    @GetMapping("/runs/{runId}/audit/query")
+    public AuditQueryResponse queryAudit(
+            @PathVariable UUID runId,
+            @RequestParam(required = false) UUID nodeExecutionId,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String actorType,
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        RuntimeService.AuditQueryResult result = runtimeService.queryAuditEvents(
+                runId, nodeExecutionId, eventType, actorType, cursor, limit
+        );
+        List<AuditEventResponse> events = result.events().stream().map(this::toAuditResponse).toList();
+        return new AuditQueryResponse(events, result.nextCursor(), result.hasMore());
+    }
+
+    @GetMapping("/runs/{runId}/nodes/{nodeExecutionId}/log")
+    public NodeLogResponse getNodeLog(
+            @PathVariable UUID runId,
+            @PathVariable UUID nodeExecutionId,
+            @RequestParam(defaultValue = "0") long offset
+    ) {
+        RuntimeService.NodeLogResult result = runtimeService.getNodeLog(runId, nodeExecutionId, offset);
+        return new NodeLogResponse(result.content(), result.offset(), result.running());
     }
 
     private AuditEventResponse toAuditResponse(AuditEventEntity event) {
@@ -396,6 +435,9 @@ public class RuntimeController {
             @JsonProperty("finished_at") Instant finishedAt,
             @JsonProperty("error_code") String errorCode,
             @JsonProperty("error_message") String errorMessage,
+            @JsonProperty("checkpoint_enabled") boolean checkpointEnabled,
+            @JsonProperty("checkpoint_commit_sha") String checkpointCommitSha,
+            @JsonProperty("checkpoint_created_at") Instant checkpointCreatedAt,
             @JsonProperty("resource_version") long resourceVersion
     ) {
         static NodeExecutionResponse from(ru.hgd.sdlc.runtime.domain.NodeExecutionEntity execution) {
@@ -410,6 +452,9 @@ public class RuntimeController {
                     execution.getFinishedAt(),
                     execution.getErrorCode(),
                     execution.getErrorMessage(),
+                    execution.isCheckpointEnabled(),
+                    execution.getCheckpointCommitSha(),
+                    execution.getCheckpointCreatedAt(),
                     execution.getResourceVersion()
             );
         }
@@ -439,7 +484,7 @@ public class RuntimeController {
             @JsonProperty("kind") String kind,
             @JsonProperty("checksum") String checksum,
             @JsonProperty("size_bytes") Long sizeBytes,
-            @JsonProperty("supersedes_artifact_version_id") UUID supersedesArtifactVersionId,
+            @JsonProperty("version_no") int versionNo,
             @JsonProperty("created_at") Instant createdAt
     ) {
         static ArtifactResponse from(ArtifactVersionEntity artifact) {
@@ -453,11 +498,17 @@ public class RuntimeController {
                     artifact.getKind().name().toLowerCase(),
                     artifact.getChecksum(),
                     artifact.getSizeBytes(),
-                    artifact.getSupersedesArtifactVersionId(),
+                    artifact.getVersionNo(),
                     artifact.getCreatedAt()
             );
         }
     }
+
+    public record AuditQueryResponse(
+            @JsonProperty("events") List<AuditEventResponse> events,
+            @JsonProperty("next_cursor") Long nextCursor,
+            @JsonProperty("has_more") boolean hasMore
+    ) {}
 
     public record AuditEventResponse(
             @JsonProperty("event_id") UUID eventId,
@@ -505,6 +556,12 @@ public class RuntimeController {
             @JsonProperty("artifact_key") String artifactKey,
             @JsonProperty("path") String path,
             @JsonProperty("content") String content
+    ) {}
+
+    public record NodeLogResponse(
+            @JsonProperty("content") String content,
+            @JsonProperty("offset") long offset,
+            @JsonProperty("running") boolean running
     ) {}
 
     public record GateActionResponse(

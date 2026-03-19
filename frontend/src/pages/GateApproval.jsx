@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Col, Input, Row, Tabs, Typography, message } from 'antd';
+import { Button, Card, Col, Input, Radio, Row, Tabs, Typography, message } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -15,7 +15,9 @@ export default function GateApproval() {
   const [gate, setGate] = useState(null);
   const [comment, setComment] = useState('');
   const [instruction, setInstruction] = useState('');
+  const [reworkMode, setReworkMode] = useState('discard');
   const [submitting, setSubmitting] = useState(false);
+  const reworkDiscardAvailable = gate?.payload?.rework_discard_available !== false;
 
   const load = async () => {
     if (!runId) {
@@ -73,6 +75,7 @@ export default function GateApproval() {
         method: 'POST',
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
+          mode: reworkDiscardAvailable ? reworkMode : 'keep',
           comment,
           instruction,
           reviewed_artifact_version_ids: [],
@@ -139,6 +142,25 @@ export default function GateApproval() {
             <Input.TextArea rows={5} style={{ marginTop: 8 }} value={comment} onChange={(e) => setComment(e.target.value)} />
             <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Инструкция</Text>
             <Input.TextArea rows={5} style={{ marginTop: 8 }} value={instruction} onChange={(e) => setInstruction(e.target.value)} />
+            {reworkDiscardAvailable ? (
+              <>
+                <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Changes handling</Text>
+                <Radio.Group
+                  value={reworkMode}
+                  onChange={(event) => setReworkMode(event.target.value)}
+                  optionType="button"
+                  buttonStyle="solid"
+                  style={{ display: 'block', marginTop: 8 }}
+                >
+                  <Radio.Button value="keep">Keep changes</Radio.Button>
+                  <Radio.Button value="discard">Discard changes</Radio.Button>
+                </Radio.Group>
+              </>
+            ) : (
+              <Text type="secondary" style={{ marginTop: 12, display: 'block' }}>
+                Текущие изменения будут сохранены
+              </Text>
+            )}
             <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
               <Button type="primary" onClick={approve} loading={submitting}>Approve</Button>
               <Button type="default" style={{ borderColor: '#d97706', color: '#d97706' }} onClick={rework} loading={submitting}>Rework</Button>

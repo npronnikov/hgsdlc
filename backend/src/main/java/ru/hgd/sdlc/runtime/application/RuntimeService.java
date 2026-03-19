@@ -1,8 +1,11 @@
 package ru.hgd.sdlc.runtime.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,12 +47,6 @@ import ru.hgd.sdlc.flow.domain.PathRequirement;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
 import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
-import ru.hgd.sdlc.rule.domain.RuleStatus;
-import ru.hgd.sdlc.rule.domain.RuleVersion;
-import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
-import ru.hgd.sdlc.skill.domain.SkillStatus;
-import ru.hgd.sdlc.skill.domain.SkillVersion;
-import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ArtifactKind;
 import ru.hgd.sdlc.runtime.domain.ArtifactScope;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
@@ -82,6 +80,7 @@ public class RuntimeService {
             GateStatus.FAILED_VALIDATION
     );
     private static final int DEFAULT_MAX_TICK_ITERATIONS = 128;
+    private static final int NODE_LOG_CHUNK_SIZE = 256 * 1024;
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -90,16 +89,13 @@ public class RuntimeService {
     private final AuditEventRepository auditEventRepository;
     private final ProjectRepository projectRepository;
     private final FlowVersionRepository flowVersionRepository;
-    private final RuleVersionRepository ruleVersionRepository;
-    private final SkillVersionRepository skillVersionRepository;
     private final RuntimeStepTxService runtimeStepTxService;
-    private final AgentPromptBuilder agentPromptBuilder;
     private final ExecutionTraceBuilder executionTraceBuilder;
     private final FlowYamlParser flowYamlParser;
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
+    private final Map<String, CodingAgentStrategy> codingAgentStrategiesByAgentId;
     private final int maxTickIterations;
-    private final int aiTimeoutSeconds;
 
     public RuntimeService(
             RunRepository runRepository,
@@ -109,16 +105,13 @@ public class RuntimeService {
             AuditEventRepository auditEventRepository,
             ProjectRepository projectRepository,
             FlowVersionRepository flowVersionRepository,
-            RuleVersionRepository ruleVersionRepository,
-            SkillVersionRepository skillVersionRepository,
             RuntimeStepTxService runtimeStepTxService,
-            AgentPromptBuilder agentPromptBuilder,
             ExecutionTraceBuilder executionTraceBuilder,
             FlowYamlParser flowYamlParser,
             ObjectMapper objectMapper,
             SettingsService settingsService,
-            @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations,
-            @Value("${runtime.ai-timeout-seconds:900}") Integer aiTimeoutSeconds
+            List<CodingAgentStrategy> codingAgentStrategies,
+            @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations
     ) {
         this.runRepository = runRepository;
         this.nodeExecutionRepository = nodeExecutionRepository;
@@ -127,16 +120,19 @@ public class RuntimeService {
         this.auditEventRepository = auditEventRepository;
         this.projectRepository = projectRepository;
         this.flowVersionRepository = flowVersionRepository;
-        this.ruleVersionRepository = ruleVersionRepository;
-        this.skillVersionRepository = skillVersionRepository;
         this.runtimeStepTxService = runtimeStepTxService;
-        this.agentPromptBuilder = agentPromptBuilder;
         this.executionTraceBuilder = executionTraceBuilder;
         this.flowYamlParser = flowYamlParser;
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
+        this.codingAgentStrategiesByAgentId = (codingAgentStrategies == null ? List.<CodingAgentStrategy>of() : codingAgentStrategies)
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        (strategy) -> normalize(strategy.codingAgent()),
+                        Function.identity(),
+                        (left, right) -> left
+                ));
         this.maxTickIterations = maxTickIterations == null ? DEFAULT_MAX_TICK_ITERATIONS : maxTickIterations;
-        this.aiTimeoutSeconds = aiTimeoutSeconds == null ? 900 : aiTimeoutSeconds;
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -337,6 +333,218 @@ public class RuntimeService {
             String content
     ) {}
 
+    public NodeLogResult getNodeLog(UUID runId, UUID nodeExecutionId, long offset) {
+        RunEntity run = getRunEntity(runId);
+        NodeExecutionEntity execution = nodeExecutionRepository.findByIdAndRunId(nodeExecutionId, runId)
+                .orElseThrow(() -> new NotFoundException("Node execution not found: " + nodeExecutionId));
+        String dirName = execution.getNodeId() + "-attempt-" + execution.getAttemptNo();
+        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
+        String logFileName = "ai".equals(execution.getNodeKind()) ? "agent.stdout.log" : "command.stdout.log";
+        Path logPath = nodeDir.resolve(logFileName);
+        boolean running = execution.getStatus() == NodeExecutionStatus.RUNNING
+                || execution.getStatus() == NodeExecutionStatus.CREATED;
+        if (!Files.exists(logPath)) {
+            return new NodeLogResult("", offset, running);
+        }
+        if ("ai".equals(execution.getNodeKind())) {
+            return readAiNodeLog(logPath, offset, running);
+        }
+        return readRawNodeLog(logPath, offset, running);
+    }
+
+    private NodeLogResult readRawNodeLog(Path logPath, long offset, boolean running) {
+        try (RandomAccessFile raf = new RandomAccessFile(logPath.toFile(), "r")) {
+            long fileLength = raf.length();
+            long normalizedOffset = Math.max(offset, 0L);
+            if (normalizedOffset >= fileLength) {
+                return new NodeLogResult("", fileLength, running);
+            }
+            raf.seek(normalizedOffset);
+            int chunkSize = (int) Math.min(fileLength - normalizedOffset, NODE_LOG_CHUNK_SIZE);
+            byte[] buffer = new byte[chunkSize];
+            int read = raf.read(buffer);
+            if (read <= 0) {
+                return new NodeLogResult("", normalizedOffset, running);
+            }
+            String content = new String(buffer, 0, read, StandardCharsets.UTF_8);
+            return new NodeLogResult(content, normalizedOffset + read, running);
+        } catch (IOException ex) {
+            log.warn("Failed to read node log at {}: {}", logPath, ex.getMessage());
+            return new NodeLogResult("", offset, running);
+        }
+    }
+
+    private NodeLogResult readAiNodeLog(Path logPath, long offset, boolean running) {
+        try (RandomAccessFile raf = new RandomAccessFile(logPath.toFile(), "r")) {
+            long fileLength = raf.length();
+            long normalizedOffset = Math.max(offset, 0L);
+            if (normalizedOffset >= fileLength) {
+                return new NodeLogResult("", fileLength, running);
+            }
+            raf.seek(normalizedOffset);
+            int chunkSize = (int) Math.min(fileLength - normalizedOffset, NODE_LOG_CHUNK_SIZE);
+            byte[] buffer = new byte[chunkSize];
+            int read = raf.read(buffer);
+            if (read <= 0) {
+                return new NodeLogResult("", normalizedOffset, running);
+            }
+            int consumedBytes = consumedLineDelimitedBytes(buffer, read, normalizedOffset + read >= fileLength);
+            if (consumedBytes <= 0) {
+                return new NodeLogResult("", normalizedOffset, running);
+            }
+            String rawChunk = new String(buffer, 0, consumedBytes, StandardCharsets.UTF_8);
+            String content = parseAiStreamChunk(rawChunk);
+            return new NodeLogResult(content, normalizedOffset + consumedBytes, running);
+        } catch (IOException ex) {
+            log.warn("Failed to read AI node log at {}: {}", logPath, ex.getMessage());
+            return new NodeLogResult("", offset, running);
+        }
+    }
+
+    private int consumedLineDelimitedBytes(byte[] buffer, int readBytes, boolean eof) {
+        for (int i = readBytes - 1; i >= 0; i--) {
+            if (buffer[i] == '\n') {
+                return i + 1;
+            }
+        }
+        return eof ? readBytes : 0;
+    }
+
+    private String parseAiStreamChunk(String rawChunk) {
+        StringBuilder output = new StringBuilder();
+        int start = 0;
+        while (start < rawChunk.length()) {
+            int newline = rawChunk.indexOf('\n', start);
+            int end = newline >= 0 ? newline : rawChunk.length();
+            String line = rawChunk.substring(start, end);
+            appendAiStreamLine(output, line);
+            if (newline < 0) {
+                break;
+            }
+            start = newline + 1;
+        }
+        return output.toString();
+    }
+
+    private void appendAiStreamLine(StringBuilder output, String line) {
+        String trimmed = line == null ? "" : line.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(trimmed);
+            String extracted = extractAiStreamText(root);
+            if (extracted != null && !extracted.isEmpty()) {
+                output.append(extracted);
+            }
+        } catch (JsonProcessingException ex) {
+            output.append(line).append('\n');
+        }
+    }
+
+    private String extractAiStreamText(JsonNode root) {
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            return "";
+        }
+        String type = root.path("type").asText("");
+        if ("stream_event".equals(type)) {
+            return extractStreamEventText(root.path("event"));
+        }
+        if ("result".equals(type)) {
+            return extractFirstText(root.path("result"), root.path("output_text"), root.path("text"));
+        }
+        if ("error".equals(type)) {
+            return extractFirstText(root.path("message"), root.path("error"));
+        }
+        return "";
+    }
+
+    private String extractStreamEventText(JsonNode event) {
+        if (event == null || event.isMissingNode() || event.isNull()) {
+            return "";
+        }
+        String eventType = event.path("type").asText("");
+        return switch (eventType) {
+            case "content_block_delta", "message_delta" -> extractDeltaText(event.path("delta"));
+            case "content_block_start" -> extractContentBlockText(event.path("content_block"));
+            default -> "";
+        };
+    }
+
+    private String extractDeltaText(JsonNode delta) {
+        if (delta == null || delta.isMissingNode() || delta.isNull()) {
+            return "";
+        }
+        String deltaType = delta.path("type").asText("");
+        if ("thinking_delta".equals(deltaType)) {
+            return extractFirstText(delta.path("thinking"));
+        }
+        if ("text_delta".equals(deltaType)) {
+            return extractFirstText(delta.path("text"));
+        }
+        return extractFirstText(
+                delta.path("text"),
+                delta.path("thinking"),
+                delta.path("content"),
+                delta.path("output_text"),
+                delta.path("result")
+        );
+    }
+
+    private String extractContentBlockText(JsonNode contentBlock) {
+        if (contentBlock == null || contentBlock.isMissingNode() || contentBlock.isNull()) {
+            return "";
+        }
+        String blockType = contentBlock.path("type").asText("");
+        if ("thinking".equals(blockType)) {
+            return extractFirstText(contentBlock.path("thinking"));
+        }
+        if ("text".equals(blockType)) {
+            return extractFirstText(contentBlock.path("text"));
+        }
+        return extractFirstText(
+                contentBlock.path("text"),
+                contentBlock.path("thinking"),
+                contentBlock.path("content")
+        );
+    }
+
+    private String extractFirstText(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            String value = extractText(node);
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String extractText(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isArray()) {
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode item : node) {
+                sb.append(extractText(item));
+            }
+            return sb.toString();
+        }
+        if (node.isObject()) {
+            return extractFirstText(node.path("text"), node.path("content"), node.path("message"), node.path("output_text"));
+        }
+        return "";
+    }
+
+    public record NodeLogResult(
+            String content,
+            long offset,
+            boolean running
+    ) {}
+
     @Transactional(readOnly = true)
     public Optional<GateInstanceEntity> findCurrentGate(UUID runId) {
         getRunEntity(runId);
@@ -363,6 +571,49 @@ public class RuntimeService {
         getRunEntity(runId);
         return auditEventRepository.findByRunIdOrderBySequenceNoAsc(runId);
     }
+
+    @Transactional(readOnly = true)
+    public AuditQueryResult queryAuditEvents(
+            UUID runId,
+            UUID nodeExecutionId,
+            String eventType,
+            String actorType,
+            Long cursor,
+            int limit
+    ) {
+        getRunEntity(runId);
+        int effectiveLimit = Math.min(Math.max(limit, 1), 500);
+        ActorType parsedActorType = parseActorType(actorType);
+        List<AuditEventEntity> events = auditEventRepository.queryFiltered(
+                runId,
+                nodeExecutionId,
+                eventType != null && eventType.isBlank() ? null : eventType,
+                parsedActorType,
+                cursor,
+                org.springframework.data.domain.PageRequest.of(0, effectiveLimit + 1)
+        );
+        boolean hasMore = events.size() > effectiveLimit;
+        List<AuditEventEntity> page = hasMore ? events.subList(0, effectiveLimit) : events;
+        Long nextCursor = hasMore ? page.get(page.size() - 1).getSequenceNo() : null;
+        return new AuditQueryResult(page, nextCursor, hasMore);
+    }
+
+    private ActorType parseActorType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return ActorType.valueOf(raw.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    public record AuditQueryResult(
+            List<AuditEventEntity> events,
+            Long nextCursor,
+            boolean hasMore
+    ) {}
 
     @Transactional(readOnly = true)
     public List<RunEntity> listRunsByProject(UUID projectId, int limit) {
@@ -467,7 +718,6 @@ public class RuntimeService {
         );
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
         applyTransition(run, null, updatedGate, node.getOnSubmit(), "on_submit");
-        tick(run.getId());
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }
 
@@ -502,7 +752,6 @@ public class RuntimeService {
         );
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
         applyTransition(run, null, updatedGate, node.getOnApprove(), "on_approve");
-        tick(run.getId());
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }
 
@@ -528,6 +777,10 @@ public class RuntimeService {
         enforceGateRole(node, user);
 
         String transitionTarget = resolveReworkTarget(node);
+        boolean keepChanges = shouldKeepChangesOnRework(node, command.mode());
+        if (!keepChanges) {
+            rollbackWorkspaceToCheckpoint(run, transitionTarget, gate.getId());
+        }
         String reworkInstruction = trimToNull(command.instruction());
         GateInstanceEntity updatedGate = runtimeStepTxService.requestRework(
                 run.getId(),
@@ -547,7 +800,6 @@ public class RuntimeService {
         }
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
         applyTransition(run, null, updatedGate, transitionTarget, "on_rework");
-        tick(run.getId());
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }
 
@@ -592,6 +844,9 @@ public class RuntimeService {
     }
 
     private boolean executeCurrentNode(RunEntity run) {
+        if (isRunCancelled(run.getId())) {
+            return false;
+        }
         FlowModel flowModel = parseFlowSnapshot(run);
         NodeModel node = requireNode(flowModel, run.getCurrentNodeId());
         String nodeKind = normalizeNodeKind(node);
@@ -599,6 +854,7 @@ public class RuntimeService {
         NodeExecutionEntity execution = createNodeExecution(run, node, nodeKind);
 
         try {
+            createCheckpointBeforeExecution(run, node, execution, nodeKind);
             return switch (nodeKind) {
                 case "ai" -> executeAiNode(run, node, execution);
                 case "command" -> executeCommandNode(run, node, execution);
@@ -613,6 +869,9 @@ public class RuntimeService {
             };
         } catch (NodeFailureException ex) {
             runtimeStepTxService.markNodeExecutionFailed(run.getId(), execution.getId(), ex.errorCode, ex.getMessage(), ex.auditEventType);
+            if (isRunCancelled(run.getId())) {
+                return false;
+            }
             if ("ai".equals(nodeKind) && node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
                 applyTransition(run, execution, null, node.getOnFailure(), "on_failure");
                 return true;
@@ -626,7 +885,21 @@ public class RuntimeService {
         FlowModel flowModel = parseFlowSnapshot(run);
         String pendingReworkInstruction = trimToNull(run.getPendingReworkInstruction());
         List<Map<String, Object>> resolvedContext = resolveExecutionContext(run, node);
-        AgentInvocationContext agentInvocationContext = materializeAgentWorkspace(run, flowModel, node, execution, resolvedContext);
+        CodingAgentStrategy strategy = resolveCodingAgentStrategy(flowModel);
+        AgentInvocationContext agentInvocationContext;
+        try {
+            agentInvocationContext = strategy.materializeWorkspace(new CodingAgentStrategy.MaterializationRequest(
+                    run,
+                    flowModel,
+                    node,
+                    execution,
+                    resolvedContext,
+                    resolveProjectRoot(run),
+                    resolveNodeExecutionRoot(run, execution)
+            ));
+        } catch (CodingAgentException ex) {
+            throw new NodeFailureException(ex.getErrorCode(), ex.getMessage(), false, ex.getDetails());
+        }
         runtimeStepTxService.appendAudit(
                 run.getId(),
                 execution.getId(),
@@ -665,19 +938,27 @@ public class RuntimeService {
         CommandResult agentResult;
         try {
             agentResult = runProcess(
+                    run.getId(),
                     agentInvocationContext.command(),
                     agentInvocationContext.workingDirectory(),
-                    aiTimeoutSeconds,
+                    settingsService.getAiTimeoutSeconds(),
                     agentInvocationContext.stdoutPath(),
                     agentInvocationContext.stderrPath()
             );
+        } catch (ProcessCancelledException ex) {
+            runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), ex.getMessage());
+            return false;
         } catch (IOException ex) {
             throw new NodeFailureException("AGENT_EXECUTION_FAILED", ex.getMessage(), false);
+        }
+        if (isRunCancelled(run.getId())) {
+            runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), "Run cancelled by user");
+            return false;
         }
         if (agentResult.exitCode() != 0) {
             throw new NodeFailureException(
                     "AGENT_EXECUTION_FAILED",
-                    "Qwen execution failed with exit code " + agentResult.exitCode(),
+                    capitalize(strategy.codingAgent()) + " execution failed with exit code " + agentResult.exitCode(),
                     false
             );
         }
@@ -689,7 +970,7 @@ public class RuntimeService {
                 null,
                 "agent_invocation_finished",
                 ActorType.AGENT,
-                "qwen",
+                strategy.codingAgent(),
                 executionTraceBuilder.agentInvocationFinishedPayload(
                         node,
                         agentInvocationContext.promptPackage().promptChecksum(),
@@ -703,6 +984,27 @@ public class RuntimeService {
         }
         applyTransition(run, execution, null, node.getOnSuccess(), "on_success");
         return true;
+    }
+
+    private CodingAgentStrategy resolveCodingAgentStrategy(FlowModel flowModel) {
+        String flowCodingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
+        String runtimeCodingAgent = normalize(trimToNull(settingsService.getRuntimeCodingAgent()));
+        if (!runtimeCodingAgent.equals(flowCodingAgent)) {
+            throw new NodeFailureException(
+                    "CODING_AGENT_MISMATCH",
+                    "Flow coding_agent does not match runtime settings: flow=" + flowCodingAgent + ", runtime=" + runtimeCodingAgent,
+                    false
+            );
+        }
+        CodingAgentStrategy strategy = codingAgentStrategiesByAgentId.get(runtimeCodingAgent);
+        if (strategy == null) {
+            throw new NodeFailureException(
+                    "UNSUPPORTED_CODING_AGENT",
+                    "Runtime coding_agent is not implemented: " + runtimeCodingAgent,
+                    false
+            );
+        }
+        return strategy;
     }
 
     private boolean executeCommandNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
@@ -721,7 +1023,17 @@ public class RuntimeService {
         );
 
         Map<String, String> beforeMutations = snapshotMutations(run, node.getExpectedMutations());
-        CommandResult commandResult = executeCommand(run, node, stdoutPath, stderrPath);
+        CommandResult commandResult;
+        try {
+            commandResult = executeCommand(run, node, stdoutPath, stderrPath);
+        } catch (RunCancelledException ex) {
+            runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), ex.getMessage());
+            return false;
+        }
+        if (isRunCancelled(run.getId())) {
+            runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), "Run cancelled by user");
+            return false;
+        }
         materializeDeclaredArtifacts(run, node, execution, "command", commandResult);
         validateNodeOutputs(run, node, execution, beforeMutations);
 
@@ -768,6 +1080,9 @@ public class RuntimeService {
 
     private String buildGatePayload(RunEntity run, NodeModel node) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        if ("human_approval".equals(normalizeNodeKind(node))) {
+            payload.put("rework_discard_available", isReworkDiscardAvailable(run, node));
+        }
         List<Map<String, Object>> contextArtifacts = resolveGateContextArtifacts(run, node);
         if (!contextArtifacts.isEmpty()) {
             payload.put("execution_context_artifacts", contextArtifacts);
@@ -775,7 +1090,7 @@ public class RuntimeService {
         String inputArtifactKey = trimToNull(node.getInputArtifact());
         if (inputArtifactKey != null) {
             ArtifactVersionEntity inputArtifact = artifactVersionRepository
-                    .findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(run.getId(), inputArtifactKey)
+                    .findByRunIdAndArtifactKey(run.getId(), inputArtifactKey)
                     .orElse(null);
             if (inputArtifact != null) {
                 String content = readFileContent(Path.of(inputArtifact.getPath()));
@@ -799,6 +1114,29 @@ public class RuntimeService {
             return null;
         }
         return toJson(payload);
+    }
+
+    private boolean isReworkDiscardAvailable(RunEntity run, NodeModel approvalNode) {
+        if (approvalNode == null || approvalNode.getOnRework() == null) {
+            return false;
+        }
+        String targetNodeId = trimToNull(approvalNode.getOnRework().getNextNode());
+        if (targetNodeId == null) {
+            return false;
+        }
+        FlowModel flowModel = parseFlowSnapshot(run);
+        NodeModel targetNode = flowModel.getNodes().stream()
+                .filter((candidate) -> targetNodeId.equals(candidate.getId()))
+                .findFirst()
+                .orElse(null);
+        if (targetNode == null) {
+            return false;
+        }
+        String targetKind = normalizeNodeKind(targetNode);
+        if (!"ai".equals(targetKind) && !"command".equals(targetKind)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun());
     }
 
     private List<Map<String, Object>> resolveGateContextArtifacts(RunEntity run, NodeModel node) {
@@ -853,9 +1191,27 @@ public class RuntimeService {
         }
     }
 
+    private static final Set<String> FAILURE_TRANSITIONS = Set.of("on_failure");
+
     private boolean completeTerminalNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
-        runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId());
+        RunStatus terminalStatus = resolveTerminalStatus(run.getId());
+        runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), terminalStatus);
         return false;
+    }
+
+    private RunStatus resolveTerminalStatus(UUID runId) {
+        return auditEventRepository.findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(runId, "transition_applied")
+                .map(event -> {
+                    try {
+                        Map<String, Object> payload = objectMapper.readValue(event.getPayloadJson(), new TypeReference<>() {});
+                        String transition = String.valueOf(payload.getOrDefault("transition", ""));
+                        return FAILURE_TRANSITIONS.contains(transition) ? RunStatus.FAILED : RunStatus.COMPLETED;
+                    } catch (Exception ex) {
+                        log.warn("Failed to parse transition_applied payload for run_id={}", runId, ex);
+                        return RunStatus.COMPLETED;
+                    }
+                })
+                .orElse(RunStatus.COMPLETED);
     }
 
     private CommandResult executeCommand(RunEntity run, NodeModel node, Path stdoutPath, Path stderrPath) {
@@ -868,9 +1224,10 @@ public class RuntimeService {
         Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         try {
             CommandResult commandResult = runProcess(
+                    run.getId(),
                     List.of("zsh", "-lc", instruction),
                     workingDirectory,
-                    aiTimeoutSeconds,
+                    settingsService.getAiTimeoutSeconds(),
                     stdoutPath,
                     stderrPath
             );
@@ -886,179 +1243,17 @@ public class RuntimeService {
                 );
             }
             return commandResult;
+        } catch (ProcessCancelledException ex) {
+            throw new RunCancelledException(ex.getMessage());
         } catch (IOException ex) {
             throw new NodeFailureException("COMMAND_EXECUTION_FAILED", ex.getMessage(), false);
         }
     }
 
-    private AgentInvocationContext materializeAgentWorkspace(
-            RunEntity run,
-            FlowModel flowModel,
-            NodeModel node,
-            NodeExecutionEntity execution,
-            List<Map<String, Object>> resolvedContext
-    ) {
-        String flowCodingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
-        String runtimeCodingAgent = settingsService.getRuntimeCodingAgent();
-        if (!runtimeCodingAgent.equals(flowCodingAgent)) {
-            throw new NodeFailureException(
-                    "CODING_AGENT_MISMATCH",
-                    "Flow coding_agent does not match runtime settings: flow=" + flowCodingAgent + ", runtime=" + runtimeCodingAgent,
-                    false
-            );
-        }
-        if (!"qwen".equals(runtimeCodingAgent)) {
-            throw new NodeFailureException(
-                    "UNSUPPORTED_CODING_AGENT",
-                    "Runtime coding_agent is not implemented: " + runtimeCodingAgent,
-                    false
-            );
-        }
-
-        Path projectRoot = resolveProjectRoot(run);
-        Path qwenRoot = projectRoot.resolve(".qwen");
-        Path rulesPath = qwenRoot.resolve("QWEN.md");
-        Path skillsRoot = qwenRoot.resolve("skills");
-        Path nodeExecutionRoot = resolveNodeExecutionRoot(run, execution);
-        Path promptPath = nodeExecutionRoot.resolve("prompt.md");
-        Path stdoutPath = nodeExecutionRoot.resolve("agent.stdout.log");
-        Path stderrPath = nodeExecutionRoot.resolve("agent.stderr.log");
-
-        createDirectories(qwenRoot);
-        createDirectories(skillsRoot);
-        deleteDirectoryContents(skillsRoot);
-
-        List<RuleVersion> rules = resolveFlowRules(flowModel);
-        List<SkillVersion> skills = resolveNodeSkills(flowModel, node);
-
-        String renderedRules = renderQwenRules(flowModel, rules);
-        writeFile(rulesPath, renderedRules.getBytes(StandardCharsets.UTF_8));
-        runtimeStepTxService.appendAudit(
-                run.getId(),
-                execution.getId(),
-                null,
-                "rules_materialized",
-                ActorType.SYSTEM,
-                "runtime",
-                mapOf(
-                        "path", rulesPath.toString(),
-                        "rule_refs", flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs()
-                )
-        );
-
-        for (SkillVersion skill : skills) {
-            Path skillDir = skillsRoot.resolve(skill.getCanonicalName());
-            Path skillFile = skillDir.resolve("SKILL.md");
-            createDirectories(skillDir);
-            writeFile(skillFile, skill.getSkillMarkdown().getBytes(StandardCharsets.UTF_8));
-        }
-        runtimeStepTxService.appendAudit(
-                run.getId(),
-                execution.getId(),
-                null,
-                "skills_materialized",
-                ActorType.SYSTEM,
-                "runtime",
-                mapOf(
-                        "skills_root", skillsRoot.toString(),
-                        "skill_refs", node.getSkillRefs() == null ? List.of() : node.getSkillRefs()
-                )
-        );
-
-        AgentPromptBuilder.AgentPromptPackage promptPackage = agentPromptBuilder.build(run, flowModel, node, resolvedContext);
-        writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
-
-        List<String> command = List.of(
-                "qwen",
-                "--approval-mode",
-                "yolo",
-                "--output-format",
-                "json",
-                "--channel",
-                "CI",
-                promptPackage.prompt()
-        );
-        return new AgentInvocationContext(
-                projectRoot,
-                command,
-                promptPath,
-                rulesPath,
-                skillsRoot,
-                stdoutPath,
-                stderrPath,
-                promptPackage
-        );
-    }
-
-    private List<RuleVersion> resolveFlowRules(FlowModel flowModel) {
-        String codingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
-        List<String> refs = flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs();
-        List<RuleVersion> rules = new ArrayList<>();
-        for (String ref : refs) {
-            if (ref == null || ref.isBlank()) {
-                continue;
-            }
-            RuleVersion rule = ruleVersionRepository.findFirstByCanonicalNameAndStatus(ref, RuleStatus.PUBLISHED)
-                    .orElseThrow(() -> new NodeFailureException(
-                            "RULE_NOT_FOUND",
-                            "Published rule not found: " + ref,
-                            false
-                    ));
-            if (!codingAgent.equals(normalize(rule.getCodingAgent().name()))) {
-                throw new NodeFailureException(
-                        "RULE_PROVIDER_MISMATCH",
-                        "Rule provider must match flow coding_agent " + codingAgent + ": " + ref,
-                        false
-                );
-            }
-            rules.add(rule);
-        }
-        return rules;
-    }
-
-    private List<SkillVersion> resolveNodeSkills(FlowModel flowModel, NodeModel node) {
-        String codingAgent = normalize(trimToNull(flowModel.getCodingAgent()));
-        List<String> refs = node.getSkillRefs() == null ? List.of() : node.getSkillRefs();
-        List<SkillVersion> skills = new ArrayList<>();
-        for (String ref : refs) {
-            if (ref == null || ref.isBlank()) {
-                continue;
-            }
-            SkillVersion skill = skillVersionRepository.findFirstByCanonicalNameAndStatus(ref, SkillStatus.PUBLISHED)
-                    .orElseThrow(() -> new NodeFailureException(
-                            "SKILL_NOT_FOUND",
-                            "Published skill not found: " + ref,
-                            false
-                    ));
-            if (!codingAgent.equals(normalize(skill.getCodingAgent().name()))) {
-                throw new NodeFailureException(
-                        "SKILL_PROVIDER_MISMATCH",
-                        "Skill provider must match flow coding_agent " + codingAgent + ": " + ref,
-                        false
-                );
-            }
-            skills.add(skill);
-        }
-        return skills;
-    }
-
-    private String renderQwenRules(FlowModel flowModel, List<RuleVersion> rules) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("# HGSDLC Runtime Rules\n\n");
-        sb.append("flow: ").append(flowModel.getCanonicalName() == null ? flowModel.getId() : flowModel.getCanonicalName()).append("\n");
-        sb.append("coding_agent: ").append(flowModel.getCodingAgent()).append("\n\n");
-        if (rules.isEmpty()) {
-            sb.append("No flow-level rules provided.\n");
-            return sb.toString();
-        }
-        for (RuleVersion rule : rules) {
-            sb.append("## ").append(rule.getCanonicalName()).append("\n\n");
-            sb.append(rule.getRuleMarkdown()).append("\n\n");
-        }
-        return sb.toString();
-    }
+    private static final int CANCEL_POLL_INTERVAL_SECONDS = 5;
 
     private CommandResult runProcess(
+            UUID runId,
             List<String> command,
             Path workingDirectory,
             int timeoutSeconds,
@@ -1074,17 +1269,34 @@ public class RuntimeService {
         pb.redirectOutput(stdoutPath.toFile());
         pb.redirectError(stderrPath.toFile());
         Process process = pb.start();
-        boolean finished;
         try {
-            finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            long deadlineMs = System.currentTimeMillis() + (long) timeoutSeconds * 1000;
+            while (process.isAlive()) {
+                long remainingMs = deadlineMs - System.currentTimeMillis();
+                if (remainingMs <= 0) {
+                    process.destroyForcibly();
+                    throw new IOException("Process timeout after " + timeoutSeconds + "s");
+                }
+                long pollMs = Math.min(CANCEL_POLL_INTERVAL_SECONDS * 1000L, remainingMs);
+                boolean finished = process.waitFor(pollMs, TimeUnit.MILLISECONDS);
+                if (finished) {
+                    break;
+                }
+                if (runId != null) {
+                    RunStatus currentStatus = runRepository.findById(runId)
+                            .map(RunEntity::getStatus)
+                            .orElse(null);
+                    if (currentStatus == RunStatus.CANCELLED) {
+                        log.info("Run {} cancelled, destroying process", runId);
+                        process.destroyForcibly();
+                        throw new ProcessCancelledException("Run cancelled by user");
+                    }
+                }
+            }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
             throw new IOException("Process interrupted", ex);
-        }
-        if (!finished) {
-            process.destroyForcibly();
-            throw new IOException("Process timeout after " + timeoutSeconds + "s");
         }
         String stdout = readFile(stdoutPath);
         String stderr = readFile(stderrPath);
@@ -1368,6 +1580,240 @@ public class RuntimeService {
         return runtimeStepTxService.createNodeExecution(run.getId(), node.getId(), nodeKind, attempt);
     }
 
+    private void createCheckpointBeforeExecution(
+            RunEntity run,
+            NodeModel node,
+            NodeExecutionEntity execution,
+            String nodeKind
+    ) {
+        if (!Boolean.TRUE.equals(node.getCheckpointBeforeRun())) {
+            return;
+        }
+        if (!Set.of("ai", "command").contains(nodeKind)) {
+            return;
+        }
+
+        Path operationRoot = resolveNodeExecutionRoot(run, execution);
+        Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
+        String checkpointCommitMessage = "checkpoint:" + node.getId() + ":" + execution.getId();
+
+        CommandResult addResult = runGitCommand(
+                run,
+                execution,
+                "checkpoint_add",
+                List.of("git", "add", "-A"),
+                workingDirectory,
+                operationRoot
+        );
+        ensureGitCommandSuccess("checkpoint add", addResult);
+
+        CommandResult commitResult = runGitCommand(
+                run,
+                execution,
+                "checkpoint_commit",
+                List.of("git", "commit", "--allow-empty", "-m", checkpointCommitMessage),
+                workingDirectory,
+                operationRoot
+        );
+        ensureGitCommandSuccess("checkpoint commit", commitResult);
+
+        CommandResult shaResult = runGitCommand(
+                run,
+                execution,
+                "checkpoint_rev_parse",
+                List.of("git", "rev-parse", "HEAD"),
+                workingDirectory,
+                operationRoot
+        );
+        ensureGitCommandSuccess("checkpoint rev-parse", shaResult);
+
+        String checkpointSha = parseCheckpointSha(shaResult.stdout());
+        if (checkpointSha == null) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    execution.getId(),
+                    null,
+                    "checkpoint_creation_failed",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "phase", "rev_parse",
+                            "reason", "empty_or_invalid_sha",
+                            "stdout", truncate(shaResult.stdout(), 4000),
+                            "stderr", truncate(shaResult.stderr(), 4000)
+                    )
+            );
+            throw new NodeFailureException(
+                    "CHECKPOINT_CREATION_FAILED",
+                    "Failed to resolve checkpoint commit SHA",
+                    false
+            );
+        }
+
+        runtimeStepTxService.markNodeExecutionCheckpoint(run.getId(), execution.getId(), checkpointSha, Instant.now());
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                execution.getId(),
+                null,
+                "checkpoint_created",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "checkpoint_commit_sha", checkpointSha,
+                        "stdout", truncate(commitResult.stdout(), 4000),
+                        "stderr", truncate(commitResult.stderr(), 4000)
+                )
+        );
+    }
+
+    private void rollbackWorkspaceToCheckpoint(RunEntity run, String reworkTargetNodeId, UUID gateId) {
+        NodeExecutionEntity targetExecution = nodeExecutionRepository
+                .findFirstByRunIdAndNodeIdOrderByAttemptNoDesc(run.getId(), reworkTargetNodeId)
+                .orElseThrow(() -> new ValidationException(
+                        "CHECKPOINT_NOT_FOUND_FOR_REWORK: execution not found for node " + reworkTargetNodeId
+                ));
+
+        String checkpointCommitSha = trimToNull(targetExecution.getCheckpointCommitSha());
+        if (!targetExecution.isCheckpointEnabled() || checkpointCommitSha == null) {
+            throw new ValidationException(
+                    "CHECKPOINT_NOT_FOUND_FOR_REWORK: checkpoint is missing for node " + reworkTargetNodeId
+            );
+        }
+
+        Path operationRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve(".runtime").resolve("rework-reset");
+        Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
+        CommandResult resetResult;
+        try {
+            resetResult = runProcess(
+                    run.getId(),
+                    List.of("git", "reset", "--hard", checkpointCommitSha),
+                    workingDirectory,
+                    settingsService.getAiTimeoutSeconds(),
+                    operationRoot.resolve("checkpoint_reset.stdout.log"),
+                    operationRoot.resolve("checkpoint_reset.stderr.log")
+            );
+        } catch (IOException ex) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    null,
+                    gateId,
+                    "checkpoint_reset_failed",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "rework_target_node_id", reworkTargetNodeId,
+                            "checkpoint_commit_sha", checkpointCommitSha,
+                            "error", ex.getMessage()
+                    )
+            );
+            throw new ValidationException(
+                    "REWORK_RESET_FAILED: git reset --hard failed for checkpoint " + checkpointCommitSha
+            );
+        }
+        if (resetResult.exitCode() != 0) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    null,
+                    gateId,
+                    "checkpoint_reset_failed",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "rework_target_node_id", reworkTargetNodeId,
+                            "checkpoint_commit_sha", checkpointCommitSha,
+                            "stdout", truncate(resetResult.stdout(), 4000),
+                            "stderr", truncate(resetResult.stderr(), 4000)
+                    )
+            );
+            throw new ValidationException(
+                    "REWORK_RESET_FAILED: git reset --hard failed for checkpoint " + checkpointCommitSha
+            );
+        }
+
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                null,
+                gateId,
+                "checkpoint_reset_applied",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "rework_target_node_id", reworkTargetNodeId,
+                        "checkpoint_commit_sha", checkpointCommitSha,
+                        "stdout", truncate(resetResult.stdout(), 4000),
+                        "stderr", truncate(resetResult.stderr(), 4000)
+                )
+        );
+    }
+
+    private CommandResult runGitCommand(
+            RunEntity run,
+            NodeExecutionEntity execution,
+            String operationName,
+            List<String> command,
+            Path workingDirectory,
+            Path operationRoot
+    ) {
+        Path stdoutPath = operationRoot.resolve(operationName + ".stdout.log");
+        Path stderrPath = operationRoot.resolve(operationName + ".stderr.log");
+        try {
+            return runProcess(
+                    run.getId(),
+                    command,
+                    workingDirectory,
+                    settingsService.getAiTimeoutSeconds(),
+                    stdoutPath,
+                    stderrPath
+            );
+        } catch (IOException ex) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    execution == null ? null : execution.getId(),
+                    null,
+                    "checkpoint_command_failed",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "operation", operationName,
+                            "command", command,
+                            "error", ex.getMessage()
+                    )
+            );
+            throw new NodeFailureException(
+                    "CHECKPOINT_CREATION_FAILED",
+                    "Checkpoint command failed: " + operationName,
+                    false
+            );
+        }
+    }
+
+    private void ensureGitCommandSuccess(String operation, CommandResult result) {
+        if (result.exitCode() == 0) {
+            return;
+        }
+        throw new NodeFailureException(
+                "CHECKPOINT_CREATION_FAILED",
+                operation + " failed with exit code " + result.exitCode(),
+                false,
+                mapOf(
+                        "stdout", truncate(result.stdout(), 4000),
+                        "stderr", truncate(result.stderr(), 4000)
+                )
+        );
+    }
+
+    private String parseCheckpointSha(String stdout) {
+        String normalized = trimToNull(stdout);
+        if (normalized == null) {
+            return null;
+        }
+        String firstLine = normalized.split("\\R", 2)[0].trim();
+        if (firstLine.matches("^[0-9a-fA-F]{40}$")) {
+            return firstLine.toLowerCase(Locale.ROOT);
+        }
+        return null;
+    }
+
     private void enforceGateRole(NodeModel node, User user) {
         String actorRole = user == null || user.getRole() == null ? null : user.getRole().name();
         List<String> allowedRoles = node.getAllowedRoles() == null ? List.of() : node.getAllowedRoles();
@@ -1384,6 +1830,17 @@ public class RuntimeService {
             return node.getOnRework().getNextNode();
         }
         throw new ValidationException("on_rework target is missing");
+    }
+
+    private boolean shouldKeepChangesOnRework(NodeModel node, String modeRaw) {
+        String mode = normalize(trimToNull(modeRaw));
+        if ("keep".equals(mode)) {
+            return true;
+        }
+        if ("discard".equals(mode)) {
+            return false;
+        }
+        return node.getOnRework() != null && Boolean.TRUE.equals(node.getOnRework().getKeepChanges());
     }
 
     private void validateCreateRunCommand(CreateRunCommand command) {
@@ -1517,6 +1974,7 @@ public class RuntimeService {
         }
         try {
             CommandResult cloneResult = runProcess(
+                    run.getId(),
                     List.of(
                             "git",
                             "clone",
@@ -1527,7 +1985,7 @@ public class RuntimeService {
                             projectRoot.toString()
                     ),
                     runWorkspaceRoot,
-                    aiTimeoutSeconds,
+                    settingsService.getAiTimeoutSeconds(),
                     checkoutStdout,
                     checkoutStderr
             );
@@ -1578,6 +2036,7 @@ public class RuntimeService {
         Path stderrPath = runScopeRoot.resolve("logs").resolve("git-head.stderr.log");
         try {
             CommandResult result = runProcess(
+                    null,
                     List.of("git", "-C", projectRoot.toString(), "rev-parse", "HEAD"),
                     projectRoot,
                     30,
@@ -1739,6 +2198,12 @@ public class RuntimeService {
         return null;
     }
 
+    private boolean isRunCancelled(UUID runId) {
+        return runRepository.findById(runId)
+                .map((runEntity) -> runEntity.getStatus() == RunStatus.CANCELLED)
+                .orElse(false);
+    }
+
     private boolean isRunTerminal(RunStatus status) {
         return status == RunStatus.COMPLETED || status == RunStatus.FAILED || status == RunStatus.CANCELLED;
     }
@@ -1831,6 +2296,14 @@ public class RuntimeService {
         return value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
     }
 
+    private String capitalize(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return "Agent";
+        }
+        return normalized.substring(0, 1).toUpperCase(Locale.ROOT) + normalized.substring(1);
+    }
+
     private String redactRepoUrl(String repoUrl) {
         if (repoUrl == null || repoUrl.isBlank()) {
             return repoUrl;
@@ -1893,17 +2366,6 @@ public class RuntimeService {
             String stderrPath
     ) {}
 
-    private record AgentInvocationContext(
-            Path workingDirectory,
-            List<String> command,
-            Path promptPath,
-            Path rulePath,
-            Path skillsRoot,
-            Path stdoutPath,
-            Path stderrPath,
-            AgentPromptBuilder.AgentPromptPackage promptPackage
-    ) {}
-
     private static class NodeFailureException extends RuntimeException {
         private final String errorCode;
         private final String auditEventType;
@@ -1918,6 +2380,18 @@ public class RuntimeService {
             this.errorCode = errorCode;
             this.auditEventType = validationFailure ? "node_validation_failed" : "node_execution_failed";
             this.details = details == null ? Map.of() : details;
+        }
+    }
+
+    private static class ProcessCancelledException extends IOException {
+        private ProcessCancelledException(String message) {
+            super(message);
+        }
+    }
+
+    private static class RunCancelledException extends RuntimeException {
+        private RunCancelledException(String message) {
+            super(message);
         }
     }
 }

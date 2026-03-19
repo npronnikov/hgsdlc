@@ -55,6 +55,15 @@ public class NodeExecutionEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "checkpoint_enabled", nullable = false)
+    private boolean checkpointEnabled;
+
+    @Column(name = "checkpoint_commit_sha", length = 64)
+    private String checkpointCommitSha;
+
+    @Column(name = "checkpoint_created_at")
+    private Instant checkpointCreatedAt;
+
     @Version
     @Column(name = "resource_version", nullable = false)
     private long resourceVersion;

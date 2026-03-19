@@ -29,6 +29,7 @@ public class SettingsController {
         return new RuntimeSettingsResponse(
                 settings.workspaceRoot(),
                 settings.codingAgent(),
+                settings.aiTimeoutSeconds(),
                 settings.updatedAt(),
                 settings.updatedBy()
         );
@@ -45,14 +46,19 @@ public class SettingsController {
         if (request.codingAgent() == null || request.codingAgent().isBlank()) {
             throw new ValidationException("coding_agent is required");
         }
+        if (request.aiTimeoutSeconds() == null) {
+            throw new ValidationException("ai_timeout_seconds is required");
+        }
         SettingsService.RuntimeSettings updated = settingsService.updateRuntimeSettings(
                 request.workspaceRoot(),
                 request.codingAgent(),
+                request.aiTimeoutSeconds(),
                 user == null ? "system" : user.getUsername()
         );
         RuntimeSettingsResponse response = new RuntimeSettingsResponse(
                 updated.workspaceRoot(),
                 updated.codingAgent(),
+                updated.aiTimeoutSeconds(),
                 updated.updatedAt(),
                 updated.updatedBy()
         );
@@ -61,12 +67,14 @@ public class SettingsController {
 
     public record RuntimeSettingsRequest(
             @JsonProperty("workspace_root") String workspaceRoot,
-            @JsonProperty("coding_agent") String codingAgent
+            @JsonProperty("coding_agent") String codingAgent,
+            @JsonProperty("ai_timeout_seconds") Integer aiTimeoutSeconds
     ) {}
 
     public record RuntimeSettingsResponse(
             @JsonProperty("workspace_root") String workspaceRoot,
             @JsonProperty("coding_agent") String codingAgent,
+            @JsonProperty("ai_timeout_seconds") int aiTimeoutSeconds,
             @JsonProperty("updated_at") Instant updatedAt,
             @JsonProperty("updated_by") String updatedBy
     ) {}

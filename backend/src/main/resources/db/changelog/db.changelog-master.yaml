@@ -29,3 +29,9 @@ databaseChangeLog:
       file: db/changelog/019-flow-runtime-settings.sql
   - include:
       file: db/changelog/020-runtime-rework-instruction.sql
+  - include:
+      file: db/changelog/021-audit-indexes.sql
+  - include:
+      file: db/changelog/022-artifact-upsert.sql
+  - include:
+      file: db/changelog/023-runtime-node-checkpoint.sql

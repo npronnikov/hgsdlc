@@ -76,6 +76,9 @@ public class FlowValidator {
             errors.add("Unsupported node type: " + node.getId());
             return;
         }
+        if (Boolean.TRUE.equals(node.getCheckpointBeforeRun()) && !Set.of("ai", "command").contains(nodeKind)) {
+            errors.add("checkpoint_before_run is only allowed for ai/command nodes: " + node.getId());
+        }
 
         validateExecutionContext(node, nodeKind, errors);
         validateDeclaredOutputs(node, errors);

@@ -181,7 +181,7 @@ export default function Projects() {
                     </Dropdown>
                   </div>
                 </div>
-                <div className="resource-card-description mono">{project.repo_url}</div>
+                <div className="resource-card-description mono project-repo-url">{project.repo_url}</div>
                 <div className="resource-card-footer resource-card-footer-stack">
                   <span className="resource-canonical mono">branch: {project.default_branch}</span>
                   <span className="resource-canonical mono">last run: {project.last_run_id || '—'}</span>
@@ -242,7 +242,7 @@ export default function Projects() {
             </div>
             <div>
               <div className="muted">Repository</div>
-              <div className="mono">{viewingProject.repo_url}</div>
+              <div className="mono project-repo-url">{viewingProject.repo_url}</div>
             </div>
             <div>
               <div className="muted">Default branch</div>

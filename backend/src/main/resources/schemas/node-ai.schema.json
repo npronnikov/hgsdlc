@@ -20,6 +20,7 @@
       "items": { "$ref": "#/$defs/execution_context_entry" }
     },
     "instruction": { "type": "string" },
+    "checkpoint_before_run": { "type": "boolean" },
     "skill_refs": {
       "type": "array",
       "items": { "type": "string" }

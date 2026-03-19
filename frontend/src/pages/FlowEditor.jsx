@@ -241,6 +241,7 @@ function toNodeData(node, isStart) {
     type: kind,
     executionContext: node.execution_context || node.executionContext || [],
     instruction: node.instruction || '',
+    checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? false,
     skillRefs: node.skill_refs || node.skillRefs || [],
     responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
     producedArtifacts: node.produced_artifacts || node.producedArtifacts || [],
@@ -420,6 +421,11 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       if (!data.onSuccess) {
         errors.push(`Executor нода требует on_success: ${node.id}`);
       }
+      if (data.checkpointBeforeRun !== undefined && data.checkpointBeforeRun !== null && typeof data.checkpointBeforeRun !== 'boolean') {
+        errors.push(`checkpoint_before_run должен быть boolean: ${node.id}`);
+      }
+    } else if (data.checkpointBeforeRun) {
+      errors.push(`checkpoint_before_run разрешен только для ai/command: ${node.id}`);
     }
     if (kind === 'ai' && node.id === meta.startNodeId && !String(data.instruction || '').trim()) {
       errors.push(`Стартовая AI нода требует instruction: ${node.id}`);
@@ -749,6 +755,7 @@ export default function FlowEditor() {
       type: kind,
       executionContext: [],
       instruction: '',
+      checkpointBeforeRun: false,
       skillRefs: [],
       responseSchema: '',
       producedArtifacts: [],
@@ -974,6 +981,9 @@ export default function FlowEditor() {
       if (data.instruction) {
         lines.push('    instruction: |');
         data.instruction.split('\n').forEach((line) => lines.push(`      ${line}`));
+      }
+      if ((data.nodeKind || data.type) === 'ai' || (data.nodeKind || data.type) === 'command') {
+        lines.push(`    checkpoint_before_run: ${!!data.checkpointBeforeRun}`);
       }
       if (data.skillRefs && data.skillRefs.length > 0) {
         lines.push('    skill_refs:');
@@ -1623,6 +1633,9 @@ export default function FlowEditor() {
                           responseSchema: value === 'command' ? '' : (selectedNode.data.responseSchema || ''),
                           onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
                           onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
+                          checkpointBeforeRun: value === 'ai' || value === 'command'
+                            ? !!selectedNode.data.checkpointBeforeRun
+                            : false,
                         });
                       }}
                       options={[
@@ -1684,6 +1697,9 @@ export default function FlowEditor() {
                                     placeholder="нода-источник"
                                     disabled={isReadOnly}
                                     allowClear
+                                    popupClassName="node-source-select-dropdown"
+                                    popupMatchSelectWidth
+                                    getPopupContainer={(trigger) => trigger.parentElement || document.body}
                                     onChange={(value) => updateSelectedNodeList('executionContext', index, { node_id: value || '' })}
                                   />
                                 )}
@@ -1770,6 +1786,21 @@ export default function FlowEditor() {
                       </div>
                     </div>
                   </>
+                )}
+
+                {(selectedNodeKind === 'ai' || selectedNodeKind === 'command') && (
+                  <div>
+                    <Text className="muted">Сохранять состояние ноды до запуска</Text>
+                    <div className="field-control">
+                      <Checkbox
+                        checked={!!selectedNode.data.checkpointBeforeRun}
+                        disabled={isReadOnly}
+                        onChange={(event) => updateSelectedNode({ checkpointBeforeRun: event.target.checked })}
+                      >
+                        Да/Нет
+                      </Checkbox>
+                    </div>
+                  </div>
                 )}
 
                 {selectedNodeKind === 'ai' && (

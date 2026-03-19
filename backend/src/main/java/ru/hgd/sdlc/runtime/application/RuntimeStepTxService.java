@@ -3,11 +3,11 @@ package ru.hgd.sdlc.runtime.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -177,6 +177,7 @@ public class RuntimeStepTxService {
                 .attemptNo(attemptNo)
                 .status(NodeExecutionStatus.RUNNING)
                 .startedAt(Instant.now())
+                .checkpointEnabled(false)
                 .build();
         nodeExecutionRepository.save(execution);
         appendAuditInternal(
@@ -192,6 +193,20 @@ public class RuntimeStepTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public NodeExecutionEntity markNodeExecutionCheckpoint(
+            UUID runId,
+            UUID executionId,
+            String checkpointCommitSha,
+            Instant checkpointCreatedAt
+    ) {
+        NodeExecutionEntity execution = getNodeExecution(runId, executionId);
+        execution.setCheckpointEnabled(true);
+        execution.setCheckpointCommitSha(checkpointCommitSha);
+        execution.setCheckpointCreatedAt(checkpointCreatedAt);
+        return nodeExecutionRepository.save(execution);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public NodeExecutionEntity markNodeExecutionFailed(
             UUID runId,
             UUID executionId,
@@ -199,7 +214,16 @@ public class RuntimeStepTxService {
             String errorMessage,
             String auditEventType
     ) {
+        RunEntity run = getRun(runId);
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
+        if (run.getStatus() == RunStatus.CANCELLED || execution.getStatus() == NodeExecutionStatus.CANCELLED) {
+            if (execution.getStatus() != NodeExecutionStatus.CANCELLED) {
+                execution.setStatus(NodeExecutionStatus.CANCELLED);
+                execution.setFinishedAt(Instant.now());
+                nodeExecutionRepository.save(execution);
+            }
+            return execution;
+        }
         execution.setStatus(NodeExecutionStatus.FAILED);
         execution.setErrorCode(errorCode);
         execution.setErrorMessage(errorMessage);
@@ -222,7 +246,16 @@ public class RuntimeStepTxService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public NodeExecutionEntity markNodeExecutionSucceeded(UUID runId, UUID executionId, String nodeId) {
+        RunEntity run = getRun(runId);
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
+        if (run.getStatus() == RunStatus.CANCELLED || execution.getStatus() == NodeExecutionStatus.CANCELLED) {
+            if (execution.getStatus() != NodeExecutionStatus.CANCELLED) {
+                execution.setStatus(NodeExecutionStatus.CANCELLED);
+                execution.setFinishedAt(Instant.now());
+                nodeExecutionRepository.save(execution);
+            }
+            return execution;
+        }
         execution.setStatus(NodeExecutionStatus.SUCCEEDED);
         execution.setFinishedAt(Instant.now());
         nodeExecutionRepository.save(execution);
@@ -234,6 +267,27 @@ public class RuntimeStepTxService {
                 ActorType.SYSTEM,
                 "runtime",
                 Map.of("node_id", nodeId)
+        );
+        return execution;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public NodeExecutionEntity markNodeExecutionCancelled(UUID runId, UUID executionId, String reason) {
+        NodeExecutionEntity execution = getNodeExecution(runId, executionId);
+        if (execution.getStatus() == NodeExecutionStatus.CANCELLED) {
+            return execution;
+        }
+        execution.setStatus(NodeExecutionStatus.CANCELLED);
+        execution.setFinishedAt(Instant.now());
+        nodeExecutionRepository.save(execution);
+        appendAuditInternal(
+                runId,
+                executionId,
+                null,
+                "node_execution_cancelled",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf("reason", trimToNull(reason))
         );
         return execution;
     }
@@ -470,6 +524,9 @@ public class RuntimeStepTxService {
             String transitionLabel
     ) {
         RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
         run.setCurrentNodeId(targetNodeId);
         run.setStatus(RunStatus.RUNNING);
         runRepository.save(run);
@@ -489,7 +546,11 @@ public class RuntimeStepTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public RunEntity completeRun(UUID runId, UUID executionId, String nodeId) {
+    public RunEntity completeRun(UUID runId, UUID executionId, String nodeId, RunStatus terminalStatus) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
         execution.setStatus(NodeExecutionStatus.SUCCEEDED);
         execution.setFinishedAt(Instant.now());
@@ -504,17 +565,21 @@ public class RuntimeStepTxService {
                 Map.of("node_id", nodeId)
         );
 
-        RunEntity run = getRun(runId);
-        run.setStatus(RunStatus.COMPLETED);
+        run.setStatus(terminalStatus);
         run.setFinishedAt(Instant.now());
         runRepository.save(run);
-        appendAuditInternal(runId, executionId, null, "run_completed", ActorType.SYSTEM, "runtime", Map.of());
+        String auditEventType = terminalStatus == RunStatus.FAILED ? "run_failed" : "run_completed";
+        appendAuditInternal(runId, executionId, null, auditEventType, ActorType.SYSTEM, "runtime",
+                Map.of("terminal_status", terminalStatus.name().toLowerCase()));
         return run;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RunEntity failRun(UUID runId, String errorCode, String message) {
         RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
         run.setStatus(RunStatus.FAILED);
         run.setErrorCode(errorCode);
         run.setErrorMessage(message);
@@ -546,34 +611,48 @@ public class RuntimeStepTxService {
             String checksum,
             long sizeBytes
     ) {
-        ArtifactVersionEntity previous = artifactVersionRepository.findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(runId, artifactKey)
-                .orElse(null);
-        ArtifactVersionEntity artifact = ArtifactVersionEntity.builder()
-                .id(UUID.randomUUID())
-                .runId(runId)
-                .nodeId(nodeId)
-                .artifactKey(artifactKey)
-                .path(path)
-                .scope(scope)
-                .kind(kind)
-                .checksum(checksum)
-                .sizeBytes(sizeBytes)
-                .supersedesArtifactVersionId(previous == null ? null : previous.getId())
-                .createdAt(Instant.now())
-                .build();
+        Optional<ArtifactVersionEntity> existingOpt = artifactVersionRepository.findByRunIdAndArtifactKey(runId, artifactKey);
+        boolean isUpdate = existingOpt.isPresent();
+        ArtifactVersionEntity artifact;
+        if (existingOpt.isPresent()) {
+            artifact = existingOpt.get();
+            artifact.setNodeId(nodeId);
+            artifact.setPath(path);
+            artifact.setScope(scope);
+            artifact.setKind(kind);
+            artifact.setChecksum(checksum);
+            artifact.setSizeBytes(sizeBytes);
+            artifact.setVersionNo(artifact.getVersionNo() + 1);
+        } else {
+            artifact = ArtifactVersionEntity.builder()
+                    .id(UUID.randomUUID())
+                    .runId(runId)
+                    .nodeId(nodeId)
+                    .artifactKey(artifactKey)
+                    .path(path)
+                    .scope(scope)
+                    .kind(kind)
+                    .checksum(checksum)
+                    .sizeBytes(sizeBytes)
+                    .versionNo(1)
+                    .createdAt(Instant.now())
+                    .build();
+        }
         artifactVersionRepository.save(artifact);
+        String eventType = isUpdate ? "artifact_version_updated" : "artifact_version_created";
         appendAuditInternal(
                 runId,
                 null,
                 null,
-                "artifact_version_created",
+                eventType,
                 ActorType.SYSTEM,
                 "runtime",
                 Map.of(
                         "artifact_version_id", artifact.getId(),
                         "artifact_key", artifact.getArtifactKey(),
                         "path", artifact.getPath(),
-                        "kind", artifact.getKind().name().toLowerCase(Locale.ROOT)
+                        "kind", artifact.getKind().name().toLowerCase(Locale.ROOT),
+                        "version_no", artifact.getVersionNo()
                 )
         );
         return artifact;
