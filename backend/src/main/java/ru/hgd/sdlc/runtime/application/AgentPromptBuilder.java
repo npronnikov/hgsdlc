@@ -1,5 +1,8 @@
 package ru.hgd.sdlc.runtime.application;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +16,7 @@ import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.domain.PathRequirement;
+import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 
 @Service
@@ -25,25 +29,29 @@ public class AgentPromptBuilder {
     private static final String FOOTER_SECTION_TOKEN = "{{FOOTER_SECTION}}";
 
     private final String promptTemplate;
+    private final PromptTexts promptTexts;
 
     public AgentPromptBuilder(
-            @Value("classpath:runtime/prompt-template.md") Resource promptTemplateResource
+            @Value("classpath:runtime/prompt-template.md") Resource promptTemplateResource,
+            @Value("classpath:runtime/prompt-texts.ru.yaml") Resource promptTextsResource
     ) {
         this.promptTemplate = readTemplate(promptTemplateResource);
+        this.promptTexts = readPromptTexts(promptTextsResource);
     }
 
     public AgentPromptPackage build(
             RunEntity run,
             FlowModel flowModel,
             NodeModel node,
+            NodeExecutionEntity execution,
             List<Map<String, Object>> resolvedContext
     ) {
         boolean startNode = isStartNode(flowModel, node);
-        String task = startNode ? trimToNull(run.getFeatureRequest()) : null;
+        String task = trimToNull(run.getFeatureRequest());
         String requestClarification = trimToNull(run.getPendingReworkInstruction());
         String instruction = trimToNull(node.getInstruction());
-        List<String> inputs = summarizePromptInputs(resolvedContext, startNode);
-        List<String> expectedResults = summarizeExpectedResults(node);
+        List<String> inputs = summarizePromptInputs(resolvedContext);
+        List<String> expectedResults = summarizeExpectedResults(node, execution);
         AgentInput agentInput = new AgentInput(startNode, task, requestClarification, instruction, inputs, expectedResults);
         String prompt = renderPrompt(agentInput);
         return new AgentPromptPackage(agentInput, prompt, ChecksumUtil.sha256(prompt));
@@ -55,7 +63,7 @@ public class AgentPromptBuilder {
         String instructionSection = buildNodeInstructionSection(agentInput.nodeInstruction());
         String inputsSection = buildInputsSection(agentInput.inputs());
         String expectedResultsSection = buildExpectedResultsSection(agentInput.expectedResults());
-        String footerSection = "Use repository rules and installed skills already prepared for this run.\n";
+        String footerSection = promptTexts.footer() + "\n";
 
         String rendered = promptTemplate
                 .replace(TASK_SECTION_TOKEN, taskSection)
@@ -71,21 +79,21 @@ public class AgentPromptBuilder {
         if (task == null) {
             return "";
         }
-        return "Task:\n" + task + "\n\n";
+        return promptTexts.taskHeader() + "\n" + task + "\n\n";
     }
 
     private String buildRequestClarificationSection(String clarification) {
         if (clarification == null) {
             return "";
         }
-        return "Уточнение запроса:\n" + clarification + "\n\n";
+        return promptTexts.requestClarificationHeader() + "\n" + clarification + "\n\n";
     }
 
     private String buildNodeInstructionSection(String instruction) {
         if (instruction == null) {
             return "";
         }
-        return "Node instruction:\n" + instruction + "\n\n";
+        return promptTexts.nodeInstructionHeader() + "\n" + instruction + "\n\n";
     }
 
     private String buildInputsSection(List<String> inputs) {
@@ -93,7 +101,7 @@ public class AgentPromptBuilder {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("Available inputs:\n");
+        sb.append(promptTexts.inputsHeader()).append("\n");
         for (String input : inputs) {
             sb.append("- ").append(input).append("\n");
         }
@@ -106,7 +114,7 @@ public class AgentPromptBuilder {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("Expected result:\n");
+        sb.append(promptTexts.expectedResultsHeader()).append("\n");
         for (String expectedResult : expectedResults) {
             sb.append("- ").append(expectedResult).append("\n");
         }
@@ -127,21 +135,55 @@ public class AgentPromptBuilder {
         }
     }
 
-    private List<String> summarizePromptInputs(List<Map<String, Object>> resolvedContext, boolean includeUserRequest) {
+    private PromptTexts readPromptTexts(Resource promptTextsResource) {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        try (InputStream inputStream = promptTextsResource.getInputStream()) {
+            JsonNode root = mapper.readTree(inputStream);
+            return new PromptTexts(
+                    text(root, "/sections/task_header"),
+                    text(root, "/sections/request_clarification_header"),
+                    text(root, "/sections/node_instruction_header"),
+                    text(root, "/sections/inputs_header"),
+                    text(root, "/sections/expected_results_header"),
+                    text(root, "/sections/footer"),
+                    text(root, "/inputs/use_upstream_artifact_by_path"),
+                    text(root, "/inputs/use_upstream_artifact_by_key_and_path"),
+                    text(root, "/expected_results/required_artifacts"),
+                    text(root, "/expected_results/required_run_paths"),
+                    text(root, "/expected_results/required_mutations"),
+                    text(root, "/expected_results/summary")
+            );
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load runtime prompt texts", exception);
+        }
+    }
+
+    private String text(JsonNode root, String jsonPointer) {
+        JsonNode node = root.at(jsonPointer);
+        if (node.isMissingNode() || node.isNull()) {
+            throw new IllegalStateException("Missing prompt text: " + jsonPointer);
+        }
+        String value = trimToNull(node.asText());
+        if (value == null) {
+            throw new IllegalStateException("Blank prompt text: " + jsonPointer);
+        }
+        return value;
+    }
+
+    private List<String> summarizePromptInputs(List<Map<String, Object>> resolvedContext) {
         List<String> inputs = new ArrayList<>();
         for (Map<String, Object> contextEntry : resolvedContext) {
             String type = normalize(asString(contextEntry.get("type")));
             switch (type) {
-                case "user_request" -> {
-                    if (!includeUserRequest) {
-                        inputs.add("Continue from the existing workflow state.");
-                    }
-                }
                 case "artifact_ref" -> {
                     String artifactKey = trimToNull(asString(contextEntry.get("artifact_key")));
+                    String path = trimToNull(asString(contextEntry.get("path")));
                     inputs.add(artifactKey == null
-                            ? "Use the available upstream artifact."
-                            : "Use upstream artifact '" + artifactKey + "'.");
+                            ? promptTexts.useUpstreamArtifactByPath()
+                                    .replace("{path}", path == null ? "путь не указан" : path)
+                            : promptTexts.useUpstreamArtifactByKeyAndPath()
+                                    .replace("{artifact_key}", artifactKey)
+                                    .replace("{path}", path == null ? "путь не указан" : path));
                 }
                 default -> {
                 }
@@ -150,9 +192,10 @@ public class AgentPromptBuilder {
         return inputs.stream().distinct().toList();
     }
 
-    private List<String> summarizeExpectedResults(NodeModel node) {
+    private List<String> summarizeExpectedResults(NodeModel node, NodeExecutionEntity execution) {
         List<String> expectedResults = new ArrayList<>();
         List<String> requiredArtifacts = new ArrayList<>();
+        List<String> requiredRunScopePaths = new ArrayList<>();
         String outputArtifact = trimToNull(node.getOutputArtifact());
         if (outputArtifact != null) {
             requiredArtifacts.add(outputArtifact);
@@ -165,17 +208,31 @@ public class AgentPromptBuilder {
             String path = trimToNull(requirement.getPath());
             if (path != null) {
                 requiredArtifacts.add(artifactKeyForPath(path));
+                if (!"project".equals(normalize(requirement.getScope()))) {
+                    requiredRunScopePaths.add(runScopeArtifactPath(node, execution, path));
+                }
             }
         }
         List<String> distinctArtifacts = requiredArtifacts.stream().distinct().toList();
         if (!distinctArtifacts.isEmpty()) {
-            expectedResults.add("Produce required artifacts: " + String.join(", ", distinctArtifacts) + ".");
+            expectedResults.add(promptTexts.requiredArtifacts()
+                    .replace("{artifacts}", String.join(", ", distinctArtifacts)));
+        }
+        List<String> distinctRunScopePaths = requiredRunScopePaths.stream().distinct().toList();
+        if (!distinctRunScopePaths.isEmpty()) {
+            expectedResults.add(promptTexts.requiredRunPaths()
+                    .replace("{paths}", String.join(", ", distinctRunScopePaths)));
         }
         if (hasRequiredMutations(node.getExpectedMutations())) {
-            expectedResults.add("Apply the repository changes required for this node.");
+            expectedResults.add(promptTexts.requiredMutations());
         }
-        expectedResults.add("Return a concise summary of the completed work.");
+        expectedResults.add(promptTexts.summary());
         return expectedResults;
+    }
+
+    private String runScopeArtifactPath(NodeModel node, NodeExecutionEntity execution, String artifactPath) {
+        String normalized = artifactPath.replace('\\', '/');
+        return ".hgsdlc/nodes/" + node.getId() + "/attempt-" + execution.getAttemptNo() + "/" + normalized;
     }
 
     private boolean hasRequiredMutations(List<PathRequirement> mutations) {
@@ -239,5 +296,20 @@ public class AgentPromptBuilder {
             String nodeInstruction,
             List<String> inputs,
             List<String> expectedResults
+    ) {}
+
+    private record PromptTexts(
+            String taskHeader,
+            String requestClarificationHeader,
+            String nodeInstructionHeader,
+            String inputsHeader,
+            String expectedResultsHeader,
+            String footer,
+            String useUpstreamArtifactByPath,
+            String useUpstreamArtifactByKeyAndPath,
+            String requiredArtifacts,
+            String requiredRunPaths,
+            String requiredMutations,
+            String summary
     ) {}
 }

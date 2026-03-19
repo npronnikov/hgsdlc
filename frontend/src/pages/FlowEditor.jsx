@@ -128,7 +128,6 @@ const getDraftForMajor = (versions, major) => (
 );
 
 const EXECUTION_CONTEXT_TYPES = [
-  { value: 'user_request', label: 'Запрос пользователя' },
   { value: 'artifact_ref', label: 'Артефакт' },
 ];
 
@@ -225,6 +224,14 @@ function buildEdges(nodes) {
 
 function toNodeData(node, isStart) {
   const kind = node.node_kind || node.nodeKind || node.type || '';
+  const rawProducedArtifacts = node.produced_artifacts || node.producedArtifacts || [];
+  const producedArtifacts = kind === 'human_input'
+    ? rawProducedArtifacts.map((artifact) => ({
+      ...artifact,
+      scope: 'run',
+      required: true,
+    }))
+    : rawProducedArtifacts;
   const rawRework = node.on_rework || node.onRework || null;
   let onRework = null;
   if (rawRework) {
@@ -244,7 +251,7 @@ function toNodeData(node, isStart) {
     checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? false,
     skillRefs: node.skill_refs || node.skillRefs || [],
     responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
-    producedArtifacts: node.produced_artifacts || node.producedArtifacts || [],
+    producedArtifacts,
     expectedMutations: node.expected_mutations || node.expectedMutations || [],
     onSuccess: node.on_success || node.onSuccess || '',
     onFailure: node.on_failure || node.onFailure || '',
@@ -342,7 +349,7 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       });
     }
 
-    if (kind !== 'command') {
+    if (kind !== 'command' && kind !== 'human_input') {
       if (!Array.isArray(data.executionContext)) {
         errors.push(`execution_context не задан: ${node.id}`);
       } else {
@@ -368,9 +375,6 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
               errors.push(`execution_context node_id не задан для run-scope артефакта: ${node.id}`);
             }
           }
-          if (entry.type === 'user_request' && entry.path) {
-            errors.push(`user_request не должен иметь path: ${node.id}`);
-          }
         });
       }
     }
@@ -395,6 +399,27 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     };
     checkPathList(data.producedArtifacts, 'produced_artifacts');
     checkPathList(data.expectedMutations, 'expected_mutations');
+
+    if (kind === 'human_input') {
+      if (Array.isArray(data.executionContext) && data.executionContext.length > 0) {
+        errors.push(`human_input не поддерживает execution_context: ${node.id}`);
+      }
+      if (!String(data.instruction || '').trim()) {
+        errors.push(`human_input требует instruction: ${node.id}`);
+      }
+      if (!Array.isArray(data.producedArtifacts) || data.producedArtifacts.length === 0) {
+        errors.push(`human_input требует produced_artifacts: ${node.id}`);
+      } else {
+        data.producedArtifacts.forEach((artifact) => {
+          if ((artifact.scope || 'run') !== 'run') {
+            errors.push(`human_input produced_artifacts поддерживает только scope=run: ${node.id}`);
+          }
+          if (artifact.required !== true) {
+            errors.push(`human_input produced_artifacts всегда required=true: ${node.id}`);
+          }
+        });
+      }
+    }
 
     const transitions = [];
     if (data.onSuccess) transitions.push(['on_success', data.onSuccess]);
@@ -525,7 +550,7 @@ export default function FlowEditor() {
   );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedNodeKind = selectedNode?.data?.nodeKind || selectedNode?.data?.type || '';
-  const showExecutionContextEditor = ['ai', 'human_input', 'human_approval'].includes(selectedNodeKind);
+  const showExecutionContextEditor = ['ai', 'human_approval'].includes(selectedNodeKind);
   const validationErrors = validateFlow(nodes, flowMeta, rulesCatalog, skillsCatalog);
   const isReadOnly = !isEditing;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
@@ -958,7 +983,7 @@ export default function FlowEditor() {
         lines.push(`    description: ${data.description}`);
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
-      if ((data.nodeKind || data.type) !== 'command') {
+      if ((data.nodeKind || data.type) !== 'command' && (data.nodeKind || data.type) !== 'human_input') {
         if (data.executionContext && data.executionContext.length > 0) {
           lines.push('    execution_context:');
           data.executionContext.forEach((entry) => {
@@ -997,11 +1022,12 @@ export default function FlowEditor() {
         lines.push('    produced_artifacts:');
         data.producedArtifacts.forEach((artifact) => {
           lines.push('      -');
-          if (artifact.scope) {
-            lines.push(`        scope: ${artifact.scope}`);
+          const artifactScope = (data.nodeKind || data.type) === 'human_input' ? 'run' : artifact.scope;
+          if (artifactScope) {
+            lines.push(`        scope: ${artifactScope}`);
           }
           lines.push(`        path: ${artifact.path}`);
-          lines.push(`        required: ${!!artifact.required}`);
+          lines.push(`        required: ${(data.nodeKind || data.type) === 'human_input' ? 'true' : !!artifact.required}`);
         });
       } else {
         lines.push('    produced_artifacts: []');
@@ -1665,9 +1691,7 @@ export default function FlowEditor() {
                                 onChange={(value) => updateSelectedNodeList(
                                   'executionContext',
                                   index,
-                                  value === 'user_request'
-                                    ? { type: value, path: '', scope: undefined, node_id: undefined }
-                                    : { type: value, scope: entry.scope || 'run' }
+                                  { type: value, scope: entry.scope || 'run' }
                                 )}
                               />
                               <Button
@@ -1719,7 +1743,7 @@ export default function FlowEditor() {
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
                           onClick={() =>
-                            addSelectedNodeListItem('executionContext', { type: 'user_request', required: true })
+                            addSelectedNodeListItem('executionContext', { type: 'artifact_ref', required: true, scope: 'run', path: '' })
                           }
                         >
                           Добавить контекст
@@ -1768,6 +1792,20 @@ export default function FlowEditor() {
                       </div>
                     </div>
                   </>
+                )}
+
+                {selectedNodeKind === 'human_input' && (
+                  <div>
+                    <Text className="muted">Инструкция пользователю</Text>
+                    <div className="field-control">
+                      <Input.TextArea
+                        rows={3}
+                        value={selectedNode.data.instruction}
+                        disabled={isReadOnly}
+                        onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
+                      />
+                    </div>
+                  </div>
                 )}
 
                 {selectedNodeKind === 'command' && (
@@ -1859,9 +1897,9 @@ export default function FlowEditor() {
                         {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
                           <div key={`artifact-${index}`} className="artifact-row">
                             <Select
-                              value={entry.scope || 'run'}
+                              value={selectedNodeKind === 'human_input' ? 'run' : (entry.scope || 'run')}
                               options={SCOPE_OPTIONS}
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || selectedNodeKind === 'human_input'}
                               onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
                             />
                             <Input
@@ -1888,7 +1926,11 @@ export default function FlowEditor() {
                           type="dashed"
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
-                          onClick={() => addSelectedNodeListItem('producedArtifacts', { path: '', required: true, scope: 'run' })}
+                          onClick={() => addSelectedNodeListItem('producedArtifacts', {
+                            path: '',
+                            required: true,
+                            scope: 'run',
+                          })}
                         >
                           Добавить артефакт
                         </Button>

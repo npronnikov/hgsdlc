@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -528,6 +528,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   const [runtimeSettings, setRuntimeSettings] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [artifactSubmitHandler, setArtifactSubmitHandler] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const timelineEndRef = useRef(null);
   const activeTab = searchParams.get('tab') || 'overview';
@@ -624,6 +625,104 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     if (!selectedNodeIdStr) return artifacts;
     return artifacts.filter((a) => a.node_id === selectedNodeIdStr);
   }, [artifacts, selectedNodeIdStr]);
+
+  const toRelativeRunScopePath = (rawPath) => {
+    if (!rawPath) {
+      return null;
+    }
+    if (!rawPath.startsWith('/')) {
+      return rawPath;
+    }
+    const workspaceRoot = run?.workspace_root || '';
+    if (workspaceRoot && rawPath.startsWith(workspaceRoot + '/.hgsdlc/')) {
+      return rawPath.slice((workspaceRoot + '/.hgsdlc/').length);
+    }
+    const runScopeMarker = '/.hgsdlc/';
+    const runScopeIndex = rawPath.indexOf(runScopeMarker);
+    if (runScopeIndex >= 0) {
+      return rawPath.slice(runScopeIndex + runScopeMarker.length);
+    }
+    return rawPath;
+  };
+
+  const humanInputArtifactsFromGate = useMemo(() => {
+    const gate = run?.current_gate;
+    if (!gate || gate.gate_kind !== 'human_input') {
+      return [];
+    }
+    const entries = Array.isArray(gate.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
+    return entries
+      .filter((entry) => entry && entry.path)
+      .map((entry) => ({
+        artifact_key: entry.artifact_key || 'artifact',
+        path: toRelativeRunScopePath(entry.path),
+        scope: 'run',
+        node_id: gate.node_id,
+        required: entry.required !== false,
+      }));
+  }, [run]);
+
+  const artifactsTableRows = useMemo(() => {
+    const expectedByPath = new Map(humanInputArtifactsFromGate.map((expected) => [expected.path, expected]));
+    const seenExpectedPaths = new Set();
+
+    const rows = filteredArtifacts.map((artifact) => {
+      const relativePath = toRelativeRunScopePath(artifact.path);
+      const expected = expectedByPath.get(relativePath);
+      if (expected) {
+        seenExpectedPaths.add(expected.path);
+      }
+      return {
+        ...artifact,
+        path: expected ? expected.path : artifact.path,
+        scope: expected ? 'run' : artifact.scope,
+        humanInputEditable: Boolean(expected),
+        humanInputGateId: expected ? run?.current_gate?.gate_id : null,
+        humanInputExpectedGateVersion: expected ? run?.current_gate?.resource_version : null,
+        humanInputComment: expected ? 'submitted from run console' : null,
+      };
+    });
+
+    humanInputArtifactsFromGate.forEach((expected) => {
+      if (seenExpectedPaths.has(expected.path)) {
+        return;
+      }
+      rows.push({
+        artifact_version_id: null,
+        artifact_key: expected.artifact_key,
+        node_id: expected.node_id,
+        path: expected.path,
+        scope: 'run',
+        kind: 'human_input',
+        size_bytes: 0,
+        version_no: 0,
+        humanInputEditable: true,
+        humanInputGateId: run?.current_gate?.gate_id,
+        humanInputExpectedGateVersion: run?.current_gate?.resource_version,
+        humanInputComment: 'submitted from run console',
+      });
+    });
+
+    return rows;
+  }, [humanInputArtifactsFromGate, filteredArtifacts, run]);
+
+  const handleArtifactSubmitReady = useCallback((handler) => {
+    setArtifactSubmitHandler(() => handler);
+  }, []);
+
+  const openHumanInputArtifactEditor = async () => {
+    if (selectedArtifact?.humanInputEditable && typeof artifactSubmitHandler === 'function') {
+      await artifactSubmitHandler();
+      return;
+    }
+    const editableRows = artifactsTableRows.filter((row) => row.humanInputEditable);
+    if (editableRows.length === 0) {
+      message.warning('Для human input не найдено артефактов для редактирования');
+      return;
+    }
+    setSelectedArtifact(editableRows[0]);
+    setActiveTab('artifacts');
+  };
 
   const cancelRun = async () => {
     try {
@@ -782,23 +881,38 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                     <ArtifactViewer
                       runId={runId}
                       artifact={selectedArtifact}
-                      onClose={() => setSelectedArtifact(null)}
+                      onClose={() => {
+                        setSelectedArtifact(null);
+                        setArtifactSubmitHandler(null);
+                      }}
+                      onSubmitted={async () => {
+                        setSelectedArtifact(null);
+                        setArtifactSubmitHandler(null);
+                        await load();
+                      }}
+                      onSubmitReady={handleArtifactSubmitReady}
                     />
                   ) : (
                     <Table
-                      rowKey="artifact_version_id"
-                      dataSource={filteredArtifacts}
+                      rowKey={(record) => record.artifact_version_id || `${record.node_id}:${record.path}`}
+                      dataSource={artifactsTableRows}
                       pagination={false}
                       size="small"
                       onRow={(record) => ({
-                        onClick: () => setSelectedArtifact(record),
+                        onClick: () => setSelectedArtifact({
+                          ...record,
+                          humanInputEditable: record.humanInputEditable === true,
+                          humanInputGateId: record.humanInputGateId || run?.current_gate?.gate_id,
+                          humanInputExpectedGateVersion: record.humanInputExpectedGateVersion || run?.current_gate?.resource_version,
+                          humanInputComment: 'submitted from run console',
+                        }),
                         style: { cursor: 'pointer' },
                       })}
                       columns={[
                         { title: 'Key', dataIndex: 'artifact_key', key: 'artifact_key', render: (v) => <span className="mono">{v}</span> },
                         { title: 'Node', dataIndex: 'node_id', key: 'node_id', render: (v) => <span className="mono">{v}</span> },
                         { title: 'Kind', dataIndex: 'kind', key: 'kind', render: (v) => <StatusTag value={v} /> },
-                        { title: 'Ver', dataIndex: 'version_no', key: 'version_no', width: 50, render: (v) => <span className="mono">v{v}</span> },
+                        { title: 'Ver', dataIndex: 'version_no', key: 'version_no', width: 50, render: (v) => <span className="mono">v{v || 0}</span> },
                         { title: 'Size', dataIndex: 'size_bytes', key: 'size_bytes', width: 80, render: (v) => v ? `${v} B` : '—' },
                       ]}
                     />
@@ -817,7 +931,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         </Col>
 
         <Col xs={24} lg={6}>
-          <ActionCenter run={run} onActionComplete={load} />
+          <ActionCenter run={run} onActionComplete={load} onOpenArtifactEditor={openHumanInputArtifactEditor} />
         </Col>
       </Row>
     </div>

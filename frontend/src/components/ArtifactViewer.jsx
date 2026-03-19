@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Space, Typography, message } from 'antd';
 import Editor from '@monaco-editor/react';
 import { apiRequest } from '../api/request.js';
@@ -31,11 +31,26 @@ function detectLanguage(path) {
   return map[ext] || 'plaintext';
 }
 
-export default function ArtifactViewer({ runId, artifact, onClose }) {
+function encodeBase64(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, onSubmitReady }) {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (artifact?.humanInputEditable && !artifact?.artifact_version_id) {
+      setContent('');
+      setLoading(false);
+      return;
+    }
     if (!artifact?.artifact_version_id) {
       return;
     }
@@ -55,6 +70,63 @@ export default function ArtifactViewer({ runId, artifact, onClose }) {
   }
 
   const language = detectLanguage(artifact.path || artifact.artifact_key);
+  const editable = artifact.humanInputEditable === true;
+
+  const submitHumanInput = useCallback(async () => {
+    if (!editable) {
+      return;
+    }
+    if (!artifact.humanInputGateId) {
+      message.error('Gate context missing for submit');
+      return;
+    }
+    if (!content || !content.trim()) {
+      message.warning('Введите ответ');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest(`/gates/${artifact.humanInputGateId}/submit-input`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expected_gate_version: artifact.humanInputExpectedGateVersion,
+          artifacts: [
+            {
+              artifact_key: artifact.artifact_key,
+              path: artifact.path,
+              scope: artifact.scope || 'run',
+              content_base64: encodeBase64(content),
+            },
+          ],
+          comment: artifact.humanInputComment || 'submitted from run console',
+        }),
+      });
+      message.success('Input submitted');
+      await onSubmitted?.();
+    } catch (err) {
+      if (err.status === 409) {
+        message.warning('Gate was modified, reloading...');
+        await onSubmitted?.();
+        return;
+      }
+      message.error(err.message || 'Не удалось отправить input');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    editable,
+    artifact,
+    content,
+    onSubmitted,
+  ]);
+
+  useEffect(() => {
+    if (!onSubmitReady) {
+      return undefined;
+    }
+    onSubmitReady(editable ? submitHumanInput : null);
+    return () => onSubmitReady(null);
+  }, [onSubmitReady, editable, submitHumanInput]);
 
   return (
     <Card
@@ -75,8 +147,13 @@ export default function ArtifactViewer({ runId, artifact, onClose }) {
             height="400px"
             defaultLanguage={language}
             value={content}
+            onChange={(value) => {
+              if (editable) {
+                setContent(value || '');
+              }
+            }}
             options={{
-              readOnly: true,
+              readOnly: !editable,
               minimap: { enabled: false },
               lineNumbers: 'on',
               scrollBeyondLastLine: false,

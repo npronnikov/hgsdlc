@@ -611,7 +611,11 @@ public class RuntimeStepTxService {
             String checksum,
             long sizeBytes
     ) {
-        Optional<ArtifactVersionEntity> existingOpt = artifactVersionRepository.findByRunIdAndArtifactKey(runId, artifactKey);
+        Optional<ArtifactVersionEntity> existingOpt = artifactVersionRepository.findByRunIdAndNodeIdAndArtifactKey(
+                runId,
+                nodeId,
+                artifactKey
+        );
         boolean isUpdate = existingOpt.isPresent();
         ArtifactVersionEntity artifact;
         if (existingOpt.isPresent()) {

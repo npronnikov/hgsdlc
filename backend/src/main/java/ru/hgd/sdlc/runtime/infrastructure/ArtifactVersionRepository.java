@@ -7,7 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
 
 public interface ArtifactVersionRepository extends JpaRepository<ArtifactVersionEntity, UUID> {
-    Optional<ArtifactVersionEntity> findByRunIdAndArtifactKey(UUID runId, String artifactKey);
+    Optional<ArtifactVersionEntity> findByRunIdAndNodeIdAndArtifactKey(UUID runId, String nodeId, String artifactKey);
+
+    Optional<ArtifactVersionEntity> findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(UUID runId, String artifactKey);
 
     List<ArtifactVersionEntity> findByRunIdOrderByCreatedAtDesc(UUID runId);
 }

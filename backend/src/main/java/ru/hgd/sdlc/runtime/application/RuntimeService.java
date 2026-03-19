@@ -9,6 +9,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -337,8 +338,10 @@ public class RuntimeService {
         RunEntity run = getRunEntity(runId);
         NodeExecutionEntity execution = nodeExecutionRepository.findByIdAndRunId(nodeExecutionId, runId)
                 .orElseThrow(() -> new NotFoundException("Node execution not found: " + nodeExecutionId));
-        String dirName = execution.getNodeId() + "-attempt-" + execution.getAttemptNo();
-        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
+        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run))
+                .resolve("nodes")
+                .resolve(execution.getNodeId())
+                .resolve("attempt-" + execution.getAttemptNo());
         String logFileName = "ai".equals(execution.getNodeKind()) ? "agent.stdout.log" : "command.stdout.log";
         Path logPath = nodeDir.resolve(logFileName);
         boolean running = execution.getStatus() == NodeExecutionStatus.RUNNING
@@ -689,7 +692,9 @@ public class RuntimeService {
             );
         }
 
-        List<String> validationErrors = validateHumanInputOutputs(run, node, command.artifacts());
+        NodeExecutionEntity gateExecution = nodeExecutionRepository.findById(gate.getNodeExecutionId())
+                .orElseThrow(() -> new ValidationException("Gate execution not found: " + gate.getNodeExecutionId()));
+        List<String> validationErrors = validateHumanInputOutputs(run, node, gateExecution);
         if (!validationErrors.isEmpty()) {
             runtimeStepTxService.markGateValidationFailed(
                     run.getId(),
@@ -1065,7 +1070,10 @@ public class RuntimeService {
             GateKind gateKind,
             GateStatus initialStatus
     ) {
-        String payloadJson = buildGatePayload(run, node);
+        if (gateKind == GateKind.HUMAN_INPUT) {
+            createHumanInputOutputFiles(run, node, execution);
+        }
+        String payloadJson = buildGatePayload(run, node, execution);
         runtimeStepTxService.openGate(
                 run.getId(),
                 execution.getId(),
@@ -1078,19 +1086,27 @@ public class RuntimeService {
         return false;
     }
 
-    private String buildGatePayload(RunEntity run, NodeModel node) {
+    private String buildGatePayload(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        if ("human_approval".equals(normalizeNodeKind(node))) {
+        String nodeKind = normalizeNodeKind(node);
+        if ("human_approval".equals(nodeKind)) {
             payload.put("rework_discard_available", isReworkDiscardAvailable(run, node));
         }
-        List<Map<String, Object>> contextArtifacts = resolveGateContextArtifacts(run, node);
-        if (!contextArtifacts.isEmpty()) {
-            payload.put("execution_context_artifacts", contextArtifacts);
+        if ("human_input".equals(nodeKind)) {
+            List<Map<String, Object>> humanInputArtifacts = resolveHumanInputOutputArtifacts(run, node, execution);
+            if (!humanInputArtifacts.isEmpty()) {
+                payload.put("human_input_artifacts", humanInputArtifacts);
+            }
+        } else {
+            List<Map<String, Object>> contextArtifacts = resolveGateContextArtifacts(run, node);
+            if (!contextArtifacts.isEmpty()) {
+                payload.put("execution_context_artifacts", contextArtifacts);
+            }
         }
         String inputArtifactKey = trimToNull(node.getInputArtifact());
         if (inputArtifactKey != null) {
             ArtifactVersionEntity inputArtifact = artifactVersionRepository
-                    .findByRunIdAndArtifactKey(run.getId(), inputArtifactKey)
+                    .findFirstByRunIdAndArtifactKeyOrderByCreatedAtDesc(run.getId(), inputArtifactKey)
                     .orElse(null);
             if (inputArtifact != null) {
                 String content = readFileContent(Path.of(inputArtifact.getPath()));
@@ -1106,7 +1122,7 @@ public class RuntimeService {
         if (outputArtifactKey != null) {
             payload.put("output_artifact_key", outputArtifactKey);
         }
-        String userInstructions = trimToNull(node.getUserInstructions());
+        String userInstructions = trimToNull(node.getInstruction());
         if (userInstructions != null) {
             payload.put("user_instructions", userInstructions);
         }
@@ -1173,6 +1189,53 @@ public class RuntimeService {
             result.add(artifactInfo);
         }
         return result;
+    }
+
+    private List<Map<String, Object>> resolveHumanInputOutputArtifacts(
+            RunEntity run,
+            NodeModel node,
+            NodeExecutionEntity execution
+    ) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (node.getProducedArtifacts() == null) {
+            return result;
+        }
+        for (PathRequirement requirement : node.getProducedArtifacts()) {
+            if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
+                continue;
+            }
+            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
+            result.add(mapOf(
+                    "artifact_key", artifactKeyForPath(requirement.getPath()),
+                    "path", relativizeRunScopePath(run, path),
+                    "scope", "run",
+                    "required", true
+            ));
+        }
+        return result;
+    }
+
+    private void createHumanInputOutputFiles(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
+        List<PathRequirement> producedArtifacts = node.getProducedArtifacts() == null ? List.of() : node.getProducedArtifacts();
+        for (PathRequirement requirement : producedArtifacts) {
+            if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
+                continue;
+            }
+            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
+            createDirectories(path.getParent());
+            if (!Files.exists(path)) {
+                writeFile(path, new byte[0]);
+            }
+            recordArtifactVersion(
+                    run,
+                    execution.getNodeId(),
+                    artifactKeyForPath(requirement.getPath()),
+                    path,
+                    ArtifactScope.RUN,
+                    ArtifactKind.HUMAN_INPUT,
+                    null
+            );
+        }
     }
 
     private String readFileContent(Path path) {
@@ -1398,35 +1461,48 @@ public class RuntimeService {
         return sb.toString();
     }
 
-    private List<String> validateHumanInputOutputs(
-            RunEntity run,
-            NodeModel node,
-            List<SubmittedArtifact> submittedArtifacts
-    ) {
+    private List<String> validateHumanInputOutputs(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
         List<String> errors = new ArrayList<>();
-        String outputArtifact = trimToNull(node.getOutputArtifact());
-        if (outputArtifact != null) {
-            boolean present = submittedArtifacts.stream().anyMatch((artifact) -> outputArtifact.equals(artifact.artifactKey()));
-            if (!present) {
-                errors.add("Missing required output_artifact: " + outputArtifact);
-            }
+        if (node.getProducedArtifacts() == null) {
+            return errors;
         }
-        if (node.getProducedArtifacts() != null) {
-            for (PathRequirement requirement : node.getProducedArtifacts()) {
-                if (requirement == null || !Boolean.TRUE.equals(requirement.getRequired())) {
-                    continue;
-                }
-                if (requirement.getPath() == null || requirement.getPath().isBlank()) {
-                    errors.add("produced_artifacts path is required");
-                    continue;
-                }
-                Path path = resolvePath(run, requirement.getScope(), requirement.getPath());
-                if (!Files.exists(path)) {
-                    errors.add("Required produced artifact missing: " + requirement.getPath());
-                }
+        for (PathRequirement requirement : node.getProducedArtifacts()) {
+            if (requirement == null || !Boolean.TRUE.equals(requirement.getRequired())) {
+                continue;
+            }
+            if (requirement.getPath() == null || requirement.getPath().isBlank()) {
+                errors.add("produced_artifacts path is required");
+                continue;
+            }
+            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
+            if (!Files.exists(path) || Files.isDirectory(path)) {
+                errors.add("Required produced artifact missing: " + requirement.getPath());
+                continue;
+            }
+            if (isFileEmptyOrBlank(path)) {
+                errors.add("Required produced artifact is empty: " + requirement.getPath());
             }
         }
         return errors;
+    }
+
+    private boolean isFileEmptyOrBlank(Path path) {
+        try {
+            if (!Files.exists(path) || Files.isDirectory(path)) {
+                return true;
+            }
+            long size = Files.size(path);
+            if (size == 0) {
+                return true;
+            }
+            if (size > 1_048_576) {
+                return false;
+            }
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            return content.trim().isEmpty();
+        } catch (IOException ex) {
+            return true;
+        }
     }
 
     private void validateNodeOutputs(
@@ -1950,8 +2026,11 @@ public class RuntimeService {
     private CommandResult runGitCheckout(RunEntity run, Path projectRoot) {
         Project project = resolveProject(run.getProjectId());
         Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
-        Path checkoutStdout = runWorkspaceRoot.resolve("checkout.stdout.log");
-        Path checkoutStderr = runWorkspaceRoot.resolve("checkout.stderr.log");
+        Path workspaceParent = runWorkspaceRoot.getParent() == null
+                ? runWorkspaceRoot
+                : runWorkspaceRoot.getParent();
+        Path checkoutStdout = workspaceParent.resolve(run.getId() + ".checkout.stdout.log");
+        Path checkoutStderr = workspaceParent.resolve(run.getId() + ".checkout.stderr.log");
         String repoUrl = trimToNull(project.getRepoUrl());
         if (repoUrl == null) {
             throw new NodeFailureException(
@@ -1972,6 +2051,7 @@ public class RuntimeService {
                 throw new NodeFailureException("CHECKOUT_FAILED", "Failed to clean project root before checkout", false);
             }
         }
+        createDirectories(runWorkspaceRoot);
         try {
             CommandResult cloneResult = runProcess(
                     run.getId(),
@@ -2011,6 +2091,7 @@ public class RuntimeService {
                         )
                 );
             }
+            ensureRuntimeMetadataIgnored(projectRoot);
             return cloneResult;
         } catch (IOException ex) {
             throw new NodeFailureException(
@@ -2057,11 +2138,11 @@ public class RuntimeService {
     }
 
     private Path resolveProjectScopeRoot(Path runWorkspaceRoot) {
-        return runWorkspaceRoot.resolve("repo").toAbsolutePath().normalize();
+        return runWorkspaceRoot.toAbsolutePath().normalize();
     }
 
     private Path resolveRunScopeRoot(Path runWorkspaceRoot) {
-        return runWorkspaceRoot.resolve("runtime").toAbsolutePath().normalize();
+        return runWorkspaceRoot.resolve(".hgsdlc").toAbsolutePath().normalize();
     }
 
     private Path resolveRunWorkspaceRoot(RunEntity run) {
@@ -2077,8 +2158,10 @@ public class RuntimeService {
     }
 
     private Path resolveNodeExecutionRoot(RunEntity run, NodeExecutionEntity execution) {
-        String dirName = execution.getNodeId() + "-attempt-" + execution.getAttemptNo();
-        Path path = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
+        Path path = resolveRunScopeRoot(resolveRunWorkspaceRoot(run))
+                .resolve("nodes")
+                .resolve(execution.getNodeId())
+                .resolve("attempt-" + execution.getAttemptNo());
         createDirectories(path);
         return path;
     }
@@ -2113,6 +2196,15 @@ public class RuntimeService {
         return resolved;
     }
 
+    private String relativizeRunScopePath(RunEntity run, Path path) {
+        Path runScopeRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run));
+        Path normalizedPath = path.toAbsolutePath().normalize();
+        if (normalizedPath.startsWith(runScopeRoot)) {
+            return runScopeRoot.relativize(normalizedPath).toString().replace('\\', '/');
+        }
+        return normalizedPath.toString();
+    }
+
     private Path resolveArtifactRefPath(RunEntity run, String sourceNodeId, String scopeRaw, String fileName) {
         if ("project".equals(defaultScope(scopeRaw))) {
             return resolvePath(run, "project", fileName);
@@ -2128,9 +2220,41 @@ public class RuntimeService {
         if (sourceExecution == null) {
             return null;
         }
-        String dirName = sourceExecution.getNodeId() + "-attempt-" + sourceExecution.getAttemptNo();
-        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve("nodes").resolve(dirName);
+        Path nodeDir = resolveRunScopeRoot(resolveRunWorkspaceRoot(run))
+                .resolve("nodes")
+                .resolve(sourceExecution.getNodeId())
+                .resolve("attempt-" + sourceExecution.getAttemptNo());
         return nodeDir.resolve(fileName).normalize();
+    }
+
+    private void ensureRuntimeMetadataIgnored(Path projectRoot) {
+        Path excludePath = projectRoot.resolve(".git").resolve("info").resolve("exclude");
+        if (!Files.exists(excludePath)) {
+            return;
+        }
+        try {
+            String content = Files.readString(excludePath, StandardCharsets.UTF_8);
+            boolean alreadyIgnored = content.lines()
+                    .map(String::trim)
+                    .anyMatch((line) -> line.equals(".hgsdlc") || line.equals(".hgsdlc/"));
+            if (alreadyIgnored) {
+                return;
+            }
+            StringBuilder updated = new StringBuilder(content);
+            if (updated.length() > 0 && updated.charAt(updated.length() - 1) != '\n') {
+                updated.append('\n');
+            }
+            updated.append(".hgsdlc/\n");
+            Files.writeString(
+                    excludePath,
+                    updated,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.CREATE
+            );
+        } catch (IOException ex) {
+            log.warn("Failed to update git exclude for runtime metadata at {}", excludePath, ex);
+        }
     }
 
     private byte[] decodeBase64(String value) {

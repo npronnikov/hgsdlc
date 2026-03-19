@@ -153,6 +153,26 @@ public class FlowValidator {
             } else {
                 assertTarget(node.getId(), "on_submit", node.getOnSubmit(), nodesById, errors);
             }
+            if (node.getInstruction() == null || node.getInstruction().isBlank()) {
+                errors.add("human_input gate requires instruction: " + node.getId());
+            }
+            if (node.getProducedArtifacts() == null || node.getProducedArtifacts().isEmpty()) {
+                errors.add("human_input gate requires produced_artifacts: " + node.getId());
+            } else {
+                for (var artifact : node.getProducedArtifacts()) {
+                    if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
+                        errors.add("human_input produced_artifacts path is required: " + node.getId());
+                        continue;
+                    }
+                    String scope = normalize(artifact.getScope());
+                    if (scope == null || !"run".equals(scope)) {
+                        errors.add("human_input produced_artifacts supports only scope=run: " + node.getId());
+                    }
+                    if (!Boolean.TRUE.equals(artifact.getRequired())) {
+                        errors.add("human_input produced_artifacts must be required=true: " + node.getId());
+                    }
+                }
+            }
             return;
         }
         if ("human_approval".equals(nodeKind)) {
@@ -225,6 +245,12 @@ public class FlowValidator {
         if ("command".equals(nodeKind)) {
             return;
         }
+        if ("human_input".equals(nodeKind)) {
+            if (node.getExecutionContext() != null && !node.getExecutionContext().isEmpty()) {
+                errors.add("execution_context is not allowed for human_input: " + node.getId());
+            }
+            return;
+        }
         if (node.getExecutionContext() == null) {
             errors.add("execution_context is required: " + node.getId());
             return;
@@ -240,21 +266,14 @@ public class FlowValidator {
                 errors.add("execution_context type is required: " + node.getId());
                 continue;
             }
-            if (!Set.of("user_request", "directory_ref", "file_ref", "artifact_ref").contains(type)) {
+            if (!Set.of("directory_ref", "file_ref", "artifact_ref").contains(type)) {
                 errors.add("Unsupported execution_context type: " + node.getId());
                 continue;
             }
             if (entry.getRequired() == null) {
                 errors.add("execution_context required flag is missing: " + node.getId());
             }
-            if ("user_request".equals(type)) {
-                if (entry.getPath() != null && !entry.getPath().isBlank()) {
-                    errors.add("user_request must not define path: " + node.getId());
-                }
-                if (entry.getScope() != null && !entry.getScope().isBlank()) {
-                    errors.add("user_request must not define scope: " + node.getId());
-                }
-            } else if (entry.getPath() == null || entry.getPath().isBlank()) {
+            if (entry.getPath() == null || entry.getPath().isBlank()) {
                 errors.add("execution_context path is required: " + node.getId());
             } else {
                 String scope = normalize(entry.getScope());

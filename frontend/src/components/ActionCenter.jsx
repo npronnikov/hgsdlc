@@ -1,29 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Card, Divider, Input, Modal, Radio, Select, Space, Typography, message } from 'antd';
+import React, { useState } from 'react';
+import { Button, Card, Input, Radio, Typography, message } from 'antd';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 
 function extractGateContext(payload) {
   if (!payload) {
-    return { contextArtifacts: [], inputArtifactContent: null, inputArtifactKey: null, outputArtifactKey: null, userInstructions: null };
+    return { inputArtifactKey: null, outputArtifactKey: null, userInstructions: null, humanInputArtifacts: [] };
   }
   return {
-    contextArtifacts: payload.execution_context_artifacts || [],
-    inputArtifactContent: payload.input_artifact_content || null,
     inputArtifactKey: payload.input_artifact_key || null,
     outputArtifactKey: payload.output_artifact_key || null,
     userInstructions: payload.user_instructions || null,
+    humanInputArtifacts: payload.human_input_artifacts || [],
   };
-}
-
-function encodeBase64(value) {
-  const bytes = new TextEncoder().encode(value);
-  let binary = '';
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
 }
 
 function ApprovalForm({ gate, onComplete }) {
@@ -148,66 +138,24 @@ function ApprovalForm({ gate, onComplete }) {
   );
 }
 
-function InputForm({ gate, onComplete }) {
+function InputForm({ gate, onOpenArtifactEditor }) {
   const ctx = extractGateContext(gate?.payload);
-  const editMode = ctx.inputArtifactKey && ctx.outputArtifactKey && ctx.inputArtifactKey === ctx.outputArtifactKey;
+  const [opening, setOpening] = useState(false);
 
-  const [answers, setAnswers] = useState('');
-  const [artifactKey, setArtifactKey] = useState('answers');
-  const [artifactPath, setArtifactPath] = useState('answers.md');
-  const [artifactScope, setArtifactScope] = useState('run');
-  const [submitting, setSubmitting] = useState(false);
-  const [initialized, setInitialized] = useState(false);
-
-  useEffect(() => {
-    if (initialized || !gate) {
+  const openEditor = async () => {
+    if (!gate) {
       return;
     }
-    if (ctx.outputArtifactKey) {
-      setArtifactKey(ctx.outputArtifactKey);
-      setArtifactPath(ctx.outputArtifactKey + '.md');
-    }
-    if (editMode && ctx.inputArtifactContent) {
-      setAnswers(ctx.inputArtifactContent);
-    }
-    setInitialized(true);
-  }, [gate?.gate_id]);
-
-  const submit = async () => {
-    if (!answers.trim()) {
-      message.warning('Введите ответ');
-      return;
-    }
-    setSubmitting(true);
+    setOpening(true);
     try {
-      await apiRequest(`/gates/${gate.gate_id}/submit-input`, {
-        method: 'POST',
-        body: JSON.stringify({
-          expected_gate_version: gate.resource_version,
-          artifacts: [
-            {
-              artifact_key: artifactKey,
-              path: artifactPath,
-              scope: artifactScope,
-              content_base64: encodeBase64(answers),
-            },
-          ],
-          comment: 'submitted from run console',
-        }),
+      await onOpenArtifactEditor?.({
+        gateId: gate.gate_id,
+        expectedGateVersion: gate.resource_version,
+        nodeId: gate.node_id,
+        humanInputArtifacts: ctx.humanInputArtifacts,
       });
-      message.success('Input submitted');
-      setAnswers('');
-      setInitialized(false);
-      onComplete();
-    } catch (err) {
-      if (err.status === 409) {
-        message.warning('Gate was modified, reloading...');
-        onComplete();
-        return;
-      }
-      message.error(err.message || 'Не удалось отправить input');
     } finally {
-      setSubmitting(false);
+      setOpening(false);
     }
   };
 
@@ -221,68 +169,14 @@ function InputForm({ gate, onComplete }) {
           </pre>
         </div>
       )}
-
-      {ctx.contextArtifacts.length > 0 && (
-        <div>
-          <Text className="muted">Context artifacts</Text>
-          {ctx.contextArtifacts.map((artifact, idx) => (
-            <div key={artifact.artifact_version_id || idx} style={{ marginTop: 4 }}>
-              <Text strong className="mono" style={{ fontSize: 12 }}>{artifact.artifact_key}</Text>
-              {artifact.content && (
-                <pre className="code-block" style={{ fontSize: 11, maxHeight: 150, overflow: 'auto', marginTop: 2 }}>
-                  {artifact.content}
-                </pre>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {editMode && ctx.inputArtifactContent && (
-        <div>
-          <Text className="muted">Original: {ctx.inputArtifactKey}</Text>
-          <pre className="code-block" style={{ fontSize: 11, maxHeight: 120, overflow: 'auto', marginTop: 4 }}>
-            {ctx.inputArtifactContent}
-          </pre>
-        </div>
-      )}
-
-      <div>
-        <Text className="muted">{editMode ? `Edit: ${ctx.outputArtifactKey}` : 'Ответ'}</Text>
-        <Input.TextArea
-          rows={6}
-          style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 12 }}
-          value={answers}
-          onChange={(e) => setAnswers(e.target.value)}
-          placeholder={editMode ? 'Edit content and submit' : 'Markdown ответ'}
-        />
-      </div>
-
-      <Divider style={{ margin: '8px 0' }} />
-
-      <Space style={{ width: '100%' }} direction="vertical" size={4}>
-        <Input size="small" addonBefore="key" value={artifactKey} onChange={(e) => setArtifactKey(e.target.value)} />
-        <Input size="small" addonBefore="path" value={artifactPath} onChange={(e) => setArtifactPath(e.target.value)} />
-        <Select
-          size="small"
-          value={artifactScope}
-          onChange={setArtifactScope}
-          style={{ width: '100%' }}
-          options={[
-            { value: 'run', label: 'run' },
-            { value: 'project', label: 'project' },
-          ]}
-        />
-      </Space>
-
-      <Button type="primary" onClick={submit} loading={submitting} style={{ marginTop: 8 }}>
-        {editMode ? 'Submit edited content' : 'Submit input'}
+      <Button type="default" onClick={openEditor} loading={opening} style={{ marginTop: 8 }}>
+        Ответить
       </Button>
     </div>
   );
 }
 
-export default function ActionCenter({ run, onActionComplete }) {
+export default function ActionCenter({ run, onActionComplete, onOpenArtifactEditor }) {
   const gate = run?.current_gate;
 
   if (!gate) {
@@ -304,7 +198,7 @@ export default function ActionCenter({ run, onActionComplete }) {
       extra={<span className="mono" style={{ fontSize: 11 }}>{gate.node_id}</span>}
     >
       {isApproval && <ApprovalForm gate={gate} onComplete={onActionComplete} />}
-      {isInput && <InputForm gate={gate} onComplete={onActionComplete} />}
+      {isInput && <InputForm gate={gate} onOpenArtifactEditor={onOpenArtifactEditor} />}
       {!isApproval && !isInput && (
         <Text type="secondary">Unknown gate kind: {gate.gate_kind}</Text>
       )}

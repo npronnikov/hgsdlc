@@ -67,7 +67,7 @@ class NodeLogEndpointTest {
     void aiNodeLogStreamsParsedDeltasByOffset() throws Exception {
         RunEntity run = createRun();
         NodeExecutionEntity execution = createNodeExecution(run.getId(), "ai-writer", "ai", 1, NodeExecutionStatus.RUNNING);
-        Path nodeDir = tempDir.resolve("runtime").resolve("nodes").resolve("ai-writer-attempt-1");
+        Path nodeDir = tempDir.resolve(".hgsdlc").resolve("nodes").resolve("ai-writer").resolve("attempt-1");
         Files.createDirectories(nodeDir);
 
         String logContent = """
@@ -108,7 +108,7 @@ class NodeLogEndpointTest {
     void aiNodeLogIncludesNonJsonLines() throws Exception {
         RunEntity run = createRun();
         NodeExecutionEntity execution = createNodeExecution(run.getId(), "ai-writer", "ai", 1, NodeExecutionStatus.SUCCEEDED);
-        Path nodeDir = tempDir.resolve("runtime").resolve("nodes").resolve("ai-writer-attempt-1");
+        Path nodeDir = tempDir.resolve(".hgsdlc").resolve("nodes").resolve("ai-writer").resolve("attempt-1");
         Files.createDirectories(nodeDir);
         Files.writeString(nodeDir.resolve("agent.stdout.log"), "plain stderr-like warning\n", StandardCharsets.UTF_8);
 

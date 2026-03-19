@@ -6,21 +6,20 @@
     "id",
     "title",
     "type",
-    "execution_context"
+    "instruction",
+    "produced_artifacts",
+    "on_submit"
   ],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
     "type": { "type": "string", "enum": ["human_input"] },
-    "execution_context": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/execution_context_entry" }
-    },
     "instruction": { "type": "string" },
     "response_schema": { "type": "object" },
     "produced_artifacts": {
       "type": "array",
+      "minItems": 1,
       "items": { "$ref": "#/$defs/path_requirement" }
     },
     "expected_mutations": {
@@ -34,23 +33,13 @@
     "on_submit": { "type": "string" }
   },
   "$defs": {
-    "execution_context_entry": {
-      "type": "object",
-      "required": ["type", "required"],
-      "properties": {
-        "type": { "type": "string" },
-        "path": { "type": "string" },
-        "scope": { "type": "string", "enum": ["project", "run"] },
-        "required": { "type": "boolean" }
-      }
-    },
     "path_requirement": {
       "type": "object",
       "required": ["path", "required"],
       "properties": {
         "path": { "type": "string" },
-        "scope": { "type": "string", "enum": ["project", "run"] },
-        "required": { "type": "boolean" }
+        "scope": { "type": "string", "enum": ["run"] },
+        "required": { "const": true }
       }
     }
   },

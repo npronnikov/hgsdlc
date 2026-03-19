@@ -105,6 +105,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
                 run,
                 flowModel,
                 node,
+                request.execution(),
                 request.resolvedContext()
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
