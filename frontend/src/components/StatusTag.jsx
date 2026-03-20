@@ -30,11 +30,22 @@ const colorMap = {
   mutation: '#d97706',
 };
 
+export function formatStatusLabel(value) {
+  if (!value) {
+    return 'Unknown';
+  }
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 export default function StatusTag({ value }) {
   const color = colorMap[value] || '#64748b';
   return (
     <Tag color={color}>
-      {value}
+      {formatStatusLabel(value)}
     </Tag>
   );
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
 import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import StatusTag from '../components/StatusTag.jsx';
+import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
@@ -155,7 +155,7 @@ export default function Rules() {
               allowClear
               value={filters.status}
               onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
-              options={statuses.map((status) => ({ value: status, label: status }))}
+              options={statuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))}
               placeholder="Select status"
             />
           </div>

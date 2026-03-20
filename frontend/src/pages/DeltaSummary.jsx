@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Col, Empty, Row, Typography, message } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
+import StatusTag from '../components/StatusTag.jsx';
 
 const { Title, Text } = Typography;
 
@@ -65,7 +66,7 @@ export default function DeltaSummary() {
       <Card style={{ marginTop: 16 }}>
         <div>
           <Text className="muted">run_status</Text>
-          <div>{run?.status || '—'}</div>
+          <div>{run?.status ? <StatusTag value={run.status} /> : '—'}</div>
         </div>
         <div style={{ marginTop: 12 }}>
           <Text className="muted">current_node_id</Text>

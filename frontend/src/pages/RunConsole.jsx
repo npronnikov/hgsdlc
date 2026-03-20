@@ -19,7 +19,7 @@ import {
 } from 'antd';
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import StatusTag from '../components/StatusTag.jsx';
+import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import ArtifactViewer from '../components/ArtifactViewer.jsx';
 import { apiRequest } from '../api/request.js';
@@ -809,7 +809,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                     >
                       <div className="node-timeline-name">{item.node_id}</div>
                       <div className="node-timeline-meta">
-                        <Tag color={nodeTimelineColor(item.status)} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>{item.status}</Tag>
+                        <Tag color={nodeTimelineColor(item.status)} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>{formatStatusLabel(item.status)}</Tag>
                         {item.attempt_no > 1 && <span className="mono" style={{ fontSize: 10 }}>#{item.attempt_no}</span>}
                       </div>
                     </div>

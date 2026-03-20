@@ -30,6 +30,7 @@ import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { parse as parseYaml } from 'yaml';
 import Editor from '@monaco-editor/react';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
@@ -878,7 +879,7 @@ export default function FlowEditor() {
     try {
       const versions = await apiRequest(`/flows/${id}/versions`);
       const mapped = versions.map((item) => ({
-        label: `v${item.version} · ${item.status === 'draft' ? 'draft' : item.status === 'published' ? 'published' : item.status}`,
+        label: `v${item.version} · ${formatStatusLabel(item.status)}`,
         value: item.version,
         status: item.status,
         flowId: item.flow_id,

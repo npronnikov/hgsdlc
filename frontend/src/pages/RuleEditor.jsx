@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
@@ -166,7 +167,7 @@ export default function RuleEditor() {
     try {
       const versions = await apiRequest(`/rules/${ruleId}/versions`);
       const mapped = versions.map((item) => ({
-        label: `v${item.version} · ${item.status === 'draft' ? 'draft' : item.status === 'published' ? 'published' : item.status}`,
+        label: `v${item.version} · ${formatStatusLabel(item.status)}`,
         value: item.version,
         canonical: item.canonical_name,
         ruleId: item.rule_id,
