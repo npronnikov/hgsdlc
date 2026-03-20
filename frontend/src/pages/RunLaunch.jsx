@@ -229,7 +229,7 @@ export default function RunLaunch() {
           target_branch: initialProject?.default_branch || 'main',
         });
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить данные запуска');
+        message.error(err.message || 'Failed to load launch data');
       }
     };
     loadData();
@@ -287,7 +287,7 @@ export default function RunLaunch() {
           nodeList: nodes,
         });
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить конфигурацию запуска');
+        message.error(err.message || 'Failed to load launch configuration');
         setLaunchConfig({ loading: false, flow: null, rules: [], skills: [], nodes: [], edges: [], nodeList: [] });
       }
     };
@@ -310,7 +310,7 @@ export default function RunLaunch() {
     try {
       const values = await form.validateFields();
       if (!selectedFlowCanonical) {
-        message.error('Выберите flow для запуска');
+        message.error('Select a flow to launch');
         return;
       }
       setLaunching(true);
@@ -325,13 +325,13 @@ export default function RunLaunch() {
         }),
       });
       localStorage.setItem('lastRunId', response.run_id);
-      message.success(`Flow запущен: ${response.run_id}`);
+      message.success(`Flow started: ${response.run_id}`);
       navigate(`/run-console?runId=${response.run_id}`);
     } catch (err) {
       if (err?.errorFields) {
         return;
       }
-      message.error(err.message || 'Не удалось запустить run');
+      message.error(err.message || 'Failed to start run');
     } finally {
       setLaunching(false);
     }
@@ -355,7 +355,7 @@ export default function RunLaunch() {
           loading={launching}
           disabled={!canLaunch}
         >
-          Запустить
+          Launch
         </Button>
       </div>
       <Row gutter={[16, 16]} className="run-launch-grid">
@@ -368,7 +368,7 @@ export default function RunLaunch() {
                   <Form.Item
                     label="Project"
                     name="project_id"
-                    rules={[{ required: true, message: 'Выберите проект' }]}
+                    rules={[{ required: true, message: 'Select project' }]}
                   >
                     <Select
                       options={projectOptions}
@@ -384,7 +384,7 @@ export default function RunLaunch() {
                   <Form.Item
                     label="Target branch"
                     name="target_branch"
-                    rules={[{ required: true, message: 'Укажите target branch' }]}
+                    rules={[{ required: true, message: 'Specify target branch' }]}
                   >
                     <Input />
                   </Form.Item>
@@ -393,12 +393,12 @@ export default function RunLaunch() {
               <Form.Item
                 label="Flow"
                 name="flow_id"
-                rules={[{ required: true, message: 'Выберите flow' }]}
+                rules={[{ required: true, message: 'Select flow' }]}
               >
                 <Select
                   options={flowOptions}
                   value={selectedFlowId || undefined}
-                  placeholder="Выберите Flow для запуска"
+                  placeholder="Select a Flow to launch"
                   onChange={(value) => {
                     setSelectedFlowId(value);
                     const flow = flows.find((item) => item.flow_id === value);
@@ -410,11 +410,11 @@ export default function RunLaunch() {
               <Form.Item
                 label="Feature request"
                 name="feature_request"
-                rules={[{ required: true, message: 'Опишите feature request' }]}
+                rules={[{ required: true, message: 'Describe feature request' }]}
               >
                 <Input.TextArea
                   rows={6}
-                  placeholder="Опишите требуемое изменение"
+                  placeholder="Describe the requested change"
                 />
               </Form.Item>
             </Form>
@@ -458,18 +458,18 @@ export default function RunLaunch() {
                   value={layoutDirection}
                   onChange={(value) => setLayoutDirection(value)}
                   options={[
-                    { value: 'TB', label: 'Вертикально' },
-                    { value: 'LR', label: 'Горизонтально' },
+                    { value: 'TB', label: 'Vertical' },
+                    { value: 'LR', label: 'Horizontal' },
                   ]}
                   disabled={!selectedFlowId}
                 />
               </div>
-              {launchConfig?.loading && <div className="card-muted">Загрузка конфигурации...</div>}
+              {launchConfig?.loading && <div className="card-muted">Loading configuration...</div>}
               {!launchConfig?.loading && !selectedFlowId && (
-                <div className="flow-preview-placeholder card-muted">Выберите Flow для запуска.</div>
+                <div className="flow-preview-placeholder card-muted">Select a Flow to launch.</div>
               )}
               {!launchConfig?.loading && selectedFlowId && !launchConfig?.flow && (
-                <div className="flow-preview-placeholder card-muted">Нет доступных Flow для запуска.</div>
+                <div className="flow-preview-placeholder card-muted">No Flows available for launch.</div>
               )}
               {!launchConfig?.loading && launchConfig?.flow && (
                 <div className="flow-preview-canvas flow-canvas">

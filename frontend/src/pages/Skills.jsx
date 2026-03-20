@@ -36,7 +36,7 @@ export default function Skills() {
       }));
       setSkills(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Skills');
+      message.error(err.message || 'Failed to load Skills');
     } finally {
       setLoading(false);
     }
@@ -87,13 +87,13 @@ export default function Skills() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Skills</Title>
         <Space>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/skills/create')}>Новый Skill</Button>
-          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Фильтр</Button>
+          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/skills/create')}>New Skill</Button>
+          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
       <div className="cards-fullscreen">
         {loading ? (
-          <div className="card-muted">Загрузка...</div>
+          <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
             {filteredSkills.map((skill) => (
@@ -123,14 +123,14 @@ export default function Skills() {
               </Card>
             ))}
             {filteredSkills.length === 0 && (
-              <div className="card-muted">Навыки не найдены.</div>
+              <div className="card-muted">Skills not found.</div>
             )}
           </div>
         )}
       </div>
 
       <Drawer
-        title="Фильтр Skills"
+        title="Skills filter"
         placement="right"
         open={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
@@ -139,11 +139,11 @@ export default function Skills() {
       >
         <div className="filter-drawer-body">
           <div className="filter-row">
-            <Text className="muted">Поиск</Text>
+            <Text className="muted">Search</Text>
             <Input
               value={filters.search}
               onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
-              placeholder="Название, ID, описание"
+              placeholder="Name, ID, description"
             />
           </div>
           <div className="filter-row">
@@ -153,38 +153,38 @@ export default function Skills() {
               value={filters.codingAgent}
               onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))}
               options={codingAgents.map((agent) => ({ value: agent, label: agent }))}
-              placeholder="Выберите агент"
+              placeholder="Select agent"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Статус</Text>
+            <Text className="muted">Status</Text>
             <Select
               allowClear
               value={filters.status}
               onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
               options={statuses.map((status) => ({ value: status, label: status }))}
-              placeholder="Выберите статус"
+              placeholder="Select status"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Версия</Text>
+            <Text className="muted">Version</Text>
             <Input
               value={filters.version}
               onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))}
-              placeholder="Например 1.0.0"
+              placeholder="For example 1.0.0"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Описание</Text>
+            <Text className="muted">Description</Text>
             <Select
               allowClear
               value={filters.hasDescription}
               onChange={(value) => setFilters((prev) => ({ ...prev, hasDescription: value ?? null }))}
               options={[
-                { value: true, label: 'Есть описание' },
-                { value: false, label: 'Без описания' },
+                { value: true, label: 'Has description' },
+                { value: false, label: 'No description' },
               ]}
-              placeholder="Любое"
+              placeholder="Any"
             />
           </div>
         </div>
@@ -193,10 +193,10 @@ export default function Skills() {
             type="default"
             onClick={() => setFilters({ search: '', codingAgent: null, status: null, version: '', hasDescription: null })}
           >
-            Сбросить
+            Reset
           </Button>
           <Button type="primary" onClick={() => setIsFilterOpen(false)}>
-            Применить
+            Apply
           </Button>
         </div>
       </Drawer>

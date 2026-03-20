@@ -52,10 +52,10 @@ export default function GateInput() {
           setInitialized(true);
         }
       } else {
-        message.warning('Для текущего run нет active human_input gate');
+        message.warning('No active human_input gate for current run');
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить gate');
+      message.error(err.message || 'Failed to load gate');
     }
   };
 
@@ -88,7 +88,7 @@ export default function GateInput() {
       return;
     }
     if (!answers.trim()) {
-      message.warning('Введите ответы');
+      message.warning('Enter answers');
       return;
     }
     setSubmitting(true);
@@ -111,7 +111,7 @@ export default function GateInput() {
       message.success('Input submitted');
       navigate(`/run-console?runId=${runId}`);
     } catch (err) {
-      message.error(err.message || 'Не удалось отправить input');
+      message.error(err.message || 'Failed to submit input');
       await load();
     } finally {
       setSubmitting(false);

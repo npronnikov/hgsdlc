@@ -128,7 +128,7 @@ const getDraftForMajor = (versions, major) => (
 );
 
 const EXECUTION_CONTEXT_TYPES = [
-  { value: 'artifact_ref', label: 'Артефакт' },
+  { value: 'artifact_ref', label: 'Artifact' },
 ];
 
 const SCOPE_OPTIONS = [
@@ -286,21 +286,21 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
   const nodeIds = nodes.map((node) => node.id);
   const uniqueIds = new Set(nodeIds);
   if (nodes.length === 0) {
-    errors.push('Flow не содержит нод.');
+    errors.push('Flow has no nodes.');
   }
   if (!meta.startNodeId) {
-    errors.push('start_node_id не задан.');
+    errors.push('start_node_id is not set.');
   } else if (!uniqueIds.has(meta.startNodeId)) {
-    errors.push(`start_node_id не найден: ${meta.startNodeId}`);
+    errors.push(`start_node_id not found: ${meta.startNodeId}`);
   }
   if (!meta.codingAgent) {
-    errors.push('coding_agent не задан.');
+    errors.push('coding_agent is not set.');
   }
   if (uniqueIds.size !== nodeIds.length) {
     const seen = new Set();
     nodeIds.forEach((id) => {
       if (seen.has(id)) {
-        errors.push(`Дублирующийся ID ноды: ${id}`);
+        errors.push(`Duplicate node ID: ${id}`);
       }
       seen.add(id);
     });
@@ -312,14 +312,14 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     meta.ruleRefs.forEach((ref) => {
       const rule = rulesByCanonical.get(ref);
       if (!rule) {
-        errors.push(`Rule ref не найден: ${ref}`);
+        errors.push(`Rule ref not found: ${ref}`);
         return;
       }
       if (rule.status !== 'published') {
-        errors.push(`Rule ref не опубликован: ${ref}`);
+        errors.push(`Rule ref not published: ${ref}`);
       }
       if (meta.codingAgent && rule.codingAgent !== meta.codingAgent) {
-        errors.push(`Rule ref не соответствует coding_agent: ${ref}`);
+        errors.push(`Rule ref does not match coding_agent: ${ref}`);
       }
     });
   }
@@ -328,51 +328,51 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     const data = node.data || {};
     const kind = data.nodeKind || data.type;
     if (!kind) {
-      errors.push(`type не задан: ${node.id}`);
+      errors.push(`type is not set: ${node.id}`);
     }
     if (data.skillRefs && data.skillRefs.length > 0 && kind !== 'ai') {
-      errors.push(`skill_refs разрешены только для AI нод: ${node.id}`);
+      errors.push(`skill_refs are allowed only for AI nodes: ${node.id}`);
     }
     if (data.skillRefs && skillsByCanonical.size > 0) {
       data.skillRefs.forEach((ref) => {
         const skill = skillsByCanonical.get(ref);
         if (!skill) {
-          errors.push(`Skill ref не найден: ${ref}`);
+          errors.push(`Skill ref not found: ${ref}`);
           return;
         }
         if (skill.status !== 'published') {
-          errors.push(`Skill ref не опубликован: ${ref}`);
+          errors.push(`Skill ref not published: ${ref}`);
         }
         if (meta.codingAgent && skill.codingAgent !== meta.codingAgent) {
-          errors.push(`Skill ref не соответствует coding_agent: ${ref}`);
+          errors.push(`Skill ref does not match coding_agent: ${ref}`);
         }
       });
     }
 
     if (kind !== 'command' && kind !== 'human_input') {
       if (!Array.isArray(data.executionContext)) {
-        errors.push(`execution_context не задан: ${node.id}`);
+        errors.push(`execution_context is not set: ${node.id}`);
       } else {
         data.executionContext.forEach((entry) => {
           if (!entry?.type) {
-            errors.push(`execution_context type не задан: ${node.id}`);
+            errors.push(`execution_context type is not set: ${node.id}`);
             return;
           }
           if (!EXECUTION_CONTEXT_TYPES.some((item) => item.value === entry.type)) {
-            errors.push(`execution_context type не поддерживается: ${node.id}`);
+            errors.push(`execution_context type is not supported: ${node.id}`);
           }
           if (entry.required === undefined || entry.required === null) {
-            errors.push(`execution_context required не задан: ${node.id}`);
+            errors.push(`execution_context required is not set: ${node.id}`);
           }
           if (entry.type === 'artifact_ref') {
             if (!entry.path) {
-              errors.push(`execution_context path не задан: ${node.id}`);
+              errors.push(`execution_context path is not set: ${node.id}`);
             }
             if (!entry.scope) {
-              errors.push(`execution_context scope не задан: ${node.id}`);
+              errors.push(`execution_context scope is not set: ${node.id}`);
             }
             if (entry.scope === 'run' && !entry.node_id) {
-              errors.push(`execution_context node_id не задан для run-scope артефакта: ${node.id}`);
+              errors.push(`execution_context node_id is not set for run-scope artifact: ${node.id}`);
             }
           }
         });
@@ -383,17 +383,17 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       if (!Array.isArray(items)) return;
       items.forEach((item) => {
         if (!item) {
-          errors.push(`${label} entry не задан: ${node.id}`);
+          errors.push(`${label} entry is not set: ${node.id}`);
           return;
         }
         if (item.required === undefined || item.required === null) {
-          errors.push(`${label} required не задан: ${node.id}`);
+          errors.push(`${label} required is not set: ${node.id}`);
         }
         if (!item.path) {
-          errors.push(`${label} path не задан: ${node.id}`);
+          errors.push(`${label} path is not set: ${node.id}`);
         }
         if (!item.scope) {
-          errors.push(`${label} scope не задан: ${node.id}`);
+          errors.push(`${label} scope is not set: ${node.id}`);
         }
       });
     };
@@ -402,20 +402,20 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
 
     if (kind === 'human_input') {
       if (Array.isArray(data.executionContext) && data.executionContext.length > 0) {
-        errors.push(`human_input не поддерживает execution_context: ${node.id}`);
+        errors.push(`human_input does not support execution_context: ${node.id}`);
       }
       if (!String(data.instruction || '').trim()) {
-        errors.push(`human_input требует instruction: ${node.id}`);
+        errors.push(`human_input requires instruction: ${node.id}`);
       }
       if (!Array.isArray(data.producedArtifacts) || data.producedArtifacts.length === 0) {
-        errors.push(`human_input требует produced_artifacts: ${node.id}`);
+        errors.push(`human_input requires produced_artifacts: ${node.id}`);
       } else {
         data.producedArtifacts.forEach((artifact) => {
           if ((artifact.scope || 'run') !== 'run') {
-            errors.push(`human_input produced_artifacts поддерживает только scope=run: ${node.id}`);
+            errors.push(`human_input produced_artifacts supports only scope=run: ${node.id}`);
           }
           if (artifact.required !== true) {
-            errors.push(`human_input produced_artifacts всегда required=true: ${node.id}`);
+            errors.push(`human_input produced_artifacts always required=true: ${node.id}`);
           }
         });
       }
@@ -431,43 +431,43 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     }
     transitions.forEach(([label, target]) => {
       if (target && !uniqueIds.has(target)) {
-        errors.push(`Невалидный переход ${label} из ${node.id} -> ${target}`);
+        errors.push(`Invalid transition ${label} from ${node.id} -> ${target}`);
       }
     });
 
     if (kind === 'terminal') {
       if (transitions.length > 0) {
-        errors.push(`Terminal нода не может иметь переходов: ${node.id}`);
+        errors.push(`Terminal node cannot have transitions: ${node.id}`);
       }
       return;
     }
 
     if (kind === 'ai' || kind === 'command') {
       if (!data.onSuccess) {
-        errors.push(`Executor нода требует on_success: ${node.id}`);
+        errors.push(`Executor node requires on_success: ${node.id}`);
       }
       if (data.checkpointBeforeRun !== undefined && data.checkpointBeforeRun !== null && typeof data.checkpointBeforeRun !== 'boolean') {
-        errors.push(`checkpoint_before_run должен быть boolean: ${node.id}`);
+        errors.push(`checkpoint_before_run must be boolean: ${node.id}`);
       }
     } else if (data.checkpointBeforeRun) {
-      errors.push(`checkpoint_before_run разрешен только для ai/command: ${node.id}`);
+      errors.push(`checkpoint_before_run is allowed only for ai/command: ${node.id}`);
     }
     if (kind === 'ai' && node.id === meta.startNodeId && !String(data.instruction || '').trim()) {
-      errors.push(`Стартовая AI нода требует instruction: ${node.id}`);
+      errors.push(`Start AI node requires instruction: ${node.id}`);
     }
 
     if (kind === 'human_input') {
       if (!data.onSubmit) {
-        errors.push(`human_input требует on_submit: ${node.id}`);
+        errors.push(`human_input requires on_submit: ${node.id}`);
       }
     }
 
     if (kind === 'human_approval') {
       if (!data.onApprove) {
-        errors.push(`human_approval требует on_approve: ${node.id}`);
+        errors.push(`human_approval requires on_approve: ${node.id}`);
       }
       if (!data.onRework || !data.onRework.nextNode) {
-        errors.push(`human_approval требует on_rework: ${node.id}`);
+        errors.push(`human_approval requires on_rework: ${node.id}`);
       }
     }
   });
@@ -493,7 +493,7 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     }
     nodeIds.forEach((id) => {
       if (!visited.has(id)) {
-        errors.push(`Недостижимая нода: ${id}`);
+        errors.push(`Unreachable node: ${id}`);
       }
     });
   }
@@ -535,13 +535,13 @@ export default function FlowEditor() {
       : `${currentMajor}.0`);
   const draftForMajor = getDraftForMajor(versionOptions, currentMajor);
   const publishVersion = draftForMajor ? draftForMajor.value : nextDraftVersion;
-  const publishLabel = `Опубликовать версию → ${publishVersion}`;
+  const publishLabel = `Publish version -> ${publishVersion}`;
   const maxPublishedMajor = getMaxPublishedMajor(versionOptions);
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
-  const releaseLabel = `Несовместимое обновление (major) → ${releaseVersion}`;
+  const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
   const flowVersionLabel = currentStatus === 'draft' || isCreateMode
-    ? 'черновик'
+    ? 'draft'
     : (flowVersion || '0.0.0');
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
   const nodeIdOptions = useMemo(
@@ -599,7 +599,7 @@ export default function FlowEditor() {
     }
     const exists = nodes.some((node) => node.id === trimmed);
     if (exists) {
-      message.error(`ID ноды уже используется: ${trimmed}`);
+      message.error(`Node ID is already used: ${trimmed}`);
       return;
     }
     setNodes((prev) =>
@@ -774,7 +774,7 @@ export default function FlowEditor() {
     const meta = NODE_KIND_META[kind] || NODE_KIND_META.ai;
     return {
       id,
-      title: `Новая ${meta.label}`,
+      title: `New ${meta.label}`,
       description: '',
       nodeKind: kind,
       type: kind,
@@ -847,7 +847,7 @@ export default function FlowEditor() {
       }));
       setRulesCatalog(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Rules');
+      message.error(err.message || 'Failed to load Rules');
     }
   };
 
@@ -866,7 +866,7 @@ export default function FlowEditor() {
       }));
       setSkillsCatalog(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Skills');
+      message.error(err.message || 'Failed to load Skills');
     }
   };
 
@@ -874,7 +874,7 @@ export default function FlowEditor() {
     try {
       const versions = await apiRequest(`/flows/${id}/versions`);
       const mapped = versions.map((item) => ({
-        label: `v${item.version} · ${item.status === 'draft' ? 'черновик' : item.status === 'published' ? 'опубликовано' : item.status}`,
+        label: `v${item.version} · ${item.status === 'draft' ? 'draft' : item.status === 'published' ? 'published' : item.status}`,
         value: item.version,
         status: item.status,
         flowId: item.flow_id,
@@ -882,7 +882,7 @@ export default function FlowEditor() {
       }));
       setVersionOptions(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить версии Flow');
+      message.error(err.message || 'Failed to load Flow versions');
     }
   };
 
@@ -910,7 +910,7 @@ export default function FlowEditor() {
       setNodes(parsedNodes);
       setSelectedNodeId(parsedNodes[0]?.id || null);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Flow');
+      message.error(err.message || 'Failed to load Flow');
     }
   };
 
@@ -944,7 +944,7 @@ export default function FlowEditor() {
       setSelectedNodeId(parsedNodes[0]?.id || null);
       setIsEditing(keepEditing);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить выбранную версию');
+      message.error(err.message || 'Failed to load selected version');
     }
   };
 
@@ -1068,19 +1068,19 @@ export default function FlowEditor() {
 
   const saveFlow = async ({ publish, release = false }) => {
     if (!flowMeta.flowId) {
-      message.error('Нужен ID Flow');
+      message.error('Flow ID is required');
       return false;
     }
     if (!flowMeta.title.trim()) {
-      message.error('Нужно название');
+      message.error('Name is required');
       return false;
     }
     if (!flowMeta.startNodeId.trim()) {
-      message.error('Нужна стартовая нода');
+      message.error('Start node is required');
       return false;
     }
     if (!flowMeta.codingAgent.trim()) {
-      message.error('Нужен coding_agent');
+      message.error('coding_agent is required');
       return false;
     }
     const flowYaml = buildFlowYaml();
@@ -1119,13 +1119,13 @@ export default function FlowEditor() {
       setCurrentStatus(response.status || currentStatus);
       setBaseVersion(response.version || baseVersion);
       setResourceVersion(response.resource_version ?? resourceVersion);
-      message.success(publish ? 'Flow опубликован' : 'Черновик сохранён');
+      message.success(publish ? 'Flow published' : 'Draft saved');
       if (response.flow_id || flowMeta.flowId) {
         loadFlowVersions(response.flow_id || flowMeta.flowId);
       }
       return true;
     } catch (err) {
-      message.error(toRussianError(err?.message, 'Не удалось сохранить Flow'));
+      message.error(toRussianError(err?.message, 'Failed to save Flow'));
       return false;
     }
   };
@@ -1220,16 +1220,16 @@ export default function FlowEditor() {
   return (
     <div className="flow-editor-page">
       <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Редактор Flow</Title>
+        <Title level={3} style={{ margin: 0 }}>Flow editor</Title>
         <Space>
           {!isEditing ? (
             currentStatus === 'draft' ? (
               <Button type="default" onClick={() => setIsEditing(true)}>
-                Редактировать
+                Edit
               </Button>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
-                {`Создать новую версию ${nextDraftVersion}`}
+                {`Create new version ${nextDraftVersion}`}
               </Button>
             )
           ) : (
@@ -1242,7 +1242,7 @@ export default function FlowEditor() {
                 }
               }}
             >
-              Сохранить
+              Save
             </Button>
           )}
           <Dropdown
@@ -1254,10 +1254,10 @@ export default function FlowEditor() {
               onClick: ({ key }) => {
                 if (key === 'release') {
                   Modal.confirm({
-                    title: 'Подтвердить major-обновление?',
-                    content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
-                    okText: 'Выпустить',
-                    cancelText: 'Отмена',
+                    title: 'Confirm major update?',
+                    content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
+                    okText: 'Release',
+                    cancelText: 'Cancel',
                     onOk: () => saveFlow({ publish: true, release: true }),
                   });
                   return;
@@ -1266,7 +1266,7 @@ export default function FlowEditor() {
               },
             }}
           >
-            <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
+            <Button type="default" icon={<MoreOutlined />}>Publish</Button>
           </Dropdown>
         </Space>
       </div>
@@ -1275,7 +1275,7 @@ export default function FlowEditor() {
         <Card className="flow-canvas-card">
           <div className="flow-canvas-header">
             <div>
-              <Text className="muted">Канвас</Text>
+              <Text className="muted">Canvas</Text>
               <div className="mono">{flowMeta.flowId || 'new-flow'}@{flowVersionLabel}</div>
             </div>
             <Space>
@@ -1283,7 +1283,7 @@ export default function FlowEditor() {
                 type="default"
                 onClick={() => setShowYaml((prev) => !prev)}
               >
-                {showYaml ? 'Показать дизайнер' : 'Просмотр YAML'}
+                {showYaml ? 'Show designer' : 'YAML view'}
               </Button>
             </Space>
           </div>
@@ -1382,7 +1382,7 @@ export default function FlowEditor() {
                 style={{ top: contextMenu.y, left: contextMenu.x }}
                 onMouseDown={(event) => event.stopPropagation()}
               >
-                <div className="flow-context-title">Добавить ноду</div>
+                <div className="flow-context-title">Add node</div>
                 <div className="flow-context-section">
                   {NODE_TYPE_OPTIONS.map((option) => (
                     <Button
@@ -1416,16 +1416,16 @@ export default function FlowEditor() {
                         const targetId = contextMenu.nodeId || selectedNodeId;
                         setContextMenu(null);
                         Modal.confirm({
-                          title: 'Удалить ноду?',
-                          content: `Нода ${targetId} будет удалена вместе с её связями.`,
-                          okText: 'Удалить',
-                          cancelText: 'Отмена',
+                          title: 'Delete node?',
+                          content: `Node ${targetId} will be removed with its links.`,
+                          okText: 'Delete',
+                          cancelText: 'Cancel',
                           okButtonProps: { danger: true },
                           onOk: () => removeNodeById(targetId),
                         });
                       }}
                     >
-                      Удалить ноду
+                      Delete node
                     </Button>
                   </>
                 )}
@@ -1438,23 +1438,23 @@ export default function FlowEditor() {
           {!selectedNode ? (
             <Card className="flow-panel-card">
               <div className="rule-fields-header">
-                <Title level={5} style={{ margin: 0 }}>Данные Flow</Title>
+                <Title level={5} style={{ margin: 0 }}>Flow data</Title>
                 {flowMeta.flowId ? (
                   <Select
                     value={flowVersion || undefined}
                     options={versionOptions}
                     onChange={(value) => handleVersionSelect(value)}
                     className="rule-version-select"
-                    placeholder="Версия"
+                    placeholder="Version"
                     disabled={isEditing}
                   />
                 ) : (
-                  <span className="rule-version-pill">новый</span>
+                  <span className="rule-version-pill">new</span>
                 )}
               </div>
               <div className="form-stack">
               <div>
-                <Text className="muted">Название</Text>
+                <Text className="muted">Name</Text>
                 <div className="field-control">
                   <Input
                     value={flowMeta.title}
@@ -1474,7 +1474,7 @@ export default function FlowEditor() {
                 </div>
               </div>
               <div>
-                <Text className="muted">Описание</Text>
+                <Text className="muted">Description</Text>
                 <div className="field-control">
                   <Input.TextArea
                     rows={3}
@@ -1485,7 +1485,7 @@ export default function FlowEditor() {
                 </div>
               </div>
               <div>
-                <Text className="muted">Стартовая нода</Text>
+                <Text className="muted">Start node</Text>
                 <div className="field-control">
                   <Select
                     value={flowMeta.startNodeId}
@@ -1496,7 +1496,7 @@ export default function FlowEditor() {
                 </div>
               </div>
               <div>
-                <Text className="muted">Кодинг агент</Text>
+                <Text className="muted">Coding agent</Text>
                 <div className="field-control">
                   <Select
                     value={flowMeta.codingAgent}
@@ -1507,7 +1507,7 @@ export default function FlowEditor() {
                       { value: 'claude', label: 'claude' },
                       { value: 'cursor', label: 'cursor' },
                     ]}
-                    placeholder="Выберите coding agent"
+                    placeholder="Select coding agent"
                   />
                 </div>
               </div>
@@ -1517,7 +1517,7 @@ export default function FlowEditor() {
 
             <div className="linked-block">
               <div className="linked-header">
-                <Title level={5}>Привязанные правила</Title>
+                <Title level={5}>Linked rules</Title>
               </div>
               <Select
                 mode="multiple"
@@ -1525,11 +1525,11 @@ export default function FlowEditor() {
                 value={flowMeta.ruleRefs}
                 disabled={isReadOnly}
                 onChange={(value) => updateFlowMeta({ ruleRefs: value })}
-                placeholder="Выберите правила"
+                placeholder="Select rules"
               />
               <List
                 dataSource={flowMeta.ruleRefs}
-                locale={{ emptyText: 'Нет связанных правил' }}
+                locale={{ emptyText: 'No linked rules' }}
                 renderItem={(ref, index) => {
                   const rule = rulesCatalog.find((item) => item.canonical === ref);
                   const description = rule?.description || '';
@@ -1558,7 +1558,7 @@ export default function FlowEditor() {
 
             <div className="form-stack">
               <div className="switch-row">
-                <Text className="muted">Остановить Flow при отсутствии ожидаемого результата</Text>
+                <Text className="muted">Stop Flow if expected output is missing</Text>
                 <Switch
                   checked={flowMeta.failOnMissingDeclaredOutput}
                   disabled={isReadOnly}
@@ -1566,7 +1566,7 @@ export default function FlowEditor() {
                 />
               </div>
               <div className="switch-row">
-                <Text className="muted">Остановить Flow при отсутствии ожидаемой мутации</Text>
+                <Text className="muted">Stop Flow if expected mutation is missing</Text>
                 <Switch
                   checked={flowMeta.failOnMissingExpectedMutation}
                   disabled={isReadOnly}
@@ -1574,7 +1574,7 @@ export default function FlowEditor() {
                 />
               </div>
               <div>
-                <Text className="muted">Схема ответа (опционально)</Text>
+                <Text className="muted">Response schema (optional)</Text>
                 <div className="field-control">
                   <Input.TextArea
                     rows={6}
@@ -1589,10 +1589,10 @@ export default function FlowEditor() {
             </Card>
           ) : (
             <Card className="flow-panel-card">
-              <Title level={5}>Выбранная нода</Title>
+              <Title level={5}>Selected node</Title>
               <div className="form-stack">
                 <div>
-                  <Text className="muted">ID ноды</Text>
+                  <Text className="muted">Node ID</Text>
                   <div className="field-control">
                     <Input
                       value={nodeIdDraft}
@@ -1619,7 +1619,7 @@ export default function FlowEditor() {
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Название</Text>
+                  <Text className="muted">Name</Text>
                   <div className="field-control">
                     <Input
                       value={selectedNode.data.title}
@@ -1629,7 +1629,7 @@ export default function FlowEditor() {
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Описание</Text>
+                  <Text className="muted">Description</Text>
                   <div className="field-control">
                     <Input.TextArea
                       rows={2}
@@ -1640,7 +1640,7 @@ export default function FlowEditor() {
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Тип Node</Text>
+                  <Text className="muted">Node type</Text>
                   <div className="field-control">
                     <Select
                       value={selectedNode.data.nodeKind || selectedNode.data.type}
@@ -1678,8 +1678,8 @@ export default function FlowEditor() {
                   <>
                     <Divider />
                     <div>
-                      <Title level={5}>Контекст исполнения</Title>
-                      <Text className="muted">Входные данные ноды</Text>
+                      <Title level={5}>Execution context</Title>
+                      <Text className="muted">Node input data</Text>
                       <div className="context-list">
                         {(selectedNode.data.executionContext || []).map((entry, index) => (
                           <div key={`${entry.type}-${index}`} className="context-row">
@@ -1718,7 +1718,7 @@ export default function FlowEditor() {
                                   <Select
                                     value={entry.node_id || undefined}
                                     options={nodeIdOptions.filter((opt) => opt.value !== selectedNode.id)}
-                                    placeholder="нода-источник"
+                                    placeholder="source-node"
                                     disabled={isReadOnly}
                                     allowClear
                                     popupClassName="node-source-select-dropdown"
@@ -1730,7 +1730,7 @@ export default function FlowEditor() {
                                 <Input
                                   className="context-field-full"
                                   value={entry.path || ''}
-                                  placeholder="имя файла"
+                                  placeholder="file name"
                                   disabled={isReadOnly}
                                   onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
                                 />
@@ -1746,7 +1746,7 @@ export default function FlowEditor() {
                             addSelectedNodeListItem('executionContext', { type: 'artifact_ref', required: true, scope: 'run', path: '' })
                           }
                         >
-                          Добавить контекст
+                          Add context
                         </Button>
                         </div>
                     </div>
@@ -1756,7 +1756,7 @@ export default function FlowEditor() {
                 {selectedNodeKind === 'ai' && (
                   <>
                     <div>
-                      <Text className="muted">Инструкция</Text>
+                      <Text className="muted">Instruction</Text>
                       <div className="field-control">
                         <Input.TextArea
                           rows={3}
@@ -1767,7 +1767,7 @@ export default function FlowEditor() {
                       </div>
                     </div>
                     <div>
-                      <Text className="muted">Схема ответа (опционально, JSON)</Text>
+                      <Text className="muted">Response schema (optional, JSON)</Text>
                       <div className="field-control schema-editor-wrap">
                         <Editor
                           height="120px"
@@ -1796,7 +1796,7 @@ export default function FlowEditor() {
 
                 {selectedNodeKind === 'human_input' && (
                   <div>
-                    <Text className="muted">Инструкция пользователю</Text>
+                    <Text className="muted">Instruction for user</Text>
                     <div className="field-control">
                       <Input.TextArea
                         rows={3}
@@ -1828,14 +1828,14 @@ export default function FlowEditor() {
 
                 {(selectedNodeKind === 'ai' || selectedNodeKind === 'command') && (
                   <div>
-                    <Text className="muted">Сохранять состояние ноды до запуска</Text>
+                    <Text className="muted">Save node state before launch</Text>
                     <div className="field-control">
                       <Checkbox
                         checked={!!selectedNode.data.checkpointBeforeRun}
                         disabled={isReadOnly}
                         onChange={(event) => updateSelectedNode({ checkpointBeforeRun: event.target.checked })}
                       >
-                        Да/Нет
+                        Yes/No
                       </Checkbox>
                     </div>
                   </div>
@@ -1846,8 +1846,8 @@ export default function FlowEditor() {
                     <Divider />
                     <div className="linked-block">
                       <div className="linked-header">
-                        <Title level={5}>Привязанные навыки</Title>
-                        <Text className="muted">Только для AI</Text>
+                        <Title level={5}>Linked skills</Title>
+                        <Text className="muted">AI only</Text>
                       </div>
                       <Select
                         mode="multiple"
@@ -1855,11 +1855,11 @@ export default function FlowEditor() {
                         value={selectedNode.data.skillRefs || []}
                         disabled={isReadOnly}
                         onChange={(value) => updateSelectedNode({ skillRefs: value })}
-                        placeholder="Выберите навыки"
+                        placeholder="Select skills"
                       />
                       <List
                         dataSource={selectedNode.data.skillRefs || []}
-                        locale={{ emptyText: 'Нет связанных навыков' }}
+                        locale={{ emptyText: 'No linked skills' }}
                         renderItem={(ref) => {
                           const skillRefs = selectedNode.data.skillRefs || [];
                           return (
@@ -1891,8 +1891,8 @@ export default function FlowEditor() {
                     <Divider />
 
                     <div>
-                      <Title level={5}>Ожидаемые выходы</Title>
-                      <Text className="muted">Создаваемые артефакты</Text>
+                      <Title level={5}>Expected outputs</Title>
+                      <Text className="muted">Generated artifacts</Text>
                       <div className="context-list">
                         {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
                           <div key={`artifact-${index}`} className="artifact-row">
@@ -1904,7 +1904,7 @@ export default function FlowEditor() {
                             />
                             <Input
                               value={entry.path || ''}
-                              placeholder="путь"
+                              placeholder="path"
                               disabled={isReadOnly}
                               onChange={(event) =>
                                 updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
@@ -1932,11 +1932,11 @@ export default function FlowEditor() {
                             scope: 'run',
                           })}
                         >
-                          Добавить артефакт
+                          Add artifact
                         </Button>
                       </div>
 
-                      <Text className="muted" style={{ marginTop: 12 }}>Ожидаемые изменения</Text>
+                      <Text className="muted" style={{ marginTop: 12 }}>Expected changes</Text>
                       <div className="context-list">
                         {(selectedNode.data.expectedMutations || []).map((entry, index) => (
                           <div key={`mutation-${index}`} className="mutation-row">
@@ -1948,7 +1948,7 @@ export default function FlowEditor() {
                             />
                             <Input
                               value={entry.path || ''}
-                              placeholder="путь"
+                              placeholder="path"
                               disabled={isReadOnly}
                               onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
                             />
@@ -1968,7 +1968,7 @@ export default function FlowEditor() {
                           disabled={isReadOnly}
                           onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true, scope: 'project' })}
                         >
-                          Добавить изменение
+                          Add change
                         </Button>
                       </div>
                     </div>
@@ -1976,7 +1976,7 @@ export default function FlowEditor() {
                     <Divider />
 
                     <div>
-                      <Title level={5}>Переходы</Title>
+                      <Title level={5}>Transitions</Title>
                       {(selectedNodeKind === 'ai' || selectedNodeKind === 'command') && (
                         <>
                           <div className="transition-block">
@@ -1987,7 +1987,7 @@ export default function FlowEditor() {
                                 disabled={isReadOnly}
                                 allowClear
                                 options={nodeIdOptions}
-                                placeholder="Выберите ноду"
+                                placeholder="Select node"
                                 onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
                               />
                             </div>
@@ -2000,7 +2000,7 @@ export default function FlowEditor() {
                                 disabled={isReadOnly}
                                 allowClear
                                 options={nodeIdOptions}
-                                placeholder="Выберите ноду"
+                                placeholder="Select node"
                                 onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
                               />
                             </div>
@@ -2016,7 +2016,7 @@ export default function FlowEditor() {
                               disabled={isReadOnly}
                               allowClear
                               options={nodeIdOptions}
-                              placeholder="Выберите ноду"
+                              placeholder="Select node"
                               onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
                             />
                           </div>
@@ -2032,7 +2032,7 @@ export default function FlowEditor() {
                                 disabled={isReadOnly}
                                 allowClear
                                 options={nodeIdOptions}
-                                placeholder="Выберите ноду"
+                                placeholder="Select node"
                                 onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
                               />
                             </div>
@@ -2062,7 +2062,7 @@ export default function FlowEditor() {
                                 disabled={isReadOnly}
                                 allowClear
                                 options={nodeIdOptions}
-                                placeholder="Выберите ноду"
+                                placeholder="Select node"
                                 onChange={(value) => {
                                   const current = selectedNode.data.onRework || DEFAULT_REWORK;
                                   updateSelectedNode({
@@ -2085,9 +2085,9 @@ export default function FlowEditor() {
           )}
 
           <Card className="flow-panel-card" style={{ marginTop: 16 }}>
-            <Title level={5}>Валидация</Title>
+            <Title level={5}>Validation</Title>
             {validationErrors.length === 0 ? (
-              <div className="card-muted">Ошибок валидации не найдено.</div>
+              <div className="card-muted">No validation errors found.</div>
             ) : (
               <List
                 dataSource={validationErrors}
@@ -2099,9 +2099,9 @@ export default function FlowEditor() {
       </div>
       <Modal
         open={!!pendingConnection}
-        title="Выберите тип связи"
-        okText="Применить"
-        cancelText="Отмена"
+        title="Select link type"
+        okText="Apply"
+        cancelText="Cancel"
         onCancel={() => setPendingConnection(null)}
         onOk={() => {
           if (pendingConnection?.source && pendingConnection?.target && routeChoice) {

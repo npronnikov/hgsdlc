@@ -24,7 +24,7 @@ export default function AuditRuntime() {
         const data = await apiRequest(`/runs/${runId}/audit`);
         setEvents(data || []);
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить runtime audit');
+        message.error(err.message || 'Failed to load runtime audit');
       }
     };
     load();
@@ -39,7 +39,7 @@ export default function AuditRuntime() {
   }, [events, filter]);
 
   if (!runId) {
-    return <Empty description="Добавьте runId: /audit-runtime?runId=..." />;
+    return <Empty description="Add runId: /audit-runtime?runId=..." />;
   }
 
   return (

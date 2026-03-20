@@ -1,66 +1,66 @@
 ---
-# Поле: name
-# Зачем: уникальный slug skill.
-# Пример заполнения: sql-query-audit
-name: <имя-skill-в-kebab-case>
+# Field: name
+# Why: unique skill slug.
+# Example: sql-query-audit
+name: <skill-name-in-kebab-case>
 
-# Поле: description
-# Зачем: Qwen использует это поле, чтобы понять, когда skill нужно автоматически применить.
-# Пример заполнения:
-# Проверяет SQL-запросы на корректность, читаемость и потенциальные проблемы
-# производительности. Использовать при работе с SELECT/JOIN/CTE/индексами и ревью SQL.
+# Field: description
+# Why: Qwen uses this to decide when the skill should be auto-applied.
+# Example:
+# Reviews SQL queries for correctness, readability, and performance risks.
+# Use for SELECT/JOIN/CTE/index related work and SQL reviews.
 description: >-
-  <что делает skill и при каких запросах/задачах его применять>
+  <what this skill does and for which requests/tasks to apply it>
 ---
 
-# <Название skill>
+# <Skill name>
 
-## Назначение
-<!-- Зачем: одним абзацем описать цель. -->
-<!-- Пример заполнения:
-Этот skill помогает делать аудит SQL-запросов, искать тяжёлые JOIN-ы,
-избыточные подзапросы и риски full scan.
+## Purpose
+<!-- Why: describe the goal in one paragraph. -->
+<!-- Example:
+This skill audits SQL queries, finds heavy joins, redundant subqueries,
+and full-scan risks.
 -->
 
-## Алгоритм работы
-<!-- Зачем: дать Qwen понятную последовательность действий. -->
-<!-- Пример заполнения:
-1. Найди SQL-файлы, ORM-запросы и миграции.
-2. Определи таблицы, JOIN-ы, фильтры и сортировки.
-3. Проверь индексы и потенциальные full scan.
-4. Сформируй рекомендации.
+## Workflow
+<!-- Why: give Qwen a clear sequence of actions. -->
+<!-- Example:
+1. Find SQL files, ORM queries, and migrations.
+2. Identify tables, joins, filters, and sorting.
+3. Check indexes and potential full scans.
+4. Produce recommendations.
 -->
 
-## Что проверять
-<!-- Зачем: перечислить критерии проверки. -->
-<!-- Пример заполнения:
-- корректность JOIN;
-- фильтрацию по индексируемым полям;
-- LIMIT/OFFSET;
-- N+1-паттерны;
-- читаемость CTE;
-- безопасность параметров.
+## What to check
+<!-- Why: list evaluation criteria. -->
+<!-- Example:
+- join correctness;
+- filtering on indexed columns;
+- LIMIT/OFFSET use;
+- N+1 patterns;
+- CTE readability;
+- parameter safety.
 -->
 
-## Ограничения
-<!-- Зачем: не дать skill делать лишние предположения. -->
-<!-- Пример заполнения:
-- Не придумывай схему БД, если её нет в проекте.
-- Если плана выполнения нет, не утверждай категорично.
+## Constraints
+<!-- Why: prevent unnecessary assumptions. -->
+<!-- Example:
+- Do not invent DB schema if it is not present in the project.
+- If no execution plan is available, avoid hard claims.
 -->
 
-## Формат ответа
-<!-- Зачем: стандартизировать результат. -->
-<!-- Пример заполнения:
-Верни блоки:
-- итог;
-- найденные проблемы;
-- приоритет;
-- предложенный переписанный запрос.
+## Response format
+<!-- Why: standardize output. -->
+<!-- Example:
+Return sections:
+- summary;
+- issues found;
+- priority;
+- proposed rewritten query.
 -->
 
-## Примеры запросов
-<!-- Пример заполнения:
-- "Проверь этот SQL на производительность"
-- "Сделай ревью сложного SELECT с несколькими JOIN"
+## Request examples
+<!-- Example:
+- "Review this SQL for performance"
+- "Review a complex SELECT with multiple JOINs"
 -->

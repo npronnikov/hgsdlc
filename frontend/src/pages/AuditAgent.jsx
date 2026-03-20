@@ -20,7 +20,7 @@ export default function AuditAgent() {
         const data = await apiRequest(`/runs/${runId}/audit`);
         setEvents((data || []).filter((item) => item.actor_type === 'agent'));
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить agent audit');
+        message.error(err.message || 'Failed to load agent audit');
       }
     };
     load();
@@ -35,7 +35,7 @@ export default function AuditAgent() {
   }, [events, nodeFilter]);
 
   if (!runId) {
-    return <Empty description="Добавьте runId: /audit-agent?runId=..." />;
+    return <Empty description="Add runId: /audit-agent?runId=..." />;
   }
 
   return (

@@ -35,7 +35,7 @@ export default function Rules() {
       }));
       setRules(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Rules');
+      message.error(err.message || 'Failed to load Rules');
     } finally {
       setLoading(false);
     }
@@ -80,13 +80,13 @@ export default function Rules() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Rules</Title>
         <Space>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/rules/create')}>Новый Rule</Button>
-          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Фильтр</Button>
+          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/rules/create')}>New Rule</Button>
+          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
       <div className="cards-fullscreen">
         {loading ? (
-          <div className="card-muted">Загрузка...</div>
+          <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
             {filteredRules.map((rule) => (
@@ -116,14 +116,14 @@ export default function Rules() {
               </Card>
             ))}
             {filteredRules.length === 0 && (
-              <div className="card-muted">Правила не найдены.</div>
+              <div className="card-muted">Rules not found.</div>
             )}
           </div>
         )}
       </div>
 
       <Drawer
-        title="Фильтр Rules"
+        title="Rules filter"
         placement="right"
         open={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
@@ -132,11 +132,11 @@ export default function Rules() {
       >
         <div className="filter-drawer-body">
           <div className="filter-row">
-            <Text className="muted">Поиск</Text>
+            <Text className="muted">Search</Text>
             <Input
               value={filters.search}
               onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
-              placeholder="Название, ID, canonical"
+              placeholder="Name, ID, canonical"
             />
           </div>
           <div className="filter-row">
@@ -146,25 +146,25 @@ export default function Rules() {
               value={filters.codingAgent}
               onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))}
               options={codingAgents.map((agent) => ({ value: agent, label: agent }))}
-              placeholder="Выберите агент"
+              placeholder="Select agent"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Статус</Text>
+            <Text className="muted">Status</Text>
             <Select
               allowClear
               value={filters.status}
               onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
               options={statuses.map((status) => ({ value: status, label: status }))}
-              placeholder="Выберите статус"
+              placeholder="Select status"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Версия</Text>
+            <Text className="muted">Version</Text>
             <Input
               value={filters.version}
               onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))}
-              placeholder="Например 1.0.0"
+              placeholder="For example 1.0.0"
             />
           </div>
         </div>
@@ -173,10 +173,10 @@ export default function Rules() {
             type="default"
             onClick={() => setFilters({ search: '', codingAgent: null, status: null, version: '' })}
           >
-            Сбросить
+            Reset
           </Button>
           <Button type="primary" onClick={() => setIsFilterOpen(false)}>
-            Применить
+            Apply
           </Button>
         </div>
       </Drawer>

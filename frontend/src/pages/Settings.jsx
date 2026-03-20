@@ -22,7 +22,7 @@ export default function Settings() {
       setInitialValues(values);
       form.setFieldsValue(values);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить настройки');
+      message.error(err.message || 'Failed to load settings');
       setInitialValues({ workspace_root: '/tmp/workspace', coding_agent: 'qwen', ai_timeout_seconds: 900 });
     } finally {
       setLoading(false);
@@ -51,12 +51,12 @@ export default function Settings() {
           ai_timeout_seconds: values.ai_timeout_seconds,
         }),
       });
-      message.success('Runtime Settings сохранены');
+      message.success('Runtime Settings saved');
     } catch (err) {
       if (err?.errorFields) {
         return;
       }
-      message.error(err.message || 'Не удалось сохранить настройки');
+      message.error(err.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -67,8 +67,8 @@ export default function Settings() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Runtime Settings</Title>
         <Space>
-          <Button onClick={load} loading={loading}>Обновить</Button>
-          <Button type="primary" onClick={handleSave} loading={saving}>Сохранить</Button>
+          <Button onClick={load} loading={loading}>Refresh</Button>
+          <Button type="primary" onClick={handleSave} loading={saving}>Save</Button>
         </Space>
       </div>
       <Card loading={loading && !initialValues}>
@@ -77,16 +77,16 @@ export default function Settings() {
           <Form.Item
             label="Runtime workspace root"
             name="workspace_root"
-            rules={[{ required: true, message: 'Укажите абсолютный путь' }]}
-            extra="Абсолютный путь на сервере, где runtime создаёт run workspace. По умолчанию /tmp/workspace."
+            rules={[{ required: true, message: 'Specify absolute path' }]}
+            extra="Absolute path on the server where runtime creates the run workspace. Default is /tmp/workspace."
           >
             <Input placeholder="/tmp/workspace" />
           </Form.Item>
           <Form.Item
             label="Runtime coding agent"
             name="coding_agent"
-            rules={[{ required: true, message: 'Выберите coding agent' }]}
-            extra="Выбранный coding_agent должен совпадать с coding_agent flow. Сейчас реальное выполнение реализовано только для qwen."
+            rules={[{ required: true, message: 'Select coding agent' }]}
+            extra="Selected coding_agent must match the flow coding_agent. Currently real execution is implemented only for qwen."
           >
             <Select
               options={[
@@ -99,8 +99,8 @@ export default function Settings() {
           <Form.Item
             label="AI timeout (seconds)"
             name="ai_timeout_seconds"
-            rules={[{ required: true, message: 'Укажите таймаут' }]}
-            extra="Максимальное время ожидания выполнения AI-ноды и команд (в секундах). По умолчанию 900 (15 минут)."
+            rules={[{ required: true, message: 'Specify timeout' }]}
+            extra="Maximum wait time for AI node and command execution (in seconds). Default is 900 (15 minutes)."
           >
             <InputNumber min={10} max={7200} style={{ width: '100%' }} placeholder="900" />
           </Form.Item>

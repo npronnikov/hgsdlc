@@ -17,7 +17,7 @@ export default function GatesInbox() {
       const data = await apiRequest('/gates/inbox');
       setGates(data || []);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить inbox');
+      message.error(err.message || 'Failed to load inbox');
     } finally {
       setLoading(false);
     }

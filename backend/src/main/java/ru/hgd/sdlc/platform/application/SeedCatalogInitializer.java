@@ -145,55 +145,55 @@ Focus on external systems, message flows, and error handling.
                 "1.0",
                 SkillStatus.PUBLISHED,
                 SkillProvider.QWEN,
-                "Уточнение запроса через вопросы",
-                "Задать 5 уточняющих вопросов к запросу пользователя с вариантами ответов.",
+                "Clarify request with questions",
+                "Ask 5 clarifying questions about the user request with answer options.",
                 """
 ---
 id: clarify-user-request-questions
 version: 1.0
 canonical_name: clarify-user-request-questions@1.0
-name: Уточнение запроса через вопросы
-description: Задать 3 уточняющих вопроса к запросу пользователя с вариантами ответов.
+name: Clarify request with questions
+description: Ask 3 clarifying questions about the user request with answer options.
 ---
 
-Ты — помощник, который помогает уточнить запрос пользователя к системе разработки.
-Твоя задача — на основе исходного запроса пользователя и анализа проекта задать РОВНО 5
-уточняющих вопросов, которые помогут лучше понять:
-- цель изменения;
-- ограничения и контекст;
-- приоритеты и критерии успеха;
-- требования к качеству и UX;
-- возможные риски и зависимости.
+You are an assistant that helps clarify a user request for the development system.
+Your task is to use the original user request and project analysis to ask EXACTLY 5
+clarifying questions that help better understand:
+- the goal of the change;
+- constraints and context;
+- priorities and success criteria;
+- quality and UX requirements;
+- possible risks and dependencies.
 
-Каждый вопрос должен быть конкретным и полезным для дальнейшей формулировки требований.
-Для КАЖДОГО вопроса ты предлагаешь 3 правдоподобных варианта ответа, но пользователь
-может вписать свой собственный ответ в поле «Ответ пользователя:».
+Each question must be specific and useful for refining requirements.
+For EACH question, provide 3 plausible answer options, but the user
+can enter their own answer in the "User answer:" field.
 
-Формат вывода СТРОГО следующий (никаких дополнительных комментариев, преамбул и пояснений):
+Output format must be STRICTLY the following (no additional comments, preambles, or explanations):
 
-Вопрос 1: {текст первого вопроса}
-Вариант 1: {первый вариант ответа}
-Вариант 2: {второй вариант ответа}
-Вариант 3: {третий вариант ответа}
-Ответ пользователя:
+Question 1: {text of the first question}
+Option 1: {first answer option}
+Option 2: {second answer option}
+Option 3: {third answer option}
+User answer:
 
-Вопрос 2: {текст второго вопроса}
-Вариант 1: {первый вариант ответа}
-Вариант 2: {второй вариант ответа}
-Вариант 3: {третий вариант ответа}
-Ответ пользователя:
+Question 2: {text of the second question}
+Option 1: {first answer option}
+Option 2: {second answer option}
+Option 3: {third answer option}
+User answer:
 
-Вопрос 3: {текст третьего вопроса}
-Вариант 1: {первый вариант ответа}
-Вариант 2: {второй вариант ответа}
-Вариант 3: {третий вариант ответа}
-Ответ пользователя:
+Question 3: {text of the third question}
+Option 1: {first answer option}
+Option 2: {second answer option}
+Option 3: {third answer option}
+User answer:
 
-Соблюдай:
-- ровно 3 вопросов;
-- ровно 3 варианта ответа на каждый вопрос;
-- пустая строка после каждого блока «Ответ пользователя: »;
-- отсутствие любого дополнительного текста вне указанного формата.
+Follow these rules:
+- exactly 3 questions;
+- exactly 3 answer options for each question;
+- one empty line after each "User answer:" block;
+- no additional text outside the required format.
 """
         );
     }
@@ -265,8 +265,8 @@ nodes:
                 "requirements-from-questions-flow",
                 "1.0",
                 FlowStatus.PUBLISHED,
-                "Уточнение запроса через вопросы",
-                "Тестовый flow: уточнение запроса пользователя через вопросы и генерация требований.",
+                "Clarify request with questions",
+                "Test flow: clarify user request with questions and generate requirements.",
                 "analyze-request-and-generate-questions",
                 "qwen",
                 List.of(),
@@ -274,8 +274,8 @@ nodes:
 id: requirements-from-questions-flow
 version: "1.0"
 canonical_name: requirements-from-questions-flow@1.0
-title: Уточнение запроса через вопросы
-description: Тестовый flow, который уточняет запрос пользователя через вопросы и генерирует требования.
+title: Clarify request with questions
+description: Test flow that clarifies the user request with questions and generates requirements.
 status: published
 start_node_id: analyze-request-and-generate-questions
 rule_refs: []
@@ -284,14 +284,14 @@ fail_on_missing_expected_mutation: true
 
 nodes:
   - id: analyze-request-and-generate-questions
-    title: Анализ запроса и генерация вопросов
+    title: Analyze request and generate questions
     type: ai
     execution_context: []
     instruction: |
-      Изучи проект и исходный запрос пользователя.
-      Задай релевантные запросу уточняющие вопросы и сформируй артефакт `questions.md` в рабочей директории run scope.
-      Вопросы должны помогать лучше понять цель изменения, ограничения, приоритеты и критерии успеха.
-      Используй прикрепленный skill для генерации вопросов и СТРОГО следуй указанному там формату вывода.
+      Study the project and the original user request.
+      Ask clarifying questions relevant to the request and create the `questions.md` artifact in the run-scope working directory.
+      Questions should help clarify change goals, constraints, priorities, and success criteria.
+      Use the attached skill to generate questions and STRICTLY follow its output format.
     skill_refs:
       - clarify-user-request-questions@1.0
     produced_artifacts:
@@ -303,12 +303,12 @@ nodes:
     on_failure: complete-requirements-flow
 
   - id: answer-questions
-    title: Ответы пользователя на вопросы
+    title: User answers to questions
     type: human_input
     instruction: |
-      Откройте артефакт `answers.md` в рабочей директории текущего запуска.
-      Впишите свои ответы на вопросы, заданные в артефакте questions.md.
-      После того как вы заполните ответы и сохраните файл, нажмите «Ответить», чтобы продолжить выполнение flow.
+      Open the `answers.md` artifact in the current run working directory.
+      Fill in your answers to the questions listed in the `questions.md` artifact.
+      After you complete your answers and save the file, click "Reply" to continue flow execution.
     produced_artifacts:
       - scope: run
         path: answers.md
@@ -317,7 +317,7 @@ nodes:
     on_submit: execute-request
 
   - id: execute-request
-    title: Генерация требований по запросу
+    title: Generate requirements from request
     type: ai
     execution_context:
       - type: artifact_ref
@@ -326,13 +326,13 @@ nodes:
         scope: run
         required: true
     instruction: |
-      У тебя есть исходный запрос пользователя и файл `answers.md` с уточняющими вопросами и ответами пользователя.
-      На их основе сформулируй новые, детализированные требования по заданной пользователем теме.
-      Требования должны быть:
-      - конкретными и проверяемыми;
-      - сгруппированными по темам (функциональные, нефункциональные, UX, ограничения и риски);
-      - пригодными для дальнейшей декомпозиции на задачи разработки.
-      Явно учитывай ответы пользователя на вопросы и делай выводы, даже если ответы краткие или неполные.
+      You have the original user request and the `answers.md` file with clarifying questions and user answers.
+      Based on them, produce new detailed requirements for the user-specified topic.
+      Requirements must be:
+      - specific and verifiable;
+      - grouped by themes (functional, non-functional, UX, constraints, and risks);
+      - suitable for decomposition into implementation tasks.
+      Explicitly account for user answers and infer conclusions even if answers are brief or incomplete.
     skill_refs: []
     produced_artifacts:
       - scope: run
@@ -343,7 +343,7 @@ nodes:
     on_failure: complete-requirements-flow
 
   - id: complete-requirements-flow
-    title: Завершение flow
+    title: Complete flow
     type: terminal
     execution_context: []
     produced_artifacts: []

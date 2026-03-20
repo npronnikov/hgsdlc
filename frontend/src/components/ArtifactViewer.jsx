@@ -81,7 +81,7 @@ export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, 
       return;
     }
     if (!content || !content.trim()) {
-      message.warning('Введите ответ');
+      message.warning('Enter an answer');
       return;
     }
     setSubmitting(true);
@@ -109,7 +109,7 @@ export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, 
         await onSubmitted?.();
         return;
       }
-      message.error(err.message || 'Не удалось отправить input');
+      message.error(err.message || 'Failed to submit input');
     } finally {
       setSubmitting(false);
     }

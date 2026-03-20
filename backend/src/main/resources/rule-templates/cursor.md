@@ -1,62 +1,62 @@
 ---
-# Поле: description
-# Зачем: помогает агенту понять, в каких задачах правило релевантно.
-# Пример заполнения:
-# Правила для backend API на TypeScript: DTO, валидация, обработка ошибок,
-# структура handler/service/repository.
+# Field: description
+# Why: helps the agent understand when the rule is relevant.
+# Example:
+# Rules for a TypeScript backend API: DTOs, validation, error handling,
+# and handler/service/repository structure.
 description: >-
-  <когда и для каких задач это правило должно подключаться>
+  <when and for which tasks this rule should be applied>
 
-# Поле: globs
-# Зачем: ограничить правило конкретными файлами/папками.
-# Пример заполнения: "src/api/**/*.ts"
-globs: "<glob-паттерн>"
+# Field: globs
+# Why: scope the rule to specific files/directories.
+# Example: "src/api/**/*.ts"
+globs: "<glob-pattern>"
 
-# Поле: alwaysApply
-# Зачем:
-# - true  = правило загружается во все чаты;
-# - false = правило используется не всегда, а по релевантности/матчингу.
-# Пример заполнения: false
+# Field: alwaysApply
+# Why:
+# - true  = rule is loaded in all chats;
+# - false = rule is loaded by relevance/matching.
+# Example: false
 alwaysApply: <true|false>
 ---
 
-# <Название правила>
+# <Rule name>
 
-## Контекст
-<!-- Зачем: быстро объяснить область применения. -->
-<!-- Пример заполнения:
-Это правило действует для backend API-слоя и всех файлов в src/api/.
+## Context
+<!-- Why: quickly explain the scope of this rule. -->
+<!-- Example:
+This rule applies to the backend API layer and all files under src/api/.
 -->
 
-## Обязательные требования
-<!-- Зачем: дать короткие, проверяемые правила. -->
-<!-- Пример заполнения:
-- Каждый endpoint обязан валидировать входные данные.
-- Ошибки возвращаются в едином формате ErrorResponse.
-- Бизнес-логика не должна лежать в controller.
+## Mandatory requirements
+<!-- Why: define short, verifiable requirements. -->
+<!-- Example:
+- Every endpoint must validate input.
+- Errors must use a unified ErrorResponse format.
+- Business logic must not live in controllers.
 -->
 
-## Структура изменений
-<!-- Зачем: зафиксировать preferred architecture. -->
-<!-- Пример заполнения:
-- controller = только HTTP-слой;
-- service = бизнес-логика;
-- repository = доступ к данным.
+## Change structure
+<!-- Why: lock preferred architecture for changes. -->
+<!-- Example:
+- controller = HTTP layer only;
+- service = business logic;
+- repository = data access.
 -->
 
-## Что запрещено
-<!-- Зачем: явно обозначить anti-patterns. -->
-<!-- Пример заполнения:
-- Не писать SQL прямо в controller.
-- Не дублировать схему ошибок по разным endpoint-ам.
+## Prohibited
+<!-- Why: explicitly call out anti-patterns. -->
+<!-- Example:
+- Do not write SQL directly in controllers.
+- Do not duplicate error schemas across endpoints.
 -->
 
-## Примеры
-<!-- Зачем: снизить неоднозначность. -->
-<!-- Пример заполнения:
-Хорошо:
-- controller вызывает service и возвращает typed response.
+## Examples
+<!-- Why: reduce ambiguity. -->
+<!-- Example:
+Good:
+- controller calls service and returns typed response.
 
-Плохо:
-- controller сам ходит в БД и собирает response вручную.
+Bad:
+- controller queries DB directly and builds response manually.
 -->

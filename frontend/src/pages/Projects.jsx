@@ -21,7 +21,7 @@ export default function Projects() {
       const data = await apiRequest('/projects');
       setProjects(data || []);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить проекты');
+      message.error(err.message || 'Failed to load projects');
     } finally {
       setLoading(false);
     }
@@ -77,14 +77,14 @@ export default function Projects() {
           }),
         });
         setProjects((prev) => prev.map((item) => (item.id === response.id ? response : item)));
-        message.success('Проект обновлён');
+        message.success('Project updated');
       } else {
         const response = await apiRequest('/projects', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
         setProjects((prev) => [response, ...prev]);
-        message.success('Проект создан');
+        message.success('Project created');
       }
       setIsModalOpen(false);
       setEditingProject(null);
@@ -93,7 +93,7 @@ export default function Projects() {
       if (err?.errorFields) {
         return;
       }
-      message.error(err.message || 'Не удалось сохранить проект');
+      message.error(err.message || 'Failed to save project');
     } finally {
       setSubmitting(false);
     }
@@ -105,18 +105,18 @@ export default function Projects() {
         method: 'POST',
       });
       setProjects((prev) => prev.map((item) => (item.id === response.id ? response : item)));
-      message.success('Проект архивирован');
+      message.success('Project archived');
     } catch (err) {
-      message.error(err.message || 'Не удалось архивировать проект');
+      message.error(err.message || 'Failed to archive project');
     }
   };
 
   const projectMenuItems = (project) => ([
-    { key: 'open', label: 'Открыть', icon: <EyeOutlined /> },
-    { key: 'edit', label: 'Редактировать', icon: <EditOutlined /> },
+    { key: 'open', label: 'Open', icon: <EyeOutlined /> },
+    { key: 'edit', label: 'Edit', icon: <EditOutlined /> },
     {
       key: 'archive',
-      label: 'Архивировать',
+      label: 'Archive',
       icon: <InboxOutlined />,
       disabled: project.status === 'archived',
     },
@@ -133,9 +133,9 @@ export default function Projects() {
     }
     if (key === 'archive') {
       Modal.confirm({
-        title: 'Архивировать проект?',
-        okText: 'Архивировать',
-        cancelText: 'Отмена',
+        title: 'Archive project?',
+        okText: 'Archive',
+        cancelText: 'Cancel',
         onOk: () => archiveProject(project),
       });
     }
@@ -146,11 +146,11 @@ export default function Projects() {
     <div className="cards-page">
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Projects</Title>
-        <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>Новый проект</Button>
+        <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>
       </div>
       <div className="cards-fullscreen">
         {loading ? (
-          <div className="card-muted">Загрузка...</div>
+          <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
             {projects.map((project) => (
@@ -189,14 +189,14 @@ export default function Projects() {
               </Card>
             ))}
             {projects.length === 0 && (
-              <div className="card-muted">Проекты не найдены.</div>
+              <div className="card-muted">No projects found.</div>
             )}
           </div>
         )}
       </div>
 
       <Modal
-        title={editingProject ? 'Редактировать проект' : 'Добавить проект'}
+        title={editingProject ? 'Edit project' : 'Add project'}
         open={isModalOpen}
         onOk={submitForm}
         confirmLoading={submitting}
@@ -204,21 +204,21 @@ export default function Projects() {
           setIsModalOpen(false);
           setEditingProject(null);
         }}
-        okText={editingProject ? 'Сохранить' : 'Создать'}
-        cancelText="Отмена"
+        okText={editingProject ? 'Save' : 'Create'}
+        cancelText="Cancel"
       >
         <Form form={form} layout="vertical">
           <Form.Item
             label="Name"
             name="name"
-            rules={[{ required: true, message: 'Введите название проекта' }]}
+            rules={[{ required: true, message: 'Enter project name' }]}
           >
             <Input />
           </Form.Item>
           <Form.Item
             label="Repository URL"
             name="repo_url"
-            rules={[{ required: true, message: 'Введите ссылку на репозиторий' }]}
+            rules={[{ required: true, message: 'Enter repository URL' }]}
           >
             <Input />
           </Form.Item>
@@ -229,7 +229,7 @@ export default function Projects() {
       </Modal>
 
       <Modal
-        title="Детали проекта"
+        title="Project details"
         open={!!viewingProject}
         onCancel={closeView}
         footer={null}

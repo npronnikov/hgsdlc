@@ -1,32 +1,32 @@
-# Локализация/тексты промпта рантайма для AI-нод.
-# Комментарии у каждого поля объясняют, когда этот текст вставляется.
+# Runtime prompt localization/texts for AI nodes.
+# Field comments explain when each text is injected.
 
 sections:
-  # Вставляется для всех AI-нод и содержит исходный пользовательский запрос запуска.
-  task_header: "Задача:"
-  # Вставляется, когда есть pending rework instruction.
-  request_clarification_header: "Уточнение запроса:"
-  # Вставляется, когда у ноды есть instruction.
-  node_instruction_header: "Инструкция:"
-  # Вставляется, когда есть хотя бы один пункт во входных данных.
-  inputs_header: "Доступные входные данные:"
-  # Вставляется, когда есть хотя бы один ожидаемый результат.
-  expected_results_header: "Ожидаемый результат:"
-  # Вставляется всегда в конце промпта.
-  footer: "Используй правила репозитория и доступные skills."
+  # Inserted for all AI nodes; contains the original user request for this run.
+  task_header: "Task:"
+  # Inserted when a pending rework instruction exists.
+  request_clarification_header: "Request clarification:"
+  # Inserted when the node contains instruction text.
+  node_instruction_header: "Instruction:"
+  # Inserted when at least one input item exists.
+  inputs_header: "Available inputs:"
+  # Inserted when at least one expected result exists.
+  expected_results_header: "Expected result:"
+  # Always inserted at the end of the prompt.
+  footer: "Use repository rules and available skills."
 
 inputs:
-  # Добавляется для artifact_ref, если ключ артефакта не вычислился. Плейсхолдер: {path}
-  use_upstream_artifact_by_path: "Используй входной артефакт по пути '{path}'."
-  # Добавляется для artifact_ref, если известен artifact_key. Плейсхолдеры: {artifact_key}, {path}
-  use_upstream_artifact_by_key_and_path: "Используй входной артефакт '{artifact_key}' по полному пути '{path}'."
+  # Added for artifact_ref when artifact key cannot be resolved. Placeholder: {path}
+  use_upstream_artifact_by_path: "Use the input artifact by path '{path}'."
+  # Added for artifact_ref when artifact_key is known. Placeholders: {artifact_key}, {path}
+  use_upstream_artifact_by_key_and_path: "Use the input artifact '{artifact_key}' by full path '{path}'."
 
 expected_results:
-  # Добавляется, если есть обязательные output артефакты. Плейсхолдер: {artifacts}
-  required_artifacts: "Создай и заполни обязательные артефакты: {artifacts}."
-  # Добавляется, если есть обязательные run-scope output артефакты. Плейсхолдер: {paths}
-  required_run_paths: "Созданные артефакты запиши строго по путям: {paths}. Перед завершением обязательно проверь, что каждый файл существует и не пустой."
-  # Добавляется, если есть обязательные expected_mutations.
-  required_mutations: "Внеси в репозиторий изменения, обязательные для этой задачи."
-  # Добавляется всегда.
-  summary: "Верни краткое резюме выполненной работы."
+  # Added when required output artifacts exist. Placeholder: {artifacts}
+  required_artifacts: "Create and fill required artifacts: {artifacts}."
+  # Added when required run-scope output artifacts exist. Placeholder: {paths}
+  required_run_paths: "Write generated artifacts strictly to these paths: {paths}. Before finishing, verify each file exists and is not empty."
+  # Added when required expected_mutations exist.
+  required_mutations: "Apply repository changes required for this task."
+  # Always added.
+  summary: "Return a brief summary of completed work."

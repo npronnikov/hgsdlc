@@ -1,7 +1,7 @@
 ---
-# Поле: paths
-# Зачем: ограничить правило конкретными путями/типами файлов.
-# Пример заполнения:
+# Field: paths
+# Why: scope the rule to specific paths/file types.
+# Example:
 # - "src/api/**/*.ts"
 # - "src/contracts/**/*.ts"
 paths:
@@ -9,63 +9,63 @@ paths:
   - "<glob-2>"
 ---
 
-# <Название правила>
+# <Rule name>
 
-## Назначение
-<!-- Зачем: объяснить, зачем существует правило. -->
-<!-- Пример заполнения:
-Это правило задаёт стандарты для API-слоя: валидация, error handling,
-контракты запросов/ответов и OpenAPI-комментарии.
+## Purpose
+<!-- Why: explain why this rule exists. -->
+<!-- Example:
+This rule defines standards for the API layer: validation, error handling,
+request/response contracts, and OpenAPI annotations.
 -->
 
-## Обязательные требования
-<!-- Зачем: перечислить короткие проверяемые инструкции. -->
-<!-- Пример заполнения:
-- Каждый endpoint валидирует входные данные.
-- Все ошибки приводятся к единому формату.
-- Любое изменение публичного контракта требует обновления документации.
+## Mandatory requirements
+<!-- Why: list short, verifiable instructions. -->
+<!-- Example:
+- Every endpoint validates input.
+- All errors are normalized to one format.
+- Public contract changes require documentation updates.
 -->
 
-## Архитектурные соглашения
-<!-- Зачем: не дать Claude смешивать слои. -->
-<!-- Пример заполнения:
-- handlers только принимают/возвращают HTTP
-- services содержат бизнес-логику
-- repositories работают с БД
+## Architecture conventions
+<!-- Why: prevent layer mixing in Claude output. -->
+<!-- Example:
+- handlers only handle HTTP input/output
+- services contain business logic
+- repositories work with the database
 -->
 
-## Правила изменения кода
-<!-- Зачем: обозначить expected workflow. -->
-<!-- Пример заполнения:
-- Сначала найди существующий паттерн в проекте
-- Затем сделай минимально-инвазивное изменение
-- При исправлении бага добавь тест
+## Code change rules
+<!-- Why: define expected workflow. -->
+<!-- Example:
+- First find an existing project pattern
+- Then apply a minimally invasive change
+- Add tests when fixing bugs
 -->
 
-## Что нельзя делать
-<!-- Зачем: явно зафиксировать anti-patterns. -->
-<!-- Пример заполнения:
-- Не вставлять сырой SQL в handler
-- Не дублировать DTO между модулями без причины
-- Не менять public API молча
+## What not to do
+<!-- Why: explicitly define anti-patterns. -->
+<!-- Example:
+- Do not embed raw SQL in handlers
+- Do not duplicate DTOs across modules without reason
+- Do not silently change public APIs
 -->
 
-## Формат отчёта
-<!-- Зачем: чтобы ответы Claude были однотипными. -->
-<!-- Пример заполнения:
-Верни:
-1. что меняешь;
-2. почему;
-3. какие файлы затронуты;
-4. какие тесты нужны.
+## Report format
+<!-- Why: keep Claude responses consistent. -->
+<!-- Example:
+Return:
+1. what you changed;
+2. why;
+3. which files are affected;
+4. which tests are needed.
 -->
 
-## Примеры
-<!-- Зачем: уменьшить неоднозначность. -->
-<!-- Пример заполнения:
-Хорошо:
-- "Добавлен validator для POST /users и обновлена схема ответа"
+## Examples
+<!-- Why: reduce ambiguity. -->
+<!-- Example:
+Good:
+- "Added validator for POST /users and updated response schema"
 
-Плохо:
-- "В controller добавлена бизнес-логика создания пользователя"
+Bad:
+- "Added business logic for user creation in controller"
 -->

@@ -30,10 +30,10 @@ export default function GateApproval() {
         setRun(runData);
         setGate(currentGate);
       } else {
-        message.warning('Для текущего run нет active human_approval gate');
+        message.warning('No active human_approval gate for current run');
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить gate');
+      message.error(err.message || 'Failed to load gate');
     }
   };
 
@@ -58,7 +58,7 @@ export default function GateApproval() {
       message.success('Gate approved');
       navigate(`/run-console?runId=${runId}`);
     } catch (err) {
-      message.error(err.message || 'Не удалось approve gate');
+      message.error(err.message || 'Failed to approve gate');
       await load();
     } finally {
       setSubmitting(false);
@@ -84,7 +84,7 @@ export default function GateApproval() {
       message.success('Rework requested');
       navigate(`/run-console?runId=${runId}`);
     } catch (err) {
-      message.error(err.message || 'Не удалось запросить rework');
+      message.error(err.message || 'Failed to request rework');
       await load();
     } finally {
       setSubmitting(false);
@@ -138,9 +138,9 @@ export default function GateApproval() {
         </Col>
         <Col xs={24} lg={8}>
           <Card title="Decision">
-            <Text className="muted">Комментарий</Text>
+            <Text className="muted">Comment</Text>
             <Input.TextArea rows={5} style={{ marginTop: 8 }} value={comment} onChange={(e) => setComment(e.target.value)} />
-            <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Инструкция</Text>
+            <Text className="muted" style={{ marginTop: 12, display: 'block' }}>Instruction</Text>
             <Input.TextArea rows={5} style={{ marginTop: 8 }} value={instruction} onChange={(e) => setInstruction(e.target.value)} />
             {reworkDiscardAvailable ? (
               <>
@@ -158,7 +158,7 @@ export default function GateApproval() {
               </>
             ) : (
               <Text type="secondary" style={{ marginTop: 12, display: 'block' }}>
-                Текущие изменения будут сохранены
+                Current changes will be preserved
               </Text>
             )}
             <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>

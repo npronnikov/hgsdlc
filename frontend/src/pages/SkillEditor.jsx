@@ -154,7 +154,7 @@ export default function SkillEditor() {
         setFrontmatterSummary([]);
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Skill');
+      message.error(err.message || 'Failed to load Skill');
     }
   };
 
@@ -162,7 +162,7 @@ export default function SkillEditor() {
     try {
       const versions = await apiRequest(`/skills/${skillIdValue}/versions`);
       const mapped = versions.map((item) => ({
-        label: `v${item.version} · ${item.status === 'draft' ? 'черновик' : item.status === 'published' ? 'опубликовано' : item.status}`,
+        label: `v${item.version} · ${item.status === 'draft' ? 'draft' : item.status === 'published' ? 'published' : item.status}`,
         value: item.version,
         canonical: item.canonical_name,
         skillId: item.skill_id,
@@ -175,7 +175,7 @@ export default function SkillEditor() {
         setSkillVersion(currentVersion);
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить версии Skill');
+      message.error(err.message || 'Failed to load Skill versions');
     }
   };
 
@@ -203,7 +203,7 @@ export default function SkillEditor() {
         setFrontmatterSummary([]);
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить выбранную версию');
+      message.error(err.message || 'Failed to load selected version');
     }
   };
 
@@ -223,7 +223,7 @@ export default function SkillEditor() {
         setEditorValue(template.template || '');
       }
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить шаблон Skill');
+      message.error(err.message || 'Failed to load Skill template');
       setFrontmatterSummary([]);
     }
   };
@@ -237,10 +237,10 @@ export default function SkillEditor() {
     };
     if (hasContent && isChange) {
       Modal.confirm({
-        title: 'Сменить кодинг-агент?',
-        content: 'Требования к шаблону и frontmatter изменятся. Заменить markdown новым шаблоном?',
-        okText: 'Заменить шаблон',
-        cancelText: 'Оставить текущий',
+        title: 'Change coding agent?',
+        content: 'Template and frontmatter requirements will change. Replace markdown with a new template?',
+        okText: 'Replace template',
+        cancelText: 'Keep current',
         onOk: () => applyChange(true),
         onCancel: () => applyChange(false),
       });
@@ -251,19 +251,19 @@ export default function SkillEditor() {
 
   const saveSkill = async ({ publish, release = false }) => {
     if (!skillId) {
-      message.error('Нужен ID Skill');
+      message.error('Skill ID is required');
       return;
     }
     if (!name.trim()) {
-      message.error('Нужно название');
+      message.error('Name is required');
       return;
     }
     if (!description.trim()) {
-      message.error('Нужно описание');
+      message.error('Description is required');
       return;
     }
     if (!codingAgent) {
-      message.error('Нужен Кодинг-агент');
+      message.error('Coding agent is required');
       return;
     }
     const effectiveVersion = skillId === selectedSkillId ? (resourceVersion ?? 0) : 0;
@@ -294,9 +294,9 @@ export default function SkillEditor() {
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(response.skill_id || skillId, response.version || skillVersion);
-      message.success(publish ? 'Skill опубликован' : 'Черновик сохранён');
+      message.success(publish ? 'Skill published' : 'Draft saved');
     } catch (err) {
-      message.error(toRussianError(err?.message, 'Не удалось сохранить Skill'));
+      message.error(toRussianError(err?.message, 'Failed to save Skill'));
     }
   };
 
@@ -339,11 +339,11 @@ export default function SkillEditor() {
       : `${currentMajor}.0`);
   const draftForMajor = getDraftForMajor(versionOptions, currentMajor);
   const publishVersion = draftForMajor ? draftForMajor.value : nextDraftVersion;
-  const publishLabel = `Опубликовать версию → ${publishVersion}`;
+  const publishLabel = `Publish version -> ${publishVersion}`;
   const maxPublishedMajor = getMaxPublishedMajor(versionOptions);
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
-  const releaseLabel = `Несовместимое обновление (major) → ${releaseVersion}`;
+  const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
 
   const startDraftFromPublished = () => {
     const sourceVersion = skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
@@ -362,12 +362,12 @@ export default function SkillEditor() {
   return (
     <div className="rule-editor-page">
       <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Редактор Skill</Title>
+        <Title level={3} style={{ margin: 0 }}>Skill editor</Title>
         <Space>
           {!isEditing && (
             currentStatus === 'draft' ? (
               <>
-                <Button type="default" onClick={beginEditDraft}>Редактировать</Button>
+                <Button type="default" onClick={beginEditDraft}>Edit</Button>
                 <Dropdown
                   menu={{
                     items: [
@@ -377,10 +377,10 @@ export default function SkillEditor() {
                     onClick: ({ key }) => {
                       if (key === 'release') {
                         Modal.confirm({
-                          title: 'Подтвердить major-обновление?',
-                          content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
-                          okText: 'Выпустить',
-                          cancelText: 'Отмена',
+                          title: 'Confirm major update?',
+                          content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
+                          okText: 'Release',
+                          cancelText: 'Cancel',
                           onOk: () => saveSkill({ publish: true, release: true }),
                         });
                         return;
@@ -389,18 +389,18 @@ export default function SkillEditor() {
                     },
                   }}
                 >
-                  <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
+                  <Button type="default" icon={<MoreOutlined />}>Publish</Button>
                 </Dropdown>
               </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
-                {`Создать новую версию ${nextDraftVersion}`}
+                {`Create new version ${nextDraftVersion}`}
               </Button>
             )
           )}
           {isEditing && (
             <>
-              <Button type="default" onClick={() => saveSkill({ publish: false })}>Сохранить</Button>
+              <Button type="default" onClick={() => saveSkill({ publish: false })}>Save</Button>
               <Dropdown
                 menu={{
                   items: [
@@ -410,10 +410,10 @@ export default function SkillEditor() {
                   onClick: ({ key }) => {
                     if (key === 'release') {
                       Modal.confirm({
-                        title: 'Подтвердить major-обновление?',
-                        content: `Будет выпущена несовместимая версия → ${releaseVersion}. Это следующий свободный major после ${maxPublishedMajor === null ? 'отсутствующих опубликованных версий' : `${maxPublishedMajor}.x`}.`,
-                        okText: 'Выпустить',
-                        cancelText: 'Отмена',
+                        title: 'Confirm major update?',
+                        content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
+                        okText: 'Release',
+                        cancelText: 'Cancel',
                         onOk: () => saveSkill({ publish: true, release: true }),
                       });
                       return;
@@ -422,7 +422,7 @@ export default function SkillEditor() {
                   },
                 }}
               >
-                <Button type="default" icon={<MoreOutlined />}>Опубликовать</Button>
+                <Button type="default" icon={<MoreOutlined />}>Publish</Button>
               </Dropdown>
             </>
           )}
@@ -516,7 +516,7 @@ export default function SkillEditor() {
                 </div>
               </div>
               <div className="editor-pane">
-                <Text className="muted">Предпросмотр</Text>
+                <Text className="muted">Preview</Text>
                 <div
                   className="editor-pane-body markdown-preview"
                   ref={previewRef}
@@ -548,7 +548,7 @@ export default function SkillEditor() {
             </div>
           ) : (
             <div className="editor-pane">
-              <Text className="muted">Предпросмотр</Text>
+              <Text className="muted">Preview</Text>
               <div className="editor-pane-body markdown-preview">
                 {previewContent.frontmatter && (
                   <pre className="frontmatter-block">{`---\n${previewContent.frontmatter}\n---`}</pre>
@@ -562,26 +562,26 @@ export default function SkillEditor() {
         </Card>
         <Card>
           <div className="rule-fields-header">
-            <Title level={5} style={{ margin: 0 }}>Поля Skill</Title>
+            <Title level={5} style={{ margin: 0 }}>Skill fields</Title>
             {selectedSkillId ? (
               <Select
                 value={skillVersion || undefined}
                 options={versionOptions}
                 onChange={(value) => handleVersionSelect(value)}
                 className="rule-version-select"
-                placeholder="Версия"
+                placeholder="Version"
                 disabled={isEditing}
               />
             ) : (
-              <span className="rule-version-pill">новый</span>
+              <span className="rule-version-pill">new</span>
             )}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Text className="muted">Название</Text>
+            <Text className="muted">Name</Text>
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Обновить требования"
+              placeholder="Update requirements"
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -597,31 +597,31 @@ export default function SkillEditor() {
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Описание</Text>
+            <Text className="muted">Description</Text>
             <Input.TextArea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
-              placeholder="Краткое описание назначения Skill"
+              placeholder="Brief description of the Skill purpose"
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Кодинг-агент</Text>
+            <Text className="muted">Coding agent</Text>
             <Select
               value={codingAgent || undefined}
               onChange={handleCodingAgentChange}
               options={codingAgentOptions}
-              placeholder="Выберите кодинг-агент"
+              placeholder="Select coding agent"
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 16 }}>
-            <Title level={5}>Подсказка по frontmatter</Title>
+            <Title level={5}>Frontmatter hint</Title>
             {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Выберите кодинг-агент, чтобы увидеть ожидаемые поля frontmatter.</Text>
+              <Text type="secondary">Select a coding agent to see the expected frontmatter fields.</Text>
             ) : (
               <Space direction="vertical" size={8}>
                 {frontmatterSummary.map((item) => (

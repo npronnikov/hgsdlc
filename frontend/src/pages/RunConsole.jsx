@@ -127,7 +127,7 @@ function renderAgentInputSection(agentInput) {
         <Descriptions.Item label="Task">
           {agentInput.task ? <pre className="code-block">{agentInput.task}</pre> : <Text type="secondary">—</Text>}
         </Descriptions.Item>
-        <Descriptions.Item label="Уточнение запроса">
+        <Descriptions.Item label="Request clarification">
           {agentInput.requestClarification
             ? <pre className="code-block">{agentInput.requestClarification}</pre>
             : <Text type="secondary">—</Text>}
@@ -249,7 +249,7 @@ function AuditTab({ runId, nodes, preFilterNodeId }) {
       setNextCursor(data.next_cursor || null);
       setHasMore(data.has_more || false);
     } catch (err) {
-      message.error(err.message || 'Ошибка загрузки аудита');
+      message.error(err.message || 'Failed to load audit');
     } finally {
       setLoading(false);
     }
@@ -318,7 +318,7 @@ function AuditTab({ runId, nodes, preFilterNodeId }) {
         />
       </Space>
       {items.length === 0 && !loading ? (
-        <Empty description="Нет событий аудита" />
+        <Empty description="No audit events" />
       ) : (
         <Collapse items={items} accordion />
       )}
@@ -350,7 +350,7 @@ function RunListView({ navigate }) {
       setRuns(runsData || []);
       setProjects(projectsData || []);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить последние запуски');
+      message.error(err.message || 'Failed to load latest runs');
     } finally {
       setLoading(false);
     }
@@ -417,7 +417,7 @@ function RunListView({ navigate }) {
       </div>
       <Card>
         {runs.length === 0 ? (
-          <Empty description="Запусков пока нет" />
+          <Empty description="No runs yet" />
         ) : (
           <Table
             rowKey="run_id"
@@ -507,7 +507,7 @@ function NodeLogTab({ runId, nodeExecutionId }) {
   }, [logContent]);
 
   if (!nodeExecutionId) {
-    return <Empty description="Выберите ноду в таймлайне" />;
+    return <Empty description="Select a node in the timeline" />;
   }
 
   return (
@@ -516,7 +516,7 @@ function NodeLogTab({ runId, nodeExecutionId }) {
       onScroll={handleScroll}
       className="node-log-pre"
     >
-      {logContent || (running ? 'Ожидание вывода…' : 'Лог пуст.')}
+      {logContent || (running ? 'Waiting for output...' : 'Log is empty.')}
     </pre>
   );
 }
@@ -577,7 +577,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
       }
 
       if (!silent && errors.length === 4) {
-        message.error(errors[0]?.message || 'Не удалось загрузить run');
+        message.error(errors[0]?.message || 'Failed to load run');
       }
     } finally {
       setLoading(false);
@@ -717,7 +717,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
     const editableRows = artifactsTableRows.filter((row) => row.humanInputEditable);
     if (editableRows.length === 0) {
-      message.warning('Для human input не найдено артефактов для редактирования');
+      message.warning('No editable artifacts found for human input');
       return;
     }
     setSelectedArtifact(editableRows[0]);
@@ -729,7 +729,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
       await apiRequest(`/runs/${runId}/cancel`, { method: 'POST' });
       await load();
     } catch (err) {
-      message.error(err.message || 'Не удалось отменить run');
+      message.error(err.message || 'Failed to cancel run');
     }
   };
 
@@ -748,37 +748,37 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
             icon={<MinusCircleOutlined />}
             disabled={['completed', 'failed', 'cancelled'].includes(run.status)}
           >
-            Остановить
+            Stop
           </Button>
         </Space>
       </div>
       <div className="summary-bar">
         <div>
-          <Text className="muted">Статус</Text>
+          <Text className="muted">Status</Text>
           <div><StatusTag value={run.status} /></div>
         </div>
         <div>
-          <Text className="muted">Текущая нода</Text>
+          <Text className="muted">Current node</Text>
           <div className="mono">{run.current_node_id}</div>
         </div>
         <div>
-          <Text className="muted">Текущий гейт</Text>
+          <Text className="muted">Current gate</Text>
           <div>{run.current_gate ? <StatusTag value={run.current_gate.status} /> : '—'}</div>
         </div>
         <div>
-          <Text className="muted">Воркфлоу</Text>
+          <Text className="muted">Workflow</Text>
           <div className="mono">{run.flow_canonical_name}</div>
         </div>
         <div>
-          <Text className="muted">Целевая ветка</Text>
+          <Text className="muted">Target branch</Text>
           <div className="mono">{run.target_branch}</div>
         </div>
         <div>
-          <Text className="muted">Рабочая директория</Text>
+          <Text className="muted">Working directory</Text>
           <div className="mono">{runtimeSettings?.workspace_root || '—'}</div>
         </div>
         <div>
-          <Text className="muted">Кодинг-агент</Text>
+          <Text className="muted">Coding agent</Text>
           <div className="mono">{runtimeSettings?.coding_agent || '—'}</div>
         </div>
       </div>
@@ -920,7 +920,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                 },
                 {
                   key: 'log',
-                  label: 'Лог',
+                  label: 'Log',
                   children: (
                     <NodeLogTab runId={runId} nodeExecutionId={logNodeExecutionId} />
                   ),

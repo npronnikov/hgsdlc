@@ -1,67 +1,67 @@
 ---
-# Поле: name
-# Зачем: машинно-читаемое имя skill; обычно используется как идентификатор папки и короткий slug.
-# Пример заполнения: api-contract-review
-name: <имя-skill-в-kebab-case>
+# Field: name
+# Why: machine-readable skill name; usually used as folder id and short slug.
+# Example: api-contract-review
+name: <skill-name-in-kebab-case>
 
-# Поле: description
-# Зачем: помогает агенту понять, ЧТО делает skill и КОГДА его надо подключать.
-# Пример заполнения:
-# Проверяет API-контракты и HTTP-схемы. Использовать, когда нужно ревью endpoint-ов,
-# OpenAPI-описаний, request/response DTO и обратной совместимости API.
+# Field: description
+# Why: helps the agent understand WHAT this skill does and WHEN to use it.
+# Example:
+# Reviews API contracts and HTTP schemas. Use when reviewing endpoints,
+# OpenAPI specs, request/response DTOs, and API backward compatibility.
 description: >-
-  <кратко опишите, что делает skill и в каких ситуациях его нужно использовать>
+  <briefly describe what the skill does and when it should be used>
 
-# Поле: license
-# Зачем: указать лицензию skill, если он будет шариться между командами или репозиториями.
-# Пример заполнения: Proprietary. См. LICENSE.txt
-license: <опционально>
+# Field: license
+# Why: specify the license if this skill is shared between teams or repositories.
+# Example: Proprietary. See LICENSE.txt
+license: <optional>
 
-# Поле: compatibility
-# Зачем: заранее указать требования окружения: продукт, доступ к shell, нужные утилиты и т.п.
-# Пример заполнения: Cursor; нужен bash, jq и доступ к OpenAPI-файлам проекта.
-compatibility: <опционально>
+# Field: compatibility
+# Why: declare environment requirements in advance: product, shell access, required utilities, etc.
+# Example: Cursor; requires bash, jq, and access to project OpenAPI files.
+compatibility: <optional>
 ---
 
-# <Человекочитаемое название skill>
+# <Human-readable skill name>
 
-## Когда использовать
-<!-- Зачем: перечислить триггеры, по которым агент поймёт, что skill релевантен. -->
-<!-- Пример заполнения:
-- Когда пользователь просит проверить API-контракт.
-- Когда нужно сравнить OpenAPI до/после изменений.
-- Когда надо найти breaking changes в request/response схемах.
+## When to use
+<!-- Why: list triggers that indicate this skill is relevant. -->
+<!-- Example:
+- When user asks to review an API contract.
+- When OpenAPI must be compared before/after changes.
+- When finding breaking changes in request/response schemas.
 -->
 
-## Что сделать
-<!-- Зачем: дать пошаговый воспроизводимый workflow. -->
-<!-- Пример заполнения:
-1. Найди OpenAPI-спеки, DTO и контроллеры.
-2. Сопоставь endpoint-ы со схемами запросов/ответов.
-3. Найди несовместимые изменения.
-4. Составь отчёт: critical / warning / note.
+## What to do
+<!-- Why: provide a reproducible step-by-step workflow. -->
+<!-- Example:
+1. Locate OpenAPI specs, DTOs, and controllers.
+2. Map endpoints to request/response schemas.
+3. Find incompatible changes.
+4. Build report: critical / warning / note.
 -->
 
-## Ограничения
-<!-- Зачем: обозначить границы skill. -->
-<!-- Пример заполнения:
-- Не придумывай endpoint-ы, которых нет в коде или спеках.
-- Если спецификация устарела, явно напиши об этом.
+## Constraints
+<!-- Why: define skill boundaries. -->
+<!-- Example:
+- Do not invent endpoints that are not in code/specs.
+- If a spec is outdated, explicitly mention it.
 -->
 
-## Формат результата
-<!-- Зачем: унифицировать выход. -->
-<!-- Пример заполнения:
-Верни:
-1. краткое резюме;
-2. список breaking changes;
-3. список рекомендаций;
-4. список файлов, которые надо обновить.
+## Result format
+<!-- Why: normalize output. -->
+<!-- Example:
+Return:
+1. brief summary;
+2. list of breaking changes;
+3. list of recommendations;
+4. list of files to update.
 -->
 
-## Примеры
-<!-- Зачем: показать 2–3 типовых запроса. -->
-<!-- Пример заполнения:
-- "Проверь, не сломали ли мы публичный REST API"
-- "Сравни новую OpenAPI-схему со старой"
+## Examples
+<!-- Why: show 2-3 typical requests. -->
+<!-- Example:
+- "Check whether we broke public REST API"
+- "Compare new OpenAPI schema with the previous one"
 -->

@@ -42,12 +42,12 @@ public class RuleTemplateService {
     private Map<RuleProvider, List<FrontmatterField>> buildSummary() {
         Map<RuleProvider, List<FrontmatterField>> summary = new EnumMap<>(RuleProvider.class);
         summary.put(RuleProvider.CLAUDE, List.of(
-                new FrontmatterField("paths", "Пути, для которых действует правило")
+                new FrontmatterField("paths", "Paths where this rule applies")
         ));
         summary.put(RuleProvider.CURSOR, List.of(
-                new FrontmatterField("description", "Краткое назначение правила"),
-                new FrontmatterField("globs", "File patterns применения"),
-                new FrontmatterField("alwaysApply", "Всегда ли применять правило")
+                new FrontmatterField("description", "Short rule purpose"),
+                new FrontmatterField("globs", "File patterns where the rule applies"),
+                new FrontmatterField("alwaysApply", "Whether to always apply the rule")
         ));
         return summary;
     }

@@ -35,7 +35,7 @@ export default function Flows() {
       }));
       setFlows(mapped);
     } catch (err) {
-      message.error(err.message || 'Не удалось загрузить Flows');
+      message.error(err.message || 'Failed to load Flows');
     } finally {
       setLoading(false);
     }
@@ -80,13 +80,13 @@ export default function Flows() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Flows</Title>
         <Space>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/flows/create')}>Новый Flow</Button>
-          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Фильтр</Button>
+          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/flows/create')}>New Flow</Button>
+          <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
       <div className="cards-fullscreen">
         {loading ? (
-          <div className="card-muted">Загрузка...</div>
+          <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
             {filteredFlows.map((flow) => (
@@ -119,14 +119,14 @@ export default function Flows() {
               </Card>
             ))}
             {filteredFlows.length === 0 && (
-              <div className="card-muted">Flows не найдены.</div>
+              <div className="card-muted">Flows not found.</div>
             )}
           </div>
         )}
       </div>
 
       <Drawer
-        title="Фильтр Flows"
+        title="Flow filter"
         placement="right"
         open={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
@@ -135,42 +135,42 @@ export default function Flows() {
       >
         <div className="filter-drawer-body">
           <div className="filter-row">
-            <Text className="muted">Поиск</Text>
+            <Text className="muted">Search</Text>
             <Input
               value={filters.search}
               onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
-              placeholder="Название, ID, описание"
+              placeholder="Name, ID, description"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Статус</Text>
+            <Text className="muted">Status</Text>
             <Select
               allowClear
               value={filters.status}
               onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
               options={statuses.map((status) => ({ value: status, label: status }))}
-              placeholder="Выберите статус"
+              placeholder="Select status"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Версия</Text>
+            <Text className="muted">Version</Text>
             <Input
               value={filters.version}
               onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))}
-              placeholder="Например 1.0.0"
+              placeholder="For example 1.0.0"
             />
           </div>
           <div className="filter-row">
-            <Text className="muted">Описание</Text>
+            <Text className="muted">Description</Text>
             <Select
               allowClear
               value={filters.hasDescription}
               onChange={(value) => setFilters((prev) => ({ ...prev, hasDescription: value ?? null }))}
               options={[
-                { value: true, label: 'Есть описание' },
-                { value: false, label: 'Без описания' },
+                { value: true, label: 'Has description' },
+                { value: false, label: 'No description' },
               ]}
-              placeholder="Любое"
+              placeholder="Any"
             />
           </div>
         </div>
@@ -179,10 +179,10 @@ export default function Flows() {
             type="default"
             onClick={() => setFilters({ search: '', status: null, version: '', hasDescription: null })}
           >
-            Сбросить
+            Reset
           </Button>
           <Button type="primary" onClick={() => setIsFilterOpen(false)}>
-            Применить
+            Apply
           </Button>
         </div>
       </Drawer>

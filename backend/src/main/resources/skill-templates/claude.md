@@ -1,55 +1,55 @@
 ---
-# Поле: name
-# Зачем: имя skill в Claude Code; если не указать, берётся из имени папки.
-# Пример заполнения: release-notes
-name: <имя-skill-в-kebab-case>
+# Field: name
+# Why: skill name in Claude Code; if omitted, folder name is used.
+# Example: release-notes
+name: <skill-name-in-kebab-case>
 
-# Поле: description
-# Зачем: описывает, что skill делает и когда его использовать.
-# Пример заполнения:
-# Готовит release notes по git-истории и PR. Использовать перед релизом,
-# при подготовке changelog и описания версии.
+# Field: description
+# Why: describes what the skill does and when to use it.
+# Example:
+# Prepares release notes from git history and PRs. Use before release,
+# while preparing changelog and version description.
 description: >-
-  <что делает skill и в каких сценариях его использовать>
+  <what this skill does and in which scenarios it should be used>
 
-# Поле: argument-hint
-# Зачем: подсказывает пользователю формат аргументов в автокомплите.
-# Пример заполнения: [version] [from-ref] [to-ref]
-argument-hint: <опционально>
+# Field: argument-hint
+# Why: suggests argument format in autocomplete.
+# Example: [version] [from-ref] [to-ref]
+argument-hint: <optional>
 
-# Поле: disable-model-invocation
-# Зачем: true = Claude НЕ будет вызывать skill сам, только вручную через /skill-name.
-# Пример заполнения: true
+# Field: disable-model-invocation
+# Why: true = Claude does NOT auto-call this skill; manual only via /skill-name.
+# Example: true
 disable-model-invocation: <true|false>
 
-# Поле: user-invocable
-# Зачем: false = скрыть skill из пользовательского меню /.
-# Пример заполнения: true
+# Field: user-invocable
+# Why: false = hide skill from user slash-menu.
+# Example: true
 user-invocable: <true|false>
 
-# Поле: allowed-tools
-# Зачем: ограничить/разрешить инструменты во время работы skill.
-# Пример заполнения: Bash(git *), Read, Glob, Grep
-allowed-tools: <опционально>
+# Field: allowed-tools
+# Why: restrict/allow tools during skill execution.
+# Example: Bash(git *), Read, Glob, Grep
+allowed-tools: <optional>
 
-# Поле: model
-# Зачем: выбрать модель для skill.
-# Пример заполнения: sonnet
-model: <опционально>
+# Field: model
+# Why: choose model for this skill.
+# Example: sonnet
+model: <optional>
 
-# Поле: context
-# Зачем: fork = запускать skill в изолированном subagent-контексте.
-# Пример заполнения: fork
-context: <опционально>
+# Field: context
+# Why: fork = run skill in isolated subagent context.
+# Example: fork
+context: <optional>
 
-# Поле: agent
-# Зачем: указать тип subagent, если context: fork.
-# Пример заполнения: Explore
-agent: <опционально>
+# Field: agent
+# Why: choose subagent type when context: fork.
+# Example: Explore
+agent: <optional>
 
-# Поле: hooks
-# Зачем: привязать lifecycle hooks именно к этому skill.
-# Пример заполнения: см. блок ниже
+# Field: hooks
+# Why: attach lifecycle hooks to this specific skill.
+# Example: see block below
 hooks:
   PreToolUse:
     - matcher: "Bash"
@@ -58,45 +58,45 @@ hooks:
           command: "./scripts/precheck.sh"
 ---
 
-# <Название skill>
+# <Skill name>
 
-## Цель
-<!-- Зачем: коротко объяснить бизнес-результат. -->
-<!-- Пример заполнения:
-Собрать релизные заметки из git-истории, PR, conventional commits и changelog-файлов.
+## Goal
+<!-- Why: briefly explain business outcome. -->
+<!-- Example:
+Assemble release notes from git history, PRs, conventional commits, and changelog files.
 -->
 
-## Входные данные
-<!-- Зачем: зафиксировать, что skill ожидает на вход. -->
-<!-- Пример заполнения:
-- версия релиза;
-- диапазон коммитов;
-- при необходимости номер milestone.
+## Inputs
+<!-- Why: define expected inputs. -->
+<!-- Example:
+- release version;
+- commit range;
+- milestone id if needed.
 -->
 
-## Порядок действий
-<!-- Зачем: дать Claude детерминированный workflow. -->
-<!-- Пример заполнения:
-1. Получи список коммитов в диапазоне.
-2. Сгруппируй изменения по категориям.
-3. Выдели breaking changes.
-4. Сформируй human-readable release notes.
+## Steps
+<!-- Why: provide deterministic workflow for Claude. -->
+<!-- Example:
+1. Get commits in the range.
+2. Group changes by category.
+3. Highlight breaking changes.
+4. Generate human-readable release notes.
 -->
 
-## Формат результата
-<!-- Зачем: унифицировать ответ. -->
-<!-- Пример заполнения:
-Верни:
-- заголовок релиза;
+## Output format
+<!-- Why: normalize response structure. -->
+<!-- Example:
+Return:
+- release title;
 - new features;
 - fixes;
 - breaking changes;
 - migration notes.
 -->
 
-## Ограничения
-<!-- Зачем: исключить опасные/нежелательные действия. -->
-<!-- Пример заполнения:
-- Не публикуй релиз автоматически.
-- Не изменяй git history.
+## Constraints
+<!-- Why: prevent unsafe/unwanted actions. -->
+<!-- Example:
+- Do not publish releases automatically.
+- Do not rewrite git history.
 -->

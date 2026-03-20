@@ -180,10 +180,10 @@ public class AgentPromptBuilder {
                     String path = trimToNull(asString(contextEntry.get("path")));
                     inputs.add(artifactKey == null
                             ? promptTexts.useUpstreamArtifactByPath()
-                                    .replace("{path}", path == null ? "путь не указан" : path)
+                                    .replace("{path}", path == null ? "path is not provided" : path)
                             : promptTexts.useUpstreamArtifactByKeyAndPath()
                                     .replace("{artifact_key}", artifactKey)
-                                    .replace("{path}", path == null ? "путь не указан" : path));
+                                    .replace("{path}", path == null ? "path is not provided" : path));
                 }
                 default -> {
                 }

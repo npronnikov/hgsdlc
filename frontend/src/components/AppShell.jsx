@@ -78,10 +78,10 @@ export default function AppShell() {
   const showRuleIdCrumb = isRuleEditorRoute && ruleIdFromPath && ruleIdFromPath !== 'create';
   const showSkillIdCrumb = isSkillEditorRoute && skillIdFromPath && skillIdFromPath !== 'create';
   const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
-  const displayName = user?.username || 'Пользователь';
+  const displayName = user?.username || 'User';
   const userMenuItems = [
     { key: 'settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
-    { key: 'logout', icon: <LogoutOutlined />, label: 'Выход' },
+    { key: 'logout', icon: <LogoutOutlined />, label: 'Logout' },
   ];
 
   return (

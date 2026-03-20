@@ -23,14 +23,14 @@ export default function AuditReview() {
         );
         setItems(reviewEvents);
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить review audit');
+        message.error(err.message || 'Failed to load review audit');
       }
     };
     load();
   }, [runId]);
 
   if (!runId) {
-    return <Empty description="Добавьте runId: /audit-review?runId=..." />;
+    return <Empty description="Add runId: /audit-review?runId=..." />;
   }
 
   return (

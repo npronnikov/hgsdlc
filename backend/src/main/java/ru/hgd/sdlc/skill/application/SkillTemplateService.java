@@ -42,26 +42,26 @@ public class SkillTemplateService {
     private Map<SkillProvider, List<FrontmatterField>> buildSummary() {
         Map<SkillProvider, List<FrontmatterField>> summary = new EnumMap<>(SkillProvider.class);
         summary.put(SkillProvider.QWEN, List.of(
-                new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать")
+                new FrontmatterField("name", "Skill name"),
+                new FrontmatterField("description", "What the skill does and when to use it")
         ));
         summary.put(SkillProvider.CLAUDE, List.of(
-                new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать"),
-                new FrontmatterField("argument-hint", "Подсказка для аргументов"),
-                new FrontmatterField("disable-model-invocation", "Запретить авто-вызов модели"),
-                new FrontmatterField("user-invocable", "Показывать skill в меню"),
-                new FrontmatterField("allowed-tools", "Разрешённые инструменты"),
-                new FrontmatterField("model", "Модель для skill"),
-                new FrontmatterField("context", "Контекст запуска (например, fork)"),
-                new FrontmatterField("agent", "Тип subagent"),
+                new FrontmatterField("name", "Skill name"),
+                new FrontmatterField("description", "What the skill does and when to use it"),
+                new FrontmatterField("argument-hint", "Argument hint"),
+                new FrontmatterField("disable-model-invocation", "Disable automatic model invocation"),
+                new FrontmatterField("user-invocable", "Show skill in menu"),
+                new FrontmatterField("allowed-tools", "Allowed tools"),
+                new FrontmatterField("model", "Model for the skill"),
+                new FrontmatterField("context", "Execution context (for example, fork)"),
+                new FrontmatterField("agent", "Subagent type"),
                 new FrontmatterField("hooks", "Lifecycle hooks")
         ));
         summary.put(SkillProvider.CURSOR, List.of(
-                new FrontmatterField("name", "Имя skill"),
-                new FrontmatterField("description", "Что делает skill и когда его использовать"),
-                new FrontmatterField("license", "Лицензия (опционально)"),
-                new FrontmatterField("compatibility", "Требования окружения (опционально)")
+                new FrontmatterField("name", "Skill name"),
+                new FrontmatterField("description", "What the skill does and when to use it"),
+                new FrontmatterField("license", "License (optional)"),
+                new FrontmatterField("compatibility", "Environment requirements (optional)")
         ));
         return summary;
     }

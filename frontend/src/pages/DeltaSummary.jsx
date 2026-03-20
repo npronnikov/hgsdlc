@@ -27,7 +27,7 @@ export default function DeltaSummary() {
         setArtifacts(artifactData || []);
         setNodes(nodeData || []);
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить delta summary');
+        message.error(err.message || 'Failed to load delta summary');
       }
     };
     load();
@@ -44,7 +44,7 @@ export default function DeltaSummary() {
   }, [artifacts, nodes]);
 
   if (!runId) {
-    return <Empty description="Добавьте runId: /delta-summary?runId=..." />;
+    return <Empty description="Add runId: /delta-summary?runId=..." />;
   }
 
   return (

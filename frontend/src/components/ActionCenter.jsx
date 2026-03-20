@@ -44,7 +44,7 @@ function ApprovalForm({ gate, onComplete }) {
         onComplete();
         return;
       }
-      message.error(err.message || 'Не удалось approve');
+      message.error(err.message || 'Failed to approve');
     } finally {
       setActiveAction(null);
     }
@@ -74,7 +74,7 @@ function ApprovalForm({ gate, onComplete }) {
         onComplete();
         return;
       }
-      message.error(err.message || 'Не удалось запросить rework');
+      message.error(err.message || 'Failed to request rework');
     } finally {
       setActiveAction(null);
     }
@@ -87,22 +87,22 @@ function ApprovalForm({ gate, onComplete }) {
   return (
     <div className="action-center-form">
       <div>
-        <Text className="muted">Комментарий</Text>
+        <Text className="muted">Comment</Text>
         <Input.TextArea
           rows={3}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Необязательный комментарий"
+          placeholder="Optional comment"
           style={{ marginTop: 4 }}
         />
       </div>
       <div>
-        <Text className="muted">Инструкция для доработки</Text>
+        <Text className="muted">Rework instruction</Text>
         <Input.TextArea
           rows={3}
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
-          placeholder="Что именно нужно переделать"
+          placeholder="What exactly needs to be revised"
           style={{ marginTop: 4 }}
         />
       </div>
@@ -121,17 +121,17 @@ function ApprovalForm({ gate, onComplete }) {
           </Radio.Group>
         </div>
       ) : (
-        <Text type="secondary">Текущие изменения будут сохранены</Text>
+        <Text type="secondary">Current changes will be preserved</Text>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-        <Button style={{ borderColor: '#16a34a', color: '#16a34a' }} onClick={approve} loading={activeAction === 'approve'} disabled={activeAction !== null}>Принять</Button>
+        <Button style={{ borderColor: '#16a34a', color: '#16a34a' }} onClick={approve} loading={activeAction === 'approve'} disabled={activeAction !== null}>Approve</Button>
         <Button
           style={{ borderColor: '#d97706', color: '#d97706' }}
           onClick={rework}
           loading={activeAction === 'rework'}
           disabled={activeAction !== null || !instruction.trim()}
         >
-          Доработать
+          Request rework
         </Button>
       </div>
     </div>
@@ -170,7 +170,7 @@ function InputForm({ gate, onOpenArtifactEditor }) {
         </div>
       )}
       <Button type="default" onClick={openEditor} loading={opening} style={{ marginTop: 8 }}>
-        Ответить
+        Reply
       </Button>
     </div>
   );

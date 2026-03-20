@@ -21,7 +21,7 @@ export default function Artifacts() {
         setArtifacts(data || []);
         setSelectedArtifactId((data || [])[0]?.artifact_version_id || null);
       } catch (err) {
-        message.error(err.message || 'Не удалось загрузить артефакты');
+        message.error(err.message || 'Failed to load artifacts');
       }
     };
     load();
@@ -33,7 +33,7 @@ export default function Artifacts() {
   );
 
   if (!runId) {
-    return <Empty description="Добавьте runId: /artifacts?runId=..." />;
+    return <Empty description="Add runId: /artifacts?runId=..." />;
   }
 
   return (

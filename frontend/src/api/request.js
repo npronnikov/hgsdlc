@@ -18,7 +18,7 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error('401-Unauthorized: пользователь не авторизован');
+      throw new Error('401-Unauthorized: user is not authorized');
     }
     const message = await response.text();
     throw new Error(message || response.statusText);
