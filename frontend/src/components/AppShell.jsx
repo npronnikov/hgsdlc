@@ -7,15 +7,18 @@ import {
   FileTextOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoonOutlined,
   LogoutOutlined,
   PlayCircleOutlined,
   ProjectOutlined,
   RobotOutlined,
   SettingOutlined,
   SisternodeOutlined,
+  SunOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { useThemeMode } from '../theme/ThemeContext.jsx';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -60,6 +63,7 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isDark, toggleMode } = useThemeMode();
   const [collapsed, setCollapsed] = useState(true);
   const ruleIdFromPath = location.pathname.startsWith('/rules/') ? location.pathname.split('/')[2] : null;
   const skillIdFromPath = location.pathname.startsWith('/skills/') ? location.pathname.split('/')[2] : null;
@@ -159,6 +163,17 @@ export default function AppShell() {
           </Space>
           <Space size="middle">
             <Input placeholder="Search" allowClear />
+            <span className="theme-toggle-wrap">
+              <Button
+                type="text"
+                shape="circle"
+                className="theme-toggle-btn"
+                icon={isDark ? <SunOutlined /> : <MoonOutlined />}
+                onClick={toggleMode}
+                aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+                title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+              />
+            </span>
             <Dropdown
               trigger={['hover']}
               menu={{

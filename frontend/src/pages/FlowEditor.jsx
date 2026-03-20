@@ -30,6 +30,8 @@ import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { parse as parseYaml } from 'yaml';
 import Editor from '@monaco-editor/react';
+import { useThemeMode } from '../theme/ThemeContext.jsx';
+import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
 const { Title, Text } = Typography;
 
@@ -502,6 +504,8 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
 }
 
 export default function FlowEditor() {
+  const { isDark } = useThemeMode();
+  const monacoTheme = getMonacoThemeName(isDark);
   const { flowId } = useParams();
   const location = useLocation();
   const isCreateMode = flowId === 'create' || location.pathname.endsWith('/flows/create');
@@ -1772,6 +1776,8 @@ export default function FlowEditor() {
                         <Editor
                           height="120px"
                           defaultLanguage="json"
+                          beforeMount={configureMonacoThemes}
+                          theme={monacoTheme}
                           value={selectedNode.data.responseSchema || ''}
                           onChange={(value) => updateSelectedNode({ responseSchema: value ?? '' })}
                           options={{

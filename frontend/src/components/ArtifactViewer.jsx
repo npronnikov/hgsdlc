@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Space, Typography, message } from 'antd';
 import Editor from '@monaco-editor/react';
 import { apiRequest } from '../api/request.js';
+import { useThemeMode } from '../theme/ThemeContext.jsx';
+import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
 const { Text } = Typography;
 
@@ -41,6 +43,8 @@ function encodeBase64(value) {
 }
 
 export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, onSubmitReady }) {
+  const { isDark } = useThemeMode();
+  const monacoTheme = getMonacoThemeName(isDark);
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -146,6 +150,8 @@ export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, 
           <Editor
             height="400px"
             defaultLanguage={language}
+            beforeMount={configureMonacoThemes}
+            theme={monacoTheme}
             value={content}
             onChange={(value) => {
               if (editable) {

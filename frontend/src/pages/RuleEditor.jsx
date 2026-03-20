@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
+import { useThemeMode } from '../theme/ThemeContext.jsx';
+import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
 const { Title, Text } = Typography;
 
@@ -109,6 +111,8 @@ const getDraftForMajor = (versions, major) => (
 );
 
 export default function RuleEditor() {
+  const { isDark } = useThemeMode();
+  const monacoTheme = getMonacoThemeName(isDark);
   const { ruleId: ruleIdParam } = useParams();
   const location = useLocation();
   const isCreateRoute = location.pathname.endsWith('/rules/create');
@@ -443,43 +447,8 @@ export default function RuleEditor() {
                     onMount={(editor, monaco) => {
                       editorRef.current = editor;
                       if (monaco) {
-                        monaco.editor.defineTheme('hg-light', {
-                          base: 'vs',
-                          inherit: true,
-                          rules: [
-                            { token: 'comment', foreground: '6e7781' },
-                            { token: 'string', foreground: '0a3069' },
-                            { token: 'keyword', foreground: '8250df' },
-                          ],
-                          colors: {
-                            'editor.background': '#ffffff',
-                            'editor.foreground': '#333333',
-                            'editorCursor.foreground': '#000000',
-                            'editorLineNumber.foreground': '#8c959f',
-                            'editorLineNumber.activeForeground': '#1677ff',
-                            'editorLineNumber.dimmedForeground': '#b0b7c3',
-                            'editor.selectionBackground': '#cfe3ff',
-                            'editor.inactiveSelectionBackground': '#e8f0ff',
-                            'editor.lineHighlightBackground': '#f5f7fa',
-                            'editorGutter.background': '#ffffff',
-                            'editorIndentGuide.background': '#e6e8eb',
-                            'editorIndentGuide.activeBackground': '#d0d7de',
-                            'editorWhitespace.foreground': '#d0d7de',
-                            'editor.wordHighlightBorder': '#00000000',
-                            'editor.wordHighlightStrongBorder': '#00000000',
-                            'editor.wordHighlightBackground': '#00000000',
-                            'editor.wordHighlightStrongBackground': '#00000000',
-                            'editor.selectionHighlightBorder': '#00000000',
-                            'editor.selectionHighlightBackground': '#00000000',
-                            'editor.findMatchBorder': '#00000000',
-                            'editor.findMatchHighlightBorder': '#00000000',
-                            'editor.findMatchHighlightBackground': '#00000000',
-                            'scrollbarSlider.background': '#c1c1c1',
-                            'scrollbarSlider.hoverBackground': '#a8a8a8',
-                            'scrollbarSlider.activeBackground': '#909090',
-                          },
-                        });
-                        monaco.editor.setTheme('hg-light');
+                        configureMonacoThemes(monaco);
+                        monaco.editor.setTheme(monacoTheme);
                       }
                       editor.onDidScrollChange(() => {
                         if (isSyncingScroll.current) return;
@@ -511,7 +480,7 @@ export default function RuleEditor() {
                       wordWrap: 'on',
                       scrollBeyondLastLine: false,
                     }}
-                    theme="hg-light"
+                    theme={monacoTheme}
                   />
                 </div>
               </div>
