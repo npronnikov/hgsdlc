@@ -162,7 +162,7 @@ export default function GateApproval() {
               </Text>
             )}
             <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
-              <Button type="primary" onClick={approve} loading={submitting}>Approve</Button>
+              <Button type="default" onClick={approve} loading={submitting}>Approve</Button>
               <Button type="default" style={{ borderColor: '#d97706', color: '#d97706' }} onClick={rework} loading={submitting}>Rework</Button>
             </div>
           </Card>

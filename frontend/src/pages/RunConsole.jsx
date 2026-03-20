@@ -791,7 +791,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
             size="small"
             style={{ maxHeight: 600, overflow: 'auto' }}
             extra={selectedNodeId && (
-              <Button type="link" size="small" onClick={() => setSelectedNodeId(null)} style={{ padding: 0, fontSize: 11 }}>
+              <Button type="default" size="small" onClick={() => setSelectedNodeId(null)} style={{ padding: 0, fontSize: 11 }}>
                 Clear
               </Button>
             )}

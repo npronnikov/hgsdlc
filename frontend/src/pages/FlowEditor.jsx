@@ -560,6 +560,22 @@ export default function FlowEditor() {
   const isReadOnly = !isEditing;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
 
+  const renderVersionSelector = () => {
+    if (flowMeta.flowId) {
+      return (
+        <Select
+          value={flowVersion || undefined}
+          options={versionOptions}
+          onChange={(value) => handleVersionSelect(value)}
+          className="rule-version-select"
+          placeholder="Version"
+          disabled={isEditing}
+        />
+      );
+    }
+    return <span className="rule-version-pill">new</span>;
+  };
+
   const filteredRules = rulesCatalog.filter(
     (rule) => !flowMeta.codingAgent || rule.codingAgent === flowMeta.codingAgent
   );
@@ -1392,7 +1408,7 @@ export default function FlowEditor() {
                   {NODE_TYPE_OPTIONS.map((option) => (
                     <Button
                       key={option.key}
-                      type="text"
+                      type="default"
                       onClick={() => {
                         if (flowInstance && flowWrapperRef.current) {
                           const bounds = flowWrapperRef.current.getBoundingClientRect();
@@ -1416,7 +1432,7 @@ export default function FlowEditor() {
                     <div className="flow-context-divider" />
                     <Button
                       danger
-                      type="text"
+                      type="default"
                       onClick={() => {
                         const targetId = contextMenu.nodeId || selectedNodeId;
                         setContextMenu(null);
@@ -1444,18 +1460,7 @@ export default function FlowEditor() {
             <Card className="flow-panel-card">
               <div className="rule-fields-header">
                 <Title level={5} style={{ margin: 0 }}>Flow data</Title>
-                {flowMeta.flowId ? (
-                  <Select
-                    value={flowVersion || undefined}
-                    options={versionOptions}
-                    onChange={(value) => handleVersionSelect(value)}
-                    className="rule-version-select"
-                    placeholder="Version"
-                    disabled={isEditing}
-                  />
-                ) : (
-                  <span className="rule-version-pill">new</span>
-                )}
+                {renderVersionSelector()}
               </div>
               <div className="form-stack">
               <div>
@@ -1594,7 +1599,10 @@ export default function FlowEditor() {
             </Card>
           ) : (
             <Card className="flow-panel-card">
-              <Title level={5}>Selected node</Title>
+              <div className="rule-fields-header">
+                <Title level={5} style={{ margin: 0 }}>Selected node</Title>
+                {renderVersionSelector()}
+              </div>
               <div className="form-stack">
                 <div>
                   <Text className="muted">Node ID</Text>
@@ -1701,7 +1709,7 @@ export default function FlowEditor() {
                               />
                               <Button
                                 size="small"
-                                type="text"
+                                type="default"
                                 danger
                                 icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
@@ -1744,7 +1752,7 @@ export default function FlowEditor() {
                           </div>
                         ))}
                         <Button
-                          type="dashed"
+                          type="default"
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
                           onClick={() =>
@@ -1877,7 +1885,7 @@ export default function FlowEditor() {
                                   <Button
                                     key="delete"
                                     size="small"
-                                    type="text"
+                                    type="default"
                                     danger
                                     icon={<DeleteOutlined />}
                                     disabled={isReadOnly}
@@ -1920,7 +1928,7 @@ export default function FlowEditor() {
                             <div className="artifact-row-controls">
                               <Button
                                 size="small"
-                                type="text"
+                                type="default"
                                 danger
                                 icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
@@ -1930,7 +1938,7 @@ export default function FlowEditor() {
                           </div>
                         ))}
                         <Button
-                          type="dashed"
+                          type="default"
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
                           onClick={() => addSelectedNodeListItem('producedArtifacts', {
@@ -1961,7 +1969,7 @@ export default function FlowEditor() {
                             />
                             <Button
                               size="small"
-                              type="text"
+                              type="default"
                               danger
                               icon={<DeleteOutlined />}
                               disabled={isReadOnly}
@@ -1970,7 +1978,7 @@ export default function FlowEditor() {
                           </div>
                         ))}
                         <Button
-                          type="dashed"
+                          type="default"
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
                           onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true, scope: 'project' })}

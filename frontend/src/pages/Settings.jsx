@@ -68,7 +68,7 @@ export default function Settings() {
         <Title level={3} style={{ margin: 0 }}>Runtime Settings</Title>
         <Space>
           <Button onClick={load} loading={loading}>Refresh</Button>
-          <Button type="primary" onClick={handleSave} loading={saving}>Save</Button>
+          <Button type="default" onClick={handleSave} loading={saving}>Save</Button>
         </Space>
       </div>
       <Card loading={loading && !initialValues}>

@@ -34,7 +34,7 @@ export default function Overview() {
         <Col xs={24} lg={12}>
           <Card
             title="Recent Runs"
-            extra={<Button type="link">View all</Button>}
+            extra={<Button type="default">View all</Button>}
           >
             <List
               itemLayout="horizontal"
@@ -57,7 +57,7 @@ export default function Overview() {
         <Col xs={24} lg={12}>
           <Card
             title="Gate Inbox"
-            extra={<Button type="link">Open inbox</Button>}
+            extra={<Button type="default">Open inbox</Button>}
           >
             <List
               itemLayout="horizontal"

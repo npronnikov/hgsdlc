@@ -37,7 +37,7 @@ export default function GatesInbox() {
       key: 'action',
       render: (_, record) => (
         <Button
-          type="link"
+          type="default"
           onClick={() => {
             const gatePath = record.gate_kind === 'human_input' ? '/gate-input' : '/gate-approval';
             navigate(`${gatePath}?runId=${record.run_id}&gateId=${record.gate_id}`);
@@ -54,7 +54,7 @@ export default function GatesInbox() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Gates Inbox</Title>
         <Space>
-          <Button type="primary" onClick={load} loading={loading}>Refresh</Button>
+          <Button type="default" onClick={load} loading={loading}>Refresh</Button>
         </Space>
       </div>
       <Card>

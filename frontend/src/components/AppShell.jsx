@@ -161,7 +161,7 @@ export default function AppShell() {
               )}
             </div>
           </Space>
-          <Space size="middle">
+          <Space size="middle" className="hg-header-actions">
             <Input placeholder="Search" allowClear />
             <span className="theme-toggle-wrap">
               <Button

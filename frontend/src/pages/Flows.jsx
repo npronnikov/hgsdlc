@@ -181,7 +181,7 @@ export default function Flows() {
           >
             Reset
           </Button>
-          <Button type="primary" onClick={() => setIsFilterOpen(false)}>
+          <Button type="default" onClick={() => setIsFilterOpen(false)}>
             Apply
           </Button>
         </div>

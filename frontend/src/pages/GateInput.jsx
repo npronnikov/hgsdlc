@@ -215,7 +215,7 @@ export default function GateInput() {
             <div className="card-muted" style={{ marginTop: 12 }}>
               Gate id: <span className="mono">{gate?.gate_id || '—'}</span>
             </div>
-            <Button type="primary" style={{ marginTop: 12 }} onClick={submit} loading={submitting}>
+            <Button type="default" style={{ marginTop: 12 }} onClick={submit} loading={submitting}>
               {editMode ? 'Submit edited content' : 'Submit answers'}
             </Button>
           </Card>
