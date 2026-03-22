@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
@@ -18,10 +19,17 @@ import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.skill.api.SkillSaveRequest;
+import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
+import ru.hgd.sdlc.skill.domain.SkillContentSource;
+import ru.hgd.sdlc.skill.domain.SkillEnvironment;
+import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
+import ru.hgd.sdlc.skill.domain.SkillVisibility;
+import ru.hgd.sdlc.skill.domain.TagEntity;
+import ru.hgd.sdlc.skill.infrastructure.TagRepository;
 
 @Service
 public class SkillService {
@@ -29,14 +37,17 @@ public class SkillService {
     private static final Pattern SKILL_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
 
     private final SkillVersionRepository repository;
+    private final TagRepository tagRepository;
     private final MarkdownFrontmatterParser frontmatterParser;
     private final SkillTemplateService templateService;
 
     public SkillService(
             SkillVersionRepository repository,
+            TagRepository tagRepository,
             SkillTemplateService templateService
     ) {
         this.repository = repository;
+        this.tagRepository = tagRepository;
         this.frontmatterParser = new MarkdownFrontmatterParser();
         this.templateService = templateService;
     }
@@ -62,6 +73,62 @@ public class SkillService {
             latestBySkill.put(version.getSkillId(), published != null ? published : latestDraft.get(version.getSkillId()));
         }
         return new ArrayList<>(latestBySkill.values());
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> listTags() {
+        return tagRepository.findAll().stream()
+                .map(TagEntity::getCode)
+                .sorted()
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SkillVersion> listPendingPublication(User user) {
+        requireApprover(user);
+        return repository.findByApprovalStatusOrderBySavedAtDesc(SkillApprovalStatus.PENDING_APPROVAL);
+    }
+
+    @Transactional
+    public SkillVersion approvePublication(String skillId, String version, User user) {
+        requireApprover(user);
+        SkillVersion entity = repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
+                .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
+        if (entity.getApprovalStatus() != SkillApprovalStatus.PENDING_APPROVAL) {
+            throw new ValidationException("Skill is not pending approval");
+        }
+        Instant now = Instant.now();
+        entity.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
+        entity.setStatus(SkillStatus.PUBLISHED);
+        entity.setApprovedBy(resolveSavedBy(user));
+        entity.setApprovedAt(now);
+        entity.setPublishedAt(now);
+        entity.setContentSource(SkillContentSource.GIT);
+        entity.setChecksum(ChecksumUtil.sha256(entity.getSkillMarkdown()));
+        if (entity.getSourceRef() == null || entity.getSourceRef().isBlank()) {
+            entity.setSourceRef("pending-git");
+        }
+        if (entity.getSourcePath() == null || entity.getSourcePath().isBlank()) {
+            entity.setSourcePath("skills/" + entity.getSkillId() + "/" + entity.getVersion());
+        }
+        entity.setSavedAt(now);
+        entity.setSavedBy(resolveSavedBy(user));
+        return repository.save(entity);
+    }
+
+    @Transactional
+    public SkillVersion rejectPublication(String skillId, String version, User user) {
+        requireApprover(user);
+        SkillVersion entity = repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
+                .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
+        if (entity.getApprovalStatus() != SkillApprovalStatus.PENDING_APPROVAL) {
+            throw new ValidationException("Skill is not pending approval");
+        }
+        entity.setApprovalStatus(SkillApprovalStatus.REJECTED);
+        entity.setStatus(SkillStatus.DRAFT);
+        entity.setSavedAt(Instant.now());
+        entity.setSavedBy(resolveSavedBy(user));
+        return repository.save(entity);
     }
 
     @Transactional(readOnly = true)
@@ -103,6 +170,12 @@ public class SkillService {
         if (request.description() == null || request.description().isBlank()) {
             throw new ValidationException("description is required");
         }
+        if (request.teamCode() == null || request.teamCode().isBlank()) {
+            throw new ValidationException("team_code is required");
+        }
+        if (request.platformCode() == null || request.platformCode().isBlank()) {
+            throw new ValidationException("platform_code is required");
+        }
         if (request.skillId() == null || request.skillId().isBlank()) {
             throw new ValidationException("skill_id is required");
         }
@@ -115,6 +188,14 @@ public class SkillService {
         SkillProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
+        boolean isApprover = isApprover(user);
+        boolean publishNow = publish && isApprover;
+        boolean requestPublish = publish && !isApprover;
+        SkillEnvironment environment = parseEnvironment(request.environment());
+        SkillVisibility visibility = parseVisibility(request.visibility());
+        SkillLifecycleStatus lifecycleStatus = parseLifecycleStatus(request.lifecycleStatus());
+        SkillContentSource contentSource = parseContentSource(request.sourceRef(), request.sourcePath(), publishNow);
+        List<String> normalizedTags = normalizeTags(request.tags());
         if (codingAgent == null) {
             throw new ValidationException("coding_agent is required");
         }
@@ -136,7 +217,7 @@ public class SkillService {
         SkillVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
-        if (publish) {
+        if (publishNow) {
             SkillVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
             if (base != null && base.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for publish");
@@ -151,13 +232,13 @@ public class SkillService {
             }
         }
 
-        String version = publish
+        String version = publishNow
                 ? resolvePublishVersion(existingDraft, maxMinorForMajor, maxPublishedMajor, release, baseMajor)
                 : resolveDraftVersion(existingDraft, maxMinorForMajor, baseMajor, publishedVersions.isEmpty());
         String canonicalName = skillId + "@" + version;
         String updatedMarkdown = request.skillMarkdown();
 
-        boolean bumpDraftBeforeInsert = publish
+        boolean bumpDraftBeforeInsert = publishNow
                 && existingDraft != null
                 && existingDraft.getVersion().equals(version);
         if (bumpDraftBeforeInsert) {
@@ -165,7 +246,7 @@ public class SkillService {
         }
 
         SkillVersion entity;
-        if (!publish && existingDraft != null) {
+        if ((requestPublish || !publish) && existingDraft != null) {
             entity = existingDraft;
         } else {
             entity = new SkillVersion();
@@ -176,18 +257,46 @@ public class SkillService {
         entity.setSkillId(skillId);
         entity.setVersion(version);
         entity.setCanonicalName(canonicalName);
-        entity.setStatus(publish ? SkillStatus.PUBLISHED : SkillStatus.DRAFT);
+        SkillStatus persistedStatus;
+        SkillApprovalStatus approvalStatus;
+        Instant now = Instant.now();
+        if (publishNow) {
+            persistedStatus = SkillStatus.PUBLISHED;
+            approvalStatus = SkillApprovalStatus.PUBLISHED;
+            entity.setApprovedBy(resolveSavedBy(user));
+            entity.setApprovedAt(now);
+            entity.setPublishedAt(now);
+        } else if (requestPublish) {
+            persistedStatus = SkillStatus.DRAFT;
+            approvalStatus = SkillApprovalStatus.PENDING_APPROVAL;
+        } else {
+            persistedStatus = SkillStatus.DRAFT;
+            approvalStatus = SkillApprovalStatus.DRAFT;
+        }
+        entity.setStatus(persistedStatus);
+        entity.setApprovalStatus(approvalStatus);
         entity.setName(request.name().trim());
         entity.setDescription(request.description().trim());
         entity.setCodingAgent(codingAgent);
+        entity.setTeamCode(request.teamCode().trim());
+        entity.setPlatformCode(normalizePlatformCode(request.platformCode()));
+        entity.setTags(normalizedTags);
+        entity.setSkillKind(normalizeOptional(request.skillKind()));
+        entity.setEnvironment(environment);
+        entity.setVisibility(visibility);
+        entity.setLifecycleStatus(lifecycleStatus);
+        entity.setSourceRef(normalizeOptional(request.sourceRef()));
+        entity.setSourcePath(normalizeOptional(request.sourcePath()));
+        entity.setContentSource(contentSource);
         entity.setSkillMarkdown(updatedMarkdown);
-        entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
+        entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
 
         SkillVersion saved = repository.save(entity);
+        ensureTagsExist(normalizedTags);
 
-        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
+        if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
         }
 
@@ -323,6 +432,105 @@ public class SkillService {
         }
     }
 
+    private SkillEnvironment parseEnvironment(String environment) {
+        try {
+            return SkillEnvironment.from(environment == null ? "dev" : environment);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported environment: " + environment);
+        }
+    }
+
+    private SkillVisibility parseVisibility(String visibility) {
+        try {
+            return SkillVisibility.from(visibility == null ? "internal" : visibility);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported visibility: " + visibility);
+        }
+    }
+
+    private SkillLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
+        try {
+            return SkillLifecycleStatus.from(lifecycleStatus == null ? "active" : lifecycleStatus);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
+        }
+    }
+
+    private SkillContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
+        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
+            return SkillContentSource.GIT;
+        }
+        if (publishNow) {
+            return SkillContentSource.GIT;
+        }
+        return SkillContentSource.DB;
+    }
+
+    private String normalizePlatformCode(String platformCode) {
+        String normalized = platformCode.trim().toUpperCase();
+        if (!List.of("UFS", "PPRB", "DATA").contains(normalized)) {
+            throw new ValidationException("Unsupported platform_code: " + platformCode);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String value = normalizeOptional(tag);
+            if (value == null) {
+                continue;
+            }
+            String code = value.toLowerCase().replace(' ', '-');
+            if (!normalized.contains(code)) {
+                normalized.add(code);
+            }
+        }
+        return normalized;
+    }
+
+    private void ensureTagsExist(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return;
+        }
+        List<TagEntity> existing = tagRepository.findByCodeIn(tags);
+        List<String> existingCodes = existing.stream().map(TagEntity::getCode).toList();
+        Instant now = Instant.now();
+        List<TagEntity> toCreate = tags.stream()
+                .filter(code -> !existingCodes.contains(code))
+                .map(code -> TagEntity.builder()
+                        .code(code)
+                        .name(code)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build())
+                .toList();
+        if (!toCreate.isEmpty()) {
+            tagRepository.saveAll(toCreate);
+        }
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private boolean isApprover(User user) {
+        return user != null && (user.hasRole(Role.TECH_APPROVER) || user.hasRole(Role.ADMIN));
+    }
+
+    private void requireApprover(User user) {
+        if (!isApprover(user)) {
+            throw new ValidationException("Approver role is required");
+        }
+    }
+
     private void validateCodingAgentFrontmatter(SkillProvider codingAgent, ObjectNode frontmatter) {
         List<String> required = templateService.requiredFrontmatter(codingAgent);
         if (frontmatter == null) {
@@ -366,8 +574,4 @@ public class SkillService {
         return parts[0] + "." + (parts[1] + 1);
     }
 
-    private String releaseVersion(String version) {
-        int[] parts = parseVersion(version);
-        return (parts[0] + 1) + ".0";
-    }
 }

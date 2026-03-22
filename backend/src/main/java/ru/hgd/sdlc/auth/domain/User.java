@@ -1,12 +1,19 @@
 package ru.hgd.sdlc.auth.domain;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +43,13 @@ public class User {
     @Column(nullable = false, length = 64)
     private Role role;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 64)
+    @Builder.Default
+    private Set<Role> roles = new HashSet<>();
+
     @Column(nullable = false, length = 255)
     private String passwordHash;
 
@@ -44,4 +58,18 @@ public class User {
 
     @Column(nullable = false)
     private Instant createdAt;
+
+    public Set<Role> getEffectiveRoles() {
+        if (roles != null && !roles.isEmpty()) {
+            return Collections.unmodifiableSet(roles);
+        }
+        if (role != null) {
+            return Set.of(role);
+        }
+        return Set.of();
+    }
+
+    public boolean hasRole(Role roleToCheck) {
+        return getEffectiveRoles().contains(roleToCheck);
+    }
 }

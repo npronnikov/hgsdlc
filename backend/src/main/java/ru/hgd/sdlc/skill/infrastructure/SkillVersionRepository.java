@@ -13,8 +13,11 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
     Optional<SkillVersion> findFirstBySkillIdAndVersionOrderBySavedAtDesc(String skillId, String version);
 
     Optional<SkillVersion> findFirstByCanonicalNameAndStatus(String canonicalName, SkillStatus status);
+    Optional<SkillVersion> findFirstByCanonicalName(String canonicalName);
 
     List<SkillVersion> findBySkillIdOrderBySavedAtDesc(String skillId);
+
+    List<SkillVersion> findByApprovalStatusOrderBySavedAtDesc(ru.hgd.sdlc.skill.domain.SkillApprovalStatus approvalStatus);
 
     List<SkillVersion> findAllByOrderBySavedAtDesc();
 }

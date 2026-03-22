@@ -37,3 +37,7 @@ databaseChangeLog:
       file: db/changelog/023-runtime-node-checkpoint.sql
   - include:
       file: db/changelog/024-artifact-upsert-node-key.sql
+  - include:
+      file: db/changelog/025-skills-catalog.sql
+  - include:
+      file: db/changelog/026-auth-user-roles.sql

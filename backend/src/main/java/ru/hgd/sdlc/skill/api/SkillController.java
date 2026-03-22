@@ -37,6 +37,34 @@ public class SkillController {
         return skillService.listLatest().stream().map(SkillSummaryResponse::from).toList();
     }
 
+    @GetMapping("/tags")
+    public List<String> tags() {
+        return skillService.listTags();
+    }
+
+    @GetMapping("/pending-publication")
+    public List<SkillSummaryResponse> pendingPublication(@AuthenticationPrincipal User user) {
+        return skillService.listPendingPublication(user).stream().map(SkillSummaryResponse::from).toList();
+    }
+
+    @PostMapping("/{skillId}/versions/{version}/approve")
+    public SkillResponse approve(
+            @PathVariable String skillId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        return SkillResponse.from(skillService.approvePublication(skillId, version, user));
+    }
+
+    @PostMapping("/{skillId}/versions/{version}/reject")
+    public SkillResponse reject(
+            @PathVariable String skillId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        return SkillResponse.from(skillService.rejectPublication(skillId, version, user));
+    }
+
     @GetMapping("/{skillId}")
     public SkillResponse get(@PathVariable String skillId) {
         return SkillResponse.from(skillService.getLatest(skillId));

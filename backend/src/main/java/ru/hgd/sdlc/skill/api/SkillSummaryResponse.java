@@ -2,6 +2,7 @@ package ru.hgd.sdlc.skill.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
+import java.util.List;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 
 public record SkillSummaryResponse(
@@ -9,6 +10,15 @@ public record SkillSummaryResponse(
         @JsonProperty("name") String name,
         @JsonProperty("description") String description,
         @JsonProperty("coding_agent") String codingAgent,
+        @JsonProperty("team_code") String teamCode,
+        @JsonProperty("platform_code") String platformCode,
+        @JsonProperty("tags") List<String> tags,
+        @JsonProperty("skill_kind") String skillKind,
+        @JsonProperty("environment") String environment,
+        @JsonProperty("approval_status") String approvalStatus,
+        @JsonProperty("content_source") String contentSource,
+        @JsonProperty("visibility") String visibility,
+        @JsonProperty("lifecycle_status") String lifecycleStatus,
         @JsonProperty("version") String version,
         @JsonProperty("canonical_name") String canonicalName,
         @JsonProperty("status") String status,
@@ -22,6 +32,15 @@ public record SkillSummaryResponse(
                 version.getName(),
                 version.getDescription(),
                 version.getCodingAgent() == null ? null : version.getCodingAgent().name().toLowerCase().replace('_', '-'),
+                version.getTeamCode(),
+                version.getPlatformCode(),
+                version.getTags() == null ? List.of() : version.getTags(),
+                version.getSkillKind(),
+                version.getEnvironment() == null ? null : version.getEnvironment().name().toLowerCase(),
+                version.getApprovalStatus() == null ? null : version.getApprovalStatus().name().toLowerCase(),
+                version.getContentSource() == null ? null : version.getContentSource().name().toLowerCase(),
+                version.getVisibility() == null ? null : version.getVisibility().name().toLowerCase(),
+                version.getLifecycleStatus() == null ? null : version.getLifecycleStatus().name().toLowerCase(),
                 version.getVersion(),
                 version.getCanonicalName(),
                 version.getStatus().name().toLowerCase(),

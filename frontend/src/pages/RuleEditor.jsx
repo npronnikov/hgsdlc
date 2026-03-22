@@ -547,6 +547,17 @@ export default function RuleEditor() {
             )}
           </div>
           <div style={{ marginTop: 8 }}>
+            <Text className="muted">Coding agent</Text>
+            <Select
+              value={codingAgent || undefined}
+              onChange={handleCodingAgentChange}
+              options={codingAgentOptions}
+              placeholder="Select coding agent"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
             <Text className="muted">Name</Text>
             <Input
               value={title}
@@ -576,32 +587,6 @@ export default function RuleEditor() {
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Coding agent</Text>
-            <Select
-              value={codingAgent || undefined}
-              onChange={handleCodingAgentChange}
-              options={codingAgentOptions}
-              placeholder="Select coding agent"
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <Title level={5}>Frontmatter hint</Title>
-            {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Select a coding agent to see the expected frontmatter fields.</Text>
-            ) : (
-              <Space direction="vertical" size={8}>
-                {frontmatterSummary.map((item) => (
-                  <div key={item.field}>
-                    <Text className="muted">{item.field}</Text>
-                    <div className="mono">{item.meaning}</div>
-                  </div>
-                ))}
-              </Space>
-            )}
           </div>
         </Card>
       </div>

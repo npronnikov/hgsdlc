@@ -15,7 +15,12 @@ export default function Skills() {
     search: '',
     codingAgent: null,
     status: null,
+    approvalStatus: null,
+    environment: null,
+    platformCode: null,
+    contentSource: null,
     version: '',
+    tag: '',
     hasDescription: null,
   });
   const navigate = useNavigate();
@@ -31,6 +36,11 @@ export default function Skills() {
         description: skill.description || '',
         codingAgent: skill.coding_agent,
         status: skill.status,
+        approvalStatus: skill.approval_status,
+        environment: skill.environment,
+        platformCode: skill.platform_code,
+        contentSource: skill.content_source,
+        tags: skill.tags || [],
         version: skill.version,
         canonical: skill.canonical_name,
       }));
@@ -53,15 +63,44 @@ export default function Skills() {
     () => Array.from(new Set(skills.map((skill) => skill.status).filter(Boolean))),
     [skills]
   );
+  const approvalStatuses = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.approvalStatus).filter(Boolean))),
+    [skills]
+  );
+  const environments = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.environment).filter(Boolean))),
+    [skills]
+  );
+  const platforms = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.platformCode).filter(Boolean))),
+    [skills]
+  );
+  const contentSources = useMemo(
+    () => Array.from(new Set(skills.map((skill) => skill.contentSource).filter(Boolean))),
+    [skills]
+  );
 
   const filteredSkills = useMemo(() => {
     const search = filters.search.trim().toLowerCase();
     const version = filters.version.trim().toLowerCase();
+    const tag = filters.tag.trim().toLowerCase();
     return skills.filter((skill) => {
       if (filters.codingAgent && skill.codingAgent !== filters.codingAgent) {
         return false;
       }
       if (filters.status && skill.status !== filters.status) {
+        return false;
+      }
+      if (filters.approvalStatus && skill.approvalStatus !== filters.approvalStatus) {
+        return false;
+      }
+      if (filters.environment && skill.environment !== filters.environment) {
+        return false;
+      }
+      if (filters.platformCode && skill.platformCode !== filters.platformCode) {
+        return false;
+      }
+      if (filters.contentSource && skill.contentSource !== filters.contentSource) {
         return false;
       }
       if (filters.hasDescription === true && !skill.description) {
@@ -73,10 +112,13 @@ export default function Skills() {
       if (version && (skill.version || '').toLowerCase() !== version) {
         return false;
       }
+      if (tag && !(skill.tags || []).some((item) => item.toLowerCase().includes(tag))) {
+        return false;
+      }
       if (!search) {
         return true;
       }
-      return [skill.name, skill.skillId, skill.canonical, skill.description, skill.codingAgent]
+      return [skill.name, skill.skillId, skill.canonical, skill.description, skill.codingAgent, skill.platformCode, skill.environment]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(search));
     });
@@ -118,6 +160,9 @@ export default function Skills() {
                   <span className="resource-canonical mono">{skill.canonical}</span>
                   <div className="resource-card-chips">
                     <span className="resource-chip">{skill.codingAgent || 'no agent'}</span>
+                    {skill.environment && <span className="resource-chip">{skill.environment}</span>}
+                    {skill.platformCode && <span className="resource-chip">{skill.platformCode}</span>}
+                    {skill.approvalStatus && <span className="resource-chip">{skill.approvalStatus}</span>}
                   </div>
                 </div>
               </Card>
@@ -167,11 +212,59 @@ export default function Skills() {
             />
           </div>
           <div className="filter-row">
+            <Text className="muted">Approval</Text>
+            <Select
+              allowClear
+              value={filters.approvalStatus}
+              onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))}
+              options={approvalStatuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))}
+              placeholder="Select approval status"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Environment</Text>
+            <Select
+              allowClear
+              value={filters.environment}
+              onChange={(value) => setFilters((prev) => ({ ...prev, environment: value || null }))}
+              options={environments.map((value) => ({ value, label: value }))}
+              placeholder="Select environment"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Platform</Text>
+            <Select
+              allowClear
+              value={filters.platformCode}
+              onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))}
+              options={platforms.map((value) => ({ value, label: value }))}
+              placeholder="Select platform"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Content source</Text>
+            <Select
+              allowClear
+              value={filters.contentSource}
+              onChange={(value) => setFilters((prev) => ({ ...prev, contentSource: value || null }))}
+              options={contentSources.map((value) => ({ value, label: value }))}
+              placeholder="Select content source"
+            />
+          </div>
+          <div className="filter-row">
             <Text className="muted">Version</Text>
             <Input
               value={filters.version}
               onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))}
               placeholder="For example 1.0.0"
+            />
+          </div>
+          <div className="filter-row">
+            <Text className="muted">Tag</Text>
+            <Input
+              value={filters.tag}
+              onChange={(event) => setFilters((prev) => ({ ...prev, tag: event.target.value }))}
+              placeholder="architecture"
             />
           </div>
           <div className="filter-row">
@@ -191,7 +284,18 @@ export default function Skills() {
         <div className="filter-drawer-footer">
           <Button
             type="default"
-            onClick={() => setFilters({ search: '', codingAgent: null, status: null, version: '', hasDescription: null })}
+            onClick={() => setFilters({
+              search: '',
+              codingAgent: null,
+              status: null,
+              approvalStatus: null,
+              environment: null,
+              platformCode: null,
+              contentSource: null,
+              version: '',
+              tag: '',
+              hasDescription: null,
+            })}
           >
             Reset
           </Button>

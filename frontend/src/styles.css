@@ -515,6 +515,22 @@ body {
   gap: 16px;
 }
 
+.settings-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.catalog-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+.catalog-settings-span-2 {
+  grid-column: 1 / -1;
+}
+
 .flow-editor-page {
   height: 100%;
   display: flex;
@@ -1752,6 +1768,15 @@ body {
 @media (max-width: 1100px) {
   .split-layout {
     grid-template-columns: 1fr;
+  }
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+  .catalog-settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .catalog-settings-span-2 {
+    grid-column: auto;
   }
 }
 

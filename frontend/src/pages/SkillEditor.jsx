@@ -10,6 +10,7 @@ import { useLocation, useParams } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 const { Title, Text } = Typography;
 
@@ -38,6 +39,32 @@ const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
   { value: 'claude', label: 'claude' },
   { value: 'cursor', label: 'cursor' },
+];
+const platformOptions = [
+  { value: 'UFS', label: 'UFS' },
+  { value: 'PPRB', label: 'PPRB' },
+  { value: 'DATA', label: 'DATA' },
+];
+const environmentOptions = [
+  { value: 'dev', label: 'dev' },
+  { value: 'prod', label: 'prod' },
+];
+const visibilityOptions = [
+  { value: 'internal', label: 'internal' },
+  { value: 'restricted', label: 'restricted' },
+  { value: 'public', label: 'public' },
+];
+const lifecycleOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'deprecated', label: 'deprecated' },
+  { value: 'retired', label: 'retired' },
+];
+const skillKindOptions = [
+  { value: 'analysis', label: 'analysis' },
+  { value: 'generation', label: 'generation' },
+  { value: 'refactor', label: 'refactor' },
+  { value: 'qa', label: 'qa' },
+  { value: 'ops', label: 'ops' },
 ];
 
 const DEFAULT_VERSION = '0.1';
@@ -112,6 +139,7 @@ const getDraftForMajor = (versions, major) => (
 );
 
 export default function SkillEditor() {
+  const { user } = useAuth();
   const { isDark } = useThemeMode();
   const monacoTheme = getMonacoThemeName(isDark);
   const { skillId: skillIdParam } = useParams();
@@ -130,12 +158,23 @@ export default function SkillEditor() {
   const [skillId, setSkillId] = useState('');
   const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
+  const [teamCode, setTeamCode] = useState('');
+  const [platformCode, setPlatformCode] = useState('UFS');
+  const [tags, setTags] = useState([]);
+  const [tagOptions, setTagOptions] = useState([]);
+  const [skillKind, setSkillKind] = useState('');
+  const [environment, setEnvironment] = useState('dev');
+  const [visibility, setVisibility] = useState('internal');
+  const [lifecycleStatus, setLifecycleStatus] = useState('active');
+  const [approvalStatus, setApprovalStatus] = useState('');
+  const [contentSource, setContentSource] = useState('');
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const editorRef = useRef(null);
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
+  const canApprovePublication = user?.role === 'TECH_APPROVER' || user?.role === 'ADMIN';
 
   const loadSkill = async (skillId) => {
     try {
@@ -150,6 +189,15 @@ export default function SkillEditor() {
       setDescription(data.description || '');
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
+      setTeamCode(data.team_code || '');
+      setPlatformCode(data.platform_code || 'UFS');
+      setTags(data.tags || []);
+      setSkillKind(data.skill_kind || '');
+      setEnvironment(data.environment || 'dev');
+      setVisibility(data.visibility || 'internal');
+      setLifecycleStatus(data.lifecycle_status || 'active');
+      setApprovalStatus(data.approval_status || '');
+      setContentSource(data.content_source || '');
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(skillId, data.version);
@@ -160,6 +208,15 @@ export default function SkillEditor() {
       }
     } catch (err) {
       message.error(err.message || 'Failed to load Skill');
+    }
+  };
+
+  const loadTags = async () => {
+    try {
+      const data = await apiRequest('/skills/tags');
+      setTagOptions((data || []).map((tag) => ({ value: tag, label: tag })));
+    } catch (err) {
+      // ignore tags dictionary loading errors
     }
   };
 
@@ -271,6 +328,14 @@ export default function SkillEditor() {
       message.error('Coding agent is required');
       return;
     }
+    if (!teamCode.trim()) {
+      message.error('Team code is required');
+      return;
+    }
+    if (!platformCode) {
+      message.error('Platform is required');
+      return;
+    }
     const effectiveVersion = skillId === selectedSkillId ? (resourceVersion ?? 0) : 0;
     try {
       const response = await apiRequest(`/skills/${skillId}/save`, {
@@ -283,6 +348,13 @@ export default function SkillEditor() {
           description: description.trim(),
           skill_id: skillId.trim(),
           coding_agent: codingAgent,
+          team_code: teamCode.trim(),
+          platform_code: platformCode,
+          tags,
+          skill_kind: skillKind || undefined,
+          environment,
+          visibility,
+          lifecycle_status: lifecycleStatus,
           skill_markdown: editorValue,
           publish,
           release,
@@ -295,11 +367,17 @@ export default function SkillEditor() {
       setSkillVersion(response.version || skillVersion);
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
+      setApprovalStatus(response.approval_status || approvalStatus);
+      setContentSource(response.content_source || contentSource);
       setSelectedSkillId(response.skill_id || skillId);
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(response.skill_id || skillId, response.version || skillVersion);
-      message.success(publish ? 'Skill published' : 'Draft saved');
+      if (publish) {
+        message.success(canApprovePublication ? 'Skill published' : 'Publication requested');
+      } else {
+        message.success('Draft saved');
+      }
     } catch (err) {
       message.error(toRussianError(err?.message, 'Failed to save Skill'));
     }
@@ -311,6 +389,15 @@ export default function SkillEditor() {
     setDescription('');
     setSkillId('');
     setCodingAgent('');
+    setTeamCode('');
+    setPlatformCode('UFS');
+    setTags([]);
+    setSkillKind('');
+    setEnvironment('dev');
+    setVisibility('internal');
+    setLifecycleStatus('active');
+    setApprovalStatus('');
+    setContentSource('db');
     setEditorValue('');
     setResourceVersion(0);
     setSkillVersion('');
@@ -332,6 +419,10 @@ export default function SkillEditor() {
       loadSkill(skillIdParam);
     }
   }, [skillIdParam, isCreateRoute]);
+
+  useEffect(() => {
+    loadTags();
+  }, []);
 
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
   const currentParsed = parseMajorMinor(skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
@@ -394,7 +485,7 @@ export default function SkillEditor() {
                     },
                   }}
                 >
-                  <Button type="default" icon={<MoreOutlined />}>Publish</Button>
+                  <Button type="default" icon={<MoreOutlined />}>{canApprovePublication ? 'Publish' : 'Request publication'}</Button>
                 </Dropdown>
               </>
             ) : (
@@ -427,7 +518,7 @@ export default function SkillEditor() {
                   },
                 }}
               >
-                <Button type="default" icon={<MoreOutlined />}>Publish</Button>
+                <Button type="default" icon={<MoreOutlined />}>{canApprovePublication ? 'Publish' : 'Request publication'}</Button>
               </Dropdown>
             </>
           )}
@@ -547,6 +638,17 @@ export default function SkillEditor() {
             )}
           </div>
           <div style={{ marginTop: 8 }}>
+            <Text className="muted">Coding agent</Text>
+            <Select
+              value={codingAgent || undefined}
+              onChange={handleCodingAgentChange}
+              options={codingAgentOptions}
+              placeholder="Select coding agent"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
             <Text className="muted">Name</Text>
             <Input
               value={name}
@@ -578,31 +680,94 @@ export default function SkillEditor() {
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Coding agent</Text>
+            <Text className="muted">Team code</Text>
+            <Input
+              value={teamCode}
+              onChange={(event) => setTeamCode(event.target.value)}
+              placeholder="platform-team"
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Platform</Text>
             <Select
-              value={codingAgent || undefined}
-              onChange={handleCodingAgentChange}
-              options={codingAgentOptions}
-              placeholder="Select coding agent"
+              value={platformCode || undefined}
+              onChange={setPlatformCode}
+              options={platformOptions}
+              placeholder="Select platform"
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
-          <div style={{ marginTop: 16 }}>
-            <Title level={5}>Frontmatter hint</Title>
-            {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Select a coding agent to see the expected frontmatter fields.</Text>
-            ) : (
-              <Space direction="vertical" size={8}>
-                {frontmatterSummary.map((item) => (
-                  <div key={item.field}>
-                    <Text className="muted">{item.field}</Text>
-                    <div className="mono">{item.meaning}</div>
-                  </div>
-                ))}
-              </Space>
-            )}
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Tags</Text>
+            <Select
+              mode="tags"
+              value={tags}
+              onChange={(nextTags) => setTags(nextTags)}
+              options={tagOptions}
+              placeholder="Add tags"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
           </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Skill kind</Text>
+            <Select
+              value={skillKind || undefined}
+              onChange={setSkillKind}
+              options={skillKindOptions}
+              placeholder="Select skill kind"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Environment</Text>
+            <Select
+              value={environment || undefined}
+              onChange={setEnvironment}
+              options={environmentOptions}
+              placeholder="Select environment"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Visibility</Text>
+            <Select
+              value={visibility || undefined}
+              onChange={setVisibility}
+              options={visibilityOptions}
+              placeholder="Select visibility"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Lifecycle status</Text>
+            <Select
+              value={lifecycleStatus || undefined}
+              onChange={setLifecycleStatus}
+              options={lifecycleOptions}
+              placeholder="Select lifecycle status"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Approval status</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
+            </div>
+          )}
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Content source</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{contentSource || 'db'}</div>
+            </div>
+          )}
         </Card>
       </div>
     </div>

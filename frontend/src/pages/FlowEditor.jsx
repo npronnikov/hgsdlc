@@ -1464,6 +1464,22 @@ export default function FlowEditor() {
               </div>
               <div className="form-stack">
               <div>
+                <Text className="muted">Coding agent</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.codingAgent}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ codingAgent: value })}
+                    options={[
+                      { value: 'qwen', label: 'qwen' },
+                      { value: 'claude', label: 'claude' },
+                      { value: 'cursor', label: 'cursor' },
+                    ]}
+                    placeholder="Select coding agent"
+                  />
+                </div>
+              </div>
+              <div>
                 <Text className="muted">Name</Text>
                 <div className="field-control">
                   <Input
@@ -1502,22 +1518,6 @@ export default function FlowEditor() {
                     disabled={isReadOnly}
                     onChange={handleStartNodeChange}
                     options={nodes.map((node) => ({ value: node.id, label: node.id }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <Text className="muted">Coding agent</Text>
-                <div className="field-control">
-                  <Select
-                    value={flowMeta.codingAgent}
-                    disabled={isReadOnly}
-                    onChange={(value) => updateFlowMeta({ codingAgent: value })}
-                    options={[
-                      { value: 'qwen', label: 'qwen' },
-                      { value: 'claude', label: 'claude' },
-                      { value: 'cursor', label: 'cursor' },
-                    ]}
-                    placeholder="Select coding agent"
                   />
                 </div>
               </div>
