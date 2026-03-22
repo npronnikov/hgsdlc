@@ -124,10 +124,32 @@ public class SettingsController {
     }
 
     @PutMapping("/catalog/repair")
-    public ResponseEntity<RepairResponse> repairCatalog(@AuthenticationPrincipal User user) {
-        SettingsService.RepairResult result = settingsService.repairCatalog(user == null ? "system" : user.getUsername());
+    public ResponseEntity<RepairResponse> repairCatalog(
+            @RequestBody(required = false) RepairRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        SettingsService.RepairResult result = settingsService.repairCatalog(
+                user == null ? "system" : user.getUsername(),
+                request == null ? null : request.mode()
+        );
         return ResponseEntity.status(HttpStatus.OK)
-                .body(new RepairResponse(result.status(), result.message(), result.startedAt(), result.requestedBy()));
+                .body(new RepairResponse(
+                        result.status(),
+                        result.message(),
+                        result.startedAt(),
+                        result.finishedAt(),
+                        result.mode(),
+                        result.requestedBy(),
+                        result.scannedRules(),
+                        result.scannedSkills(),
+                        result.scannedFlows(),
+                        result.inserted(),
+                        result.updated(),
+                        result.skipped(),
+                        result.errors() == null ? java.util.List.of() : result.errors().stream()
+                                .map(err -> new RepairErrorItem(err.path(), err.message()))
+                                .toList()
+                ));
     }
 
     public record RuntimeSettingsRequest(
@@ -171,6 +193,24 @@ public class SettingsController {
             @JsonProperty("status") String status,
             @JsonProperty("message") String message,
             @JsonProperty("started_at") Instant startedAt,
-            @JsonProperty("requested_by") String requestedBy
+            @JsonProperty("finished_at") Instant finishedAt,
+            @JsonProperty("mode") String mode,
+            @JsonProperty("requested_by") String requestedBy,
+            @JsonProperty("scanned_rules") int scannedRules,
+            @JsonProperty("scanned_skills") int scannedSkills,
+            @JsonProperty("scanned_flows") int scannedFlows,
+            @JsonProperty("inserted") int inserted,
+            @JsonProperty("updated") int updated,
+            @JsonProperty("skipped") int skipped,
+            @JsonProperty("errors") java.util.List<RepairErrorItem> errors
+    ) {}
+
+    public record RepairRequest(
+            @JsonProperty("mode") String mode
+    ) {}
+
+    public record RepairErrorItem(
+            @JsonProperty("path") String path,
+            @JsonProperty("message") String message
     ) {}
 }

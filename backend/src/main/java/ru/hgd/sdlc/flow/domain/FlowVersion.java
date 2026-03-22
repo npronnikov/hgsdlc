@@ -65,6 +65,57 @@ public class FlowVersion {
     @Column(name = "checksum", length = 128)
     private String checksum;
 
+    @Column(name = "team_code", length = 128)
+    private String teamCode;
+
+    @Column(name = "platform_code", length = 32)
+    private String platformCode;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "tags_json", columnDefinition = "TEXT")
+    private List<String> tags;
+
+    @Column(name = "flow_kind", length = 64)
+    private String flowKind;
+
+    @Column(name = "risk_level", length = 32)
+    private String riskLevel;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "environment", length = 16)
+    private FlowEnvironment environment;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", length = 32)
+    private FlowApprovalStatus approvalStatus;
+
+    @Column(name = "approved_by", length = 128)
+    private String approvedBy;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "source_ref", length = 128)
+    private String sourceRef;
+
+    @Column(name = "source_path", length = 512)
+    private String sourcePath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_source", length = 16)
+    private FlowContentSource contentSource;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", length = 32)
+    private FlowVisibility visibility;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifecycle_status", length = 32)
+    private FlowLifecycleStatus lifecycleStatus;
+
     @Column(name = "saved_by", nullable = false, length = 128)
     private String savedBy;
 

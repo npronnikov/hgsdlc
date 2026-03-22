@@ -188,9 +188,8 @@ public class SkillService {
         SkillProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
-        boolean isApprover = isApprover(user);
-        boolean publishNow = publish && isApprover;
-        boolean requestPublish = publish && !isApprover;
+        boolean publishNow = false;
+        boolean requestPublish = publish;
         SkillEnvironment environment = parseEnvironment(request.environment());
         SkillVisibility visibility = parseVisibility(request.visibility());
         SkillLifecycleStatus lifecycleStatus = parseLifecycleStatus(request.lifecycleStatus());
@@ -214,25 +213,17 @@ public class SkillService {
                 .toList();
         int baseMajor = resolveBaseMajor(request.baseVersion(), publishedVersions);
         SkillVersion existingDraft = findDraftForMajor(draftVersions, baseMajor);
-        SkillVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
-        if (publishNow) {
-            SkillVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
-            if (base != null && base.getResourceVersion() != request.resourceVersion()) {
-                throw new ConflictException("resource_version mismatch for publish");
-            }
-        } else {
-            if (existingDraft != null) {
-                if (existingDraft.getResourceVersion() != request.resourceVersion()) {
-                    throw new ConflictException("resource_version mismatch for draft");
-                }
-            } else if (request.resourceVersion() != 0L) {
+        if (existingDraft != null) {
+            if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
+        } else if (request.resourceVersion() != 0L) {
+            throw new ConflictException("resource_version mismatch for draft");
         }
 
-        String version = publishNow
+        String version = publish
                 ? resolvePublishVersion(existingDraft, maxMinorForMajor, maxPublishedMajor, release, baseMajor)
                 : resolveDraftVersion(existingDraft, maxMinorForMajor, baseMajor, publishedVersions.isEmpty());
         String canonicalName = skillId + "@" + version;
@@ -246,7 +237,8 @@ public class SkillService {
         }
 
         SkillVersion entity;
-        if ((requestPublish || !publish) && existingDraft != null) {
+        boolean useExistingDraft = existingDraft != null && (!publish || !release);
+        if (useExistingDraft) {
             entity = existingDraft;
         } else {
             entity = new SkillVersion();
@@ -522,7 +514,7 @@ public class SkillService {
     }
 
     private boolean isApprover(User user) {
-        return user != null && (user.hasRole(Role.TECH_APPROVER) || user.hasRole(Role.ADMIN));
+        return user != null && user.hasAnyRole(Role.TECH_APPROVER, Role.ADMIN);
     }
 
     private void requireApprover(User user) {

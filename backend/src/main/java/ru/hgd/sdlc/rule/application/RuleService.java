@@ -18,9 +18,14 @@ import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.rule.api.RuleSaveRequest;
+import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
+import ru.hgd.sdlc.rule.domain.RuleContentSource;
+import ru.hgd.sdlc.rule.domain.RuleEnvironment;
+import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.rule.domain.RuleVisibility;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 
 @Service
@@ -182,6 +187,21 @@ public class RuleService {
         entity.setCodingAgent(codingAgent);
         entity.setRuleMarkdown(updatedMarkdown);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
+        entity.setTeamCode(normalizeOptional(request.teamCode()));
+        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setTags(normalizeTags(request.tags()));
+        entity.setRuleKind(normalizeOptional(request.ruleKind()));
+        entity.setScope(normalizeOptional(request.scope()));
+        entity.setEnvironment(parseEnvironment(request.environment()));
+        entity.setApprovalStatus(publish ? RuleApprovalStatus.PUBLISHED : RuleApprovalStatus.DRAFT);
+        entity.setApprovedBy(null);
+        entity.setApprovedAt(null);
+        entity.setPublishedAt(publish ? Instant.now() : null);
+        entity.setSourceRef(normalizeOptional(request.sourceRef()));
+        entity.setSourcePath(normalizeOptional(request.sourcePath()));
+        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publish));
+        entity.setVisibility(parseVisibility(request.visibility()));
+        entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(Instant.now());
 
@@ -321,6 +341,71 @@ public class RuleService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported coding_agent: " + codingAgent);
         }
+    }
+
+    private RuleEnvironment parseEnvironment(String environment) {
+        if (environment == null || environment.isBlank()) {
+            return RuleEnvironment.DEV;
+        }
+        try {
+            return RuleEnvironment.valueOf(environment.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported environment: " + environment);
+        }
+    }
+
+    private RuleVisibility parseVisibility(String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return RuleVisibility.INTERNAL;
+        }
+        try {
+            return RuleVisibility.valueOf(visibility.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported visibility: " + visibility);
+        }
+    }
+
+    private RuleLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
+        if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
+            return RuleLifecycleStatus.ACTIVE;
+        }
+        try {
+            return RuleLifecycleStatus.valueOf(lifecycleStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
+        }
+    }
+
+    private RuleContentSource parseContentSource(String sourceRef, String sourcePath, boolean publish) {
+        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
+            return RuleContentSource.GIT;
+        }
+        if (publish) {
+            return RuleContentSource.DB;
+        }
+        return RuleContentSource.DB;
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String value = normalizeOptional(tag);
+            if (value != null && !normalized.contains(value)) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private void validateCodingAgentFrontmatter(RuleProvider codingAgent, ObjectNode frontmatter) {

@@ -39,6 +39,35 @@ const codingAgentOptions = [
   { value: 'claude', label: 'claude' },
   { value: 'cursor', label: 'cursor' },
 ];
+const platformOptions = [
+  { value: 'UFS', label: 'UFS' },
+  { value: 'PPRB', label: 'PPRB' },
+  { value: 'DATA', label: 'DATA' },
+];
+const environmentOptions = [
+  { value: 'dev', label: 'dev' },
+  { value: 'prod', label: 'prod' },
+];
+const visibilityOptions = [
+  { value: 'internal', label: 'internal' },
+  { value: 'restricted', label: 'restricted' },
+  { value: 'public', label: 'public' },
+];
+const lifecycleOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'deprecated', label: 'deprecated' },
+  { value: 'retired', label: 'retired' },
+];
+const ruleKindOptions = [
+  { value: 'architecture', label: 'architecture' },
+  { value: 'coding-style', label: 'coding-style' },
+  { value: 'security', label: 'security' },
+  { value: 'governance', label: 'governance' },
+];
+const scopeOptions = [
+  { value: 'global', label: 'global' },
+  { value: 'project', label: 'project' },
+];
 
 const DEFAULT_VERSION = '0.1';
 const parseMajorMinor = (version) => {
@@ -129,6 +158,16 @@ export default function RuleEditor() {
   const [description, setDescription] = useState('');
   const [ruleId, setRuleId] = useState('');
   const [codingAgent, setCodingAgent] = useState('');
+  const [teamCode, setTeamCode] = useState('');
+  const [platformCode, setPlatformCode] = useState('UFS');
+  const [tags, setTags] = useState([]);
+  const [ruleKind, setRuleKind] = useState('');
+  const [scope, setScope] = useState('');
+  const [environment, setEnvironment] = useState('dev');
+  const [visibility, setVisibility] = useState('internal');
+  const [lifecycleStatus, setLifecycleStatus] = useState('active');
+  const [approvalStatus, setApprovalStatus] = useState('');
+  const [contentSource, setContentSource] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [isNewRule, setIsNewRule] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -150,6 +189,16 @@ export default function RuleEditor() {
       setDescription(data.description || '');
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
+      setTeamCode(data.team_code || '');
+      setPlatformCode(data.platform_code || 'UFS');
+      setTags(data.tags || []);
+      setRuleKind(data.rule_kind || '');
+      setScope(data.scope || '');
+      setEnvironment(data.environment || 'dev');
+      setVisibility(data.visibility || 'internal');
+      setLifecycleStatus(data.lifecycle_status || 'active');
+      setApprovalStatus(data.approval_status || '');
+      setContentSource(data.content_source || '');
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(ruleId, data.version);
@@ -200,6 +249,16 @@ export default function RuleEditor() {
       setDescription(data.description || '');
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
+      setTeamCode(data.team_code || '');
+      setPlatformCode(data.platform_code || 'UFS');
+      setTags(data.tags || []);
+      setRuleKind(data.rule_kind || '');
+      setScope(data.scope || '');
+      setEnvironment(data.environment || 'dev');
+      setVisibility(data.visibility || 'internal');
+      setLifecycleStatus(data.lifecycle_status || 'active');
+      setApprovalStatus(data.approval_status || '');
+      setContentSource(data.content_source || '');
       setIsNewRule(false);
       setIsEditing(keepEditing);
       if (data.coding_agent) {
@@ -283,6 +342,14 @@ export default function RuleEditor() {
           description: description.trim(),
           rule_id: ruleId.trim(),
           coding_agent: codingAgent,
+          team_code: teamCode.trim(),
+          platform_code: platformCode,
+          tags,
+          rule_kind: ruleKind,
+          scope,
+          environment,
+          visibility,
+          lifecycle_status: lifecycleStatus,
           rule_markdown: editorValue,
           publish,
           release,
@@ -296,6 +363,8 @@ export default function RuleEditor() {
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
       setSelectedRuleId(response.rule_id || ruleId);
+      setApprovalStatus(response.approval_status || approvalStatus);
+      setContentSource(response.content_source || contentSource);
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(response.rule_id || ruleId, response.version || ruleVersion);
@@ -311,6 +380,16 @@ export default function RuleEditor() {
     setDescription('');
     setRuleId('');
     setCodingAgent('');
+    setTeamCode('');
+    setPlatformCode('UFS');
+    setTags([]);
+    setRuleKind('');
+    setScope('');
+    setEnvironment('dev');
+    setVisibility('internal');
+    setLifecycleStatus('active');
+    setApprovalStatus('');
+    setContentSource('');
     setEditorValue('');
     setResourceVersion(0);
     setRuleVersion('');
@@ -588,6 +667,105 @@ export default function RuleEditor() {
               disabled={!isEditing || !!selectedRuleId}
             />
           </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Team code</Text>
+            <Input
+              value={teamCode}
+              onChange={(event) => setTeamCode(event.target.value)}
+              placeholder="platform-team"
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Platform</Text>
+            <Select
+              value={platformCode || undefined}
+              onChange={setPlatformCode}
+              options={platformOptions}
+              placeholder="Select platform"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Tags</Text>
+            <Select
+              mode="tags"
+              value={tags}
+              onChange={(nextTags) => setTags(nextTags)}
+              placeholder="Add tags"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Rule kind</Text>
+            <Select
+              value={ruleKind || undefined}
+              onChange={setRuleKind}
+              options={ruleKindOptions}
+              placeholder="Select rule kind"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Scope</Text>
+            <Select
+              value={scope || undefined}
+              onChange={setScope}
+              options={scopeOptions}
+              placeholder="Select scope"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Environment</Text>
+            <Select
+              value={environment || undefined}
+              onChange={setEnvironment}
+              options={environmentOptions}
+              placeholder="Select environment"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Visibility</Text>
+            <Select
+              value={visibility || undefined}
+              onChange={setVisibility}
+              options={visibilityOptions}
+              placeholder="Select visibility"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Lifecycle status</Text>
+            <Select
+              value={lifecycleStatus || undefined}
+              onChange={setLifecycleStatus}
+              options={lifecycleOptions}
+              placeholder="Select lifecycle status"
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Approval status</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
+            </div>
+          )}
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Content source</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{contentSource || 'db'}</div>
+            </div>
+          )}
         </Card>
       </div>
     </div>

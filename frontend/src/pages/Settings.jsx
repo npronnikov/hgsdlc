@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, InputNumber, Select, Space, Tabs, Typography, message } from 'antd';
+import { Button, Card, Form, Input, InputNumber, Modal, Select, Space, Tabs, Typography, message } from 'antd';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
@@ -9,6 +9,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [initialValues, setInitialValues] = useState(null);
+  const [repairMode, setRepairMode] = useState('upsert');
 
   const load = async () => {
     setLoading(true);
@@ -101,18 +102,54 @@ export default function Settings() {
     }
   };
 
-  const handleRepair = async () => {
+  const runRepair = async (mode) => {
     try {
       setSaving(true);
-      await apiRequest('/settings/catalog/repair', {
+      const result = await apiRequest('/settings/catalog/repair', {
         method: 'PUT',
+        body: JSON.stringify({ mode }),
       });
-      message.success('Catalog repair started');
+      const summary = [
+        `Status: ${result?.status || 'unknown'}`,
+        `Scanned: rules=${result?.scanned_rules ?? 0}, skills=${result?.scanned_skills ?? 0}, flows=${result?.scanned_flows ?? 0}`,
+        `Upsert: inserted=${result?.inserted ?? 0}, updated=${result?.updated ?? 0}, skipped=${result?.skipped ?? 0}`,
+      ];
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      if (errors.length > 0) {
+        const errorPreview = errors.slice(0, 20).map((err) => `- ${err.path}: ${err.message}`).join('\n');
+        Modal.warning({
+          title: 'Catalog repair completed with errors',
+          width: 880,
+          content: (
+            <div>
+              <div>{summary.join(' | ')}</div>
+              <pre style={{ whiteSpace: 'pre-wrap', marginTop: 12, maxHeight: 320, overflow: 'auto' }}>{errorPreview}</pre>
+              {errors.length > 20 ? <Text type="secondary">Showing first 20 of {errors.length} errors.</Text> : null}
+            </div>
+          ),
+        });
+      } else {
+        message.success(result?.message || 'Catalog repair completed');
+      }
     } catch (err) {
-      message.error(err.message || 'Failed to start catalog repair');
+      message.error(err.message || 'Failed to repair catalog');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRepair = async () => {
+    if (repairMode === 'from_scratch') {
+      Modal.confirm({
+        title: 'Rebuild from scratch?',
+        content: 'This will delete all local catalog index entries for rules, skills, and flows, then rebuild from repository.',
+        okText: 'Run from scratch',
+        okButtonProps: { danger: true },
+        onOk: () => runRepair('from_scratch'),
+      });
+      return;
+    }
+    await runRepair('upsert');
   };
 
   return (
@@ -164,7 +201,20 @@ export default function Settings() {
       <Card
         title="Catalog repository settings"
         loading={loading && !initialValues}
-        extra={<Button onClick={handleRepair} loading={saving}>Repair catalog</Button>}
+        extra={(
+          <Space>
+            <Select
+              style={{ width: 170 }}
+              value={repairMode}
+              onChange={setRepairMode}
+              options={[
+                { value: 'upsert', label: 'Upsert' },
+                { value: 'from_scratch', label: 'From scratch' },
+              ]}
+            />
+            <Button onClick={handleRepair} loading={saving}>Repair catalog</Button>
+          </Space>
+        )}
       >
         {initialValues && (
           <Form layout="vertical" form={form} initialValues={initialValues}>

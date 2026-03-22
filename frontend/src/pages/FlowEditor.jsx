@@ -169,6 +169,37 @@ function FlowNode({ data, selected }) {
 }
 
 const nodeTypes = { flowNode: FlowNode };
+const platformOptions = [
+  { value: 'UFS', label: 'UFS' },
+  { value: 'PPRB', label: 'PPRB' },
+  { value: 'DATA', label: 'DATA' },
+];
+const environmentOptions = [
+  { value: 'dev', label: 'dev' },
+  { value: 'prod', label: 'prod' },
+];
+const visibilityOptions = [
+  { value: 'internal', label: 'internal' },
+  { value: 'restricted', label: 'restricted' },
+  { value: 'public', label: 'public' },
+];
+const lifecycleOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'deprecated', label: 'deprecated' },
+  { value: 'retired', label: 'retired' },
+];
+const flowKindOptions = [
+  { value: 'orchestration', label: 'orchestration' },
+  { value: 'governance', label: 'governance' },
+  { value: 'analysis', label: 'analysis' },
+  { value: 'delivery', label: 'delivery' },
+];
+const riskLevelOptions = [
+  { value: 'low', label: 'low' },
+  { value: 'medium', label: 'medium' },
+  { value: 'high', label: 'high' },
+  { value: 'critical', label: 'critical' },
+];
 
 const emptyFlow = {
   title: '',
@@ -177,6 +208,16 @@ const emptyFlow = {
   startNodeId: '',
   codingAgent: '',
   ruleRefs: [],
+  teamCode: '',
+  platformCode: 'UFS',
+  tags: [],
+  flowKind: '',
+  riskLevel: '',
+  environment: 'dev',
+  visibility: 'internal',
+  lifecycleStatus: 'active',
+  approvalStatus: '',
+  contentSource: '',
   failOnMissingDeclaredOutput: false,
   failOnMissingExpectedMutation: false,
   responseSchema: '',
@@ -920,6 +961,16 @@ export default function FlowEditor() {
         startNodeId: data.start_node_id || prev.startNodeId,
         codingAgent: data.coding_agent || prev.codingAgent,
         ruleRefs: data.rule_refs || [],
+        teamCode: data.team_code || '',
+        platformCode: data.platform_code || 'UFS',
+        tags: data.tags || [],
+        flowKind: data.flow_kind || '',
+        riskLevel: data.risk_level || '',
+        environment: data.environment || 'dev',
+        visibility: data.visibility || 'internal',
+        lifecycleStatus: data.lifecycle_status || 'active',
+        approvalStatus: data.approval_status || '',
+        contentSource: data.content_source || '',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -953,6 +1004,16 @@ export default function FlowEditor() {
         startNodeId: data.start_node_id || prev.startNodeId,
         codingAgent: data.coding_agent || prev.codingAgent,
         ruleRefs: data.rule_refs || [],
+        teamCode: data.team_code || '',
+        platformCode: data.platform_code || 'UFS',
+        tags: data.tags || [],
+        flowKind: data.flow_kind || '',
+        riskLevel: data.risk_level || '',
+        environment: data.environment || 'dev',
+        visibility: data.visibility || 'internal',
+        lifecycleStatus: data.lifecycle_status || 'active',
+        approvalStatus: data.approval_status || '',
+        contentSource: data.content_source || '',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -1114,6 +1175,14 @@ export default function FlowEditor() {
         body: JSON.stringify({
           flow_id: flowMeta.flowId,
           coding_agent: flowMeta.codingAgent,
+          team_code: flowMeta.teamCode?.trim(),
+          platform_code: flowMeta.platformCode,
+          tags: flowMeta.tags || [],
+          flow_kind: flowMeta.flowKind,
+          risk_level: flowMeta.riskLevel,
+          environment: flowMeta.environment,
+          visibility: flowMeta.visibility,
+          lifecycle_status: flowMeta.lifecycleStatus,
           flow_yaml: flowYaml,
           publish,
           release,
@@ -1130,6 +1199,16 @@ export default function FlowEditor() {
         startNodeId: response.start_node_id || prev.startNodeId,
         codingAgent: response.coding_agent || prev.codingAgent,
         ruleRefs: response.rule_refs || prev.ruleRefs,
+        teamCode: response.team_code || prev.teamCode,
+        platformCode: response.platform_code || prev.platformCode,
+        tags: response.tags || prev.tags,
+        flowKind: response.flow_kind || prev.flowKind,
+        riskLevel: response.risk_level || prev.riskLevel,
+        environment: response.environment || prev.environment,
+        visibility: response.visibility || prev.visibility,
+        lifecycleStatus: response.lifecycle_status || prev.lifecycleStatus,
+        approvalStatus: response.approval_status || prev.approvalStatus,
+        contentSource: response.content_source || prev.contentSource,
         failOnMissingDeclaredOutput: response.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: response.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: response.response_schema
@@ -1510,6 +1589,112 @@ export default function FlowEditor() {
                   />
                 </div>
               </div>
+              <div>
+                <Text className="muted">Team code</Text>
+                <div className="field-control">
+                  <Input
+                    value={flowMeta.teamCode}
+                    disabled={isReadOnly}
+                    onChange={(event) => updateFlowMeta({ teamCode: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Platform</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.platformCode || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ platformCode: value })}
+                    options={platformOptions}
+                    placeholder="Select platform"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Tags</Text>
+                <div className="field-control">
+                  <Select
+                    mode="tags"
+                    value={flowMeta.tags || []}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ tags: value })}
+                    placeholder="Add tags"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Flow kind</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.flowKind || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ flowKind: value })}
+                    options={flowKindOptions}
+                    placeholder="Select flow kind"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Risk level</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.riskLevel || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ riskLevel: value })}
+                    options={riskLevelOptions}
+                    placeholder="Select risk level"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Environment</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.environment || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ environment: value })}
+                    options={environmentOptions}
+                    placeholder="Select environment"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Visibility</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.visibility || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ visibility: value })}
+                    options={visibilityOptions}
+                    placeholder="Select visibility"
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">Lifecycle status</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.lifecycleStatus || undefined}
+                    disabled={isReadOnly}
+                    onChange={(value) => updateFlowMeta({ lifecycleStatus: value })}
+                    options={lifecycleOptions}
+                    placeholder="Select lifecycle status"
+                  />
+                </div>
+              </div>
+              {!isCreateMode && (
+                <div>
+                  <Text className="muted">Approval status</Text>
+                  <div className="mono">{flowMeta.approvalStatus || 'draft'}</div>
+                </div>
+              )}
+              {!isCreateMode && (
+                <div>
+                  <Text className="muted">Content source</Text>
+                  <div className="mono">{flowMeta.contentSource || 'db'}</div>
+                </div>
+              )}
               <div>
                 <Text className="muted">Start node</Text>
                 <div className="field-control">

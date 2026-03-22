@@ -15,9 +15,14 @@ import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.api.FlowSaveRequest;
+import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
+import ru.hgd.sdlc.flow.domain.FlowContentSource;
+import ru.hgd.sdlc.flow.domain.FlowEnvironment;
+import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
+import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
@@ -206,6 +211,21 @@ public class FlowService {
         entity.setCodingAgent(codingAgent);
         entity.setFlowYaml(updatedYaml);
         entity.setChecksum(publish ? ChecksumUtil.sha256(updatedYaml) : null);
+        entity.setTeamCode(normalizeOptional(request.teamCode()));
+        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setTags(normalizeTags(request.tags()));
+        entity.setFlowKind(normalizeOptional(request.flowKind()));
+        entity.setRiskLevel(normalizeOptional(request.riskLevel()));
+        entity.setEnvironment(parseEnvironment(request.environment()));
+        entity.setApprovalStatus(publish ? FlowApprovalStatus.PUBLISHED : FlowApprovalStatus.DRAFT);
+        entity.setApprovedBy(null);
+        entity.setApprovedAt(null);
+        entity.setPublishedAt(publish ? Instant.now() : null);
+        entity.setSourceRef(normalizeOptional(request.sourceRef()));
+        entity.setSourcePath(normalizeOptional(request.sourcePath()));
+        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publish));
+        entity.setVisibility(parseVisibility(request.visibility()));
+        entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(Instant.now());
 
@@ -223,6 +243,71 @@ public class FlowService {
             return null;
         }
         return codingAgent.trim().toLowerCase().replace('-', '_');
+    }
+
+    private FlowEnvironment parseEnvironment(String environment) {
+        if (environment == null || environment.isBlank()) {
+            return FlowEnvironment.DEV;
+        }
+        try {
+            return FlowEnvironment.valueOf(environment.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported environment: " + environment);
+        }
+    }
+
+    private FlowVisibility parseVisibility(String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return FlowVisibility.INTERNAL;
+        }
+        try {
+            return FlowVisibility.valueOf(visibility.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported visibility: " + visibility);
+        }
+    }
+
+    private FlowLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
+        if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
+            return FlowLifecycleStatus.ACTIVE;
+        }
+        try {
+            return FlowLifecycleStatus.valueOf(lifecycleStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
+        }
+    }
+
+    private FlowContentSource parseContentSource(String sourceRef, String sourcePath, boolean publish) {
+        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
+            return FlowContentSource.GIT;
+        }
+        if (publish) {
+            return FlowContentSource.DB;
+        }
+        return FlowContentSource.DB;
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String value = normalizeOptional(tag);
+            if (value != null && !normalized.contains(value)) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private void validateReferences(FlowModel model, String codingAgent) {

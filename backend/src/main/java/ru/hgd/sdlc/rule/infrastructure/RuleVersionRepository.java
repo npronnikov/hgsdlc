@@ -13,6 +13,7 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
     Optional<RuleVersion> findFirstByRuleIdAndVersionOrderBySavedAtDesc(String ruleId, String version);
 
     Optional<RuleVersion> findFirstByCanonicalNameAndStatus(String canonicalName, RuleStatus status);
+    Optional<RuleVersion> findFirstByCanonicalName(String canonicalName);
 
     List<RuleVersion> findByRuleIdOrderBySavedAtDesc(String ruleId);
 

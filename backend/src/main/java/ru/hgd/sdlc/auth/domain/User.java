@@ -1,10 +1,13 @@
 package ru.hgd.sdlc.auth.domain;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -59,6 +62,10 @@ public class User {
     @Column(nullable = false)
     private Instant createdAt;
 
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles == null ? new HashSet<>() : new HashSet<>(roles);
+    }
+
     public Set<Role> getEffectiveRoles() {
         if (roles != null && !roles.isEmpty()) {
             return Collections.unmodifiableSet(roles);
@@ -70,6 +77,44 @@ public class User {
     }
 
     public boolean hasRole(Role roleToCheck) {
-        return getEffectiveRoles().contains(roleToCheck);
+        return roleToCheck != null && getEffectiveRoles().contains(roleToCheck);
+    }
+
+    public boolean hasAnyRole(Role... rolesToCheck) {
+        if (rolesToCheck == null || rolesToCheck.length == 0) {
+            return false;
+        }
+        for (Role roleToCheck : rolesToCheck) {
+            if (hasRole(roleToCheck)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean hasRoleName(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            return false;
+        }
+        String normalized = roleName.trim().toUpperCase(Locale.ROOT);
+        return getEffectiveRoles().stream()
+                .map(Role::name)
+                .anyMatch(normalized::equals);
+    }
+
+    public boolean hasAnyRoleName(Collection<String> roleNames) {
+        if (roleNames == null || roleNames.isEmpty()) {
+            return false;
+        }
+        Set<String> normalized = roleNames.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        return getEffectiveRoles().stream()
+                .map(Role::name)
+                .anyMatch(normalized::contains);
     }
 }

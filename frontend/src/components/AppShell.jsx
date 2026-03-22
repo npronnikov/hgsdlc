@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   AppstoreOutlined,
+  ApartmentOutlined,
   AuditOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
+  GithubOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
@@ -12,9 +14,7 @@ import {
   PlayCircleOutlined,
   ProjectOutlined,
   RobotOutlined,
-  SafetyCertificateOutlined,
   SettingOutlined,
-  SisternodeOutlined,
   SunOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -27,10 +27,10 @@ const { Text } = Typography;
 const navItems = [
   { key: '/overview', icon: <AppstoreOutlined />, label: 'Overview' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/flows', icon: <SisternodeOutlined />, label: 'Flows' },
+  { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
   { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
   { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
-  { key: '/requests', icon: <SafetyCertificateOutlined />, label: 'Requests' },
+  { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
   { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },

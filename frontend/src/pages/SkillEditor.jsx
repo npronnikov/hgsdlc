@@ -10,7 +10,6 @@ import { useLocation, useParams } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
-import { useAuth } from '../auth/AuthContext.jsx';
 
 const { Title, Text } = Typography;
 
@@ -139,7 +138,6 @@ const getDraftForMajor = (versions, major) => (
 );
 
 export default function SkillEditor() {
-  const { user } = useAuth();
   const { isDark } = useThemeMode();
   const monacoTheme = getMonacoThemeName(isDark);
   const { skillId: skillIdParam } = useParams();
@@ -174,7 +172,6 @@ export default function SkillEditor() {
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
-  const canApprovePublication = user?.role === 'TECH_APPROVER' || user?.role === 'ADMIN';
 
   const loadSkill = async (skillId) => {
     try {
@@ -374,7 +371,7 @@ export default function SkillEditor() {
       setIsEditing(false);
       await loadVersions(response.skill_id || skillId, response.version || skillVersion);
       if (publish) {
-        message.success(canApprovePublication ? 'Skill published' : 'Publication requested');
+        message.success('Publication requested');
       } else {
         message.success('Draft saved');
       }
@@ -485,7 +482,7 @@ export default function SkillEditor() {
                     },
                   }}
                 >
-                  <Button type="default" icon={<MoreOutlined />}>{canApprovePublication ? 'Publish' : 'Request publication'}</Button>
+                  <Button type="default" icon={<MoreOutlined />}>Request publication</Button>
                 </Dropdown>
               </>
             ) : (
@@ -518,7 +515,7 @@ export default function SkillEditor() {
                   },
                 }}
               >
-                <Button type="default" icon={<MoreOutlined />}>{canApprovePublication ? 'Publish' : 'Request publication'}</Button>
+                <Button type="default" icon={<MoreOutlined />}>Request publication</Button>
               </Dropdown>
             </>
           )}
