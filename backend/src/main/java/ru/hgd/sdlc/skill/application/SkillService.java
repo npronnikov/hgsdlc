@@ -460,7 +460,7 @@ public class SkillService {
 
     private String normalizePlatformCode(String platformCode) {
         String normalized = platformCode.trim().toUpperCase();
-        if (!List.of("UFS", "PPRB", "DATA").contains(normalized)) {
+        if (!List.of("FRONT", "BACK", "DATA").contains(normalized)) {
             throw new ValidationException("Unsupported platform_code: " + platformCode);
         }
         return normalized;

@@ -26,9 +26,9 @@
   --warning: #d97706;
   --danger: #dc2626;
   --info: #0891b2;
-  --radius-lg: 0;
-  --radius-md: 0;
-  --radius-sm: 0;
+  --radius-lg: 6px;
+  --radius-md: 4px;
+  --radius-sm: 4px;
 }
 
 :root[data-theme="dark"] {
@@ -75,7 +75,7 @@ body {
 }
 
 .ant-btn {
-  border-radius: 0 !important;
+  border-radius: var(--radius-sm) !important;
   font-weight: 600;
   transition: all 0.18s ease;
 }
@@ -157,7 +157,16 @@ body {
 .ant-dropdown-menu,
 .ant-menu,
 .ant-tag {
-  border-radius: 0 !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.ant-table-wrapper .ant-table,
+.ant-table-wrapper .ant-table-container {
+  border-radius: var(--radius-sm) !important;
+}
+
+.ant-table-wrapper .ant-table-container {
+  overflow: hidden;
 }
 
 .muted {
@@ -1254,7 +1263,7 @@ body {
   z-index: 20;
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
   padding: 8px;
   display: flex;
@@ -1280,7 +1289,10 @@ body {
   justify-content: flex-start;
   text-align: left;
   width: 100%;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
+
 
 .flow-context-divider {
   height: 1px;
@@ -1873,6 +1885,7 @@ body {
   border-color: #334155;
   box-shadow: 0 12px 32px rgba(2, 6, 23, 0.75);
 }
+
 
 :root[data-theme="dark"] .ant-modal-mask {
   background: rgba(2, 6, 23, 0.72) !important;

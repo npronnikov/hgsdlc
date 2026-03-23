@@ -21,30 +21,30 @@ function ThemedApp() {
       colorTextSecondary: isDark ? '#9ca3af' : '#4b5563',
       colorBgLayout: isDark ? '#0b1220' : '#f6f7fb',
       colorBgContainer: isDark ? '#111827' : '#ffffff',
-      borderRadius: 0,
-      borderRadiusLG: 0,
-      borderRadiusSM: 0,
+      borderRadius: 4,
+      borderRadiusLG: 6,
+      borderRadiusSM: 4,
       fontFamily: 'Space Grotesk, Segoe UI, sans-serif',
     },
     components: {
       Button: {
-        borderRadius: 0,
+        borderRadius: 4,
       },
       Card: {
-        borderRadiusLG: 0,
+        borderRadiusLG: 6,
       },
       Modal: {
-        borderRadiusLG: 0,
-        borderRadiusSM: 0,
+        borderRadiusLG: 6,
+        borderRadiusSM: 4,
       },
       Drawer: {
-        borderRadiusLG: 0,
+        borderRadiusLG: 6,
       },
       Input: {
-        borderRadius: 0,
+        borderRadius: 4,
       },
       Select: {
-        borderRadius: 0,
+        borderRadius: 4,
       },
     },
   };

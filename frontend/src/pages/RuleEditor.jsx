@@ -40,8 +40,8 @@ const codingAgentOptions = [
   { value: 'cursor', label: 'cursor' },
 ];
 const platformOptions = [
-  { value: 'UFS', label: 'UFS' },
-  { value: 'PPRB', label: 'PPRB' },
+  { value: 'FRONT', label: 'FRONT' },
+  { value: 'BACK', label: 'BACK' },
   { value: 'DATA', label: 'DATA' },
 ];
 const environmentOptions = [
@@ -139,6 +139,7 @@ const getDraftForMajor = (versions, major) => (
     return parsed.valid && parsed.major === major;
   })
 );
+const requiredLabel = (label) => `${label} *`;
 
 export default function RuleEditor() {
   const { isDark } = useThemeMode();
@@ -159,7 +160,7 @@ export default function RuleEditor() {
   const [ruleId, setRuleId] = useState('');
   const [codingAgent, setCodingAgent] = useState('');
   const [teamCode, setTeamCode] = useState('');
-  const [platformCode, setPlatformCode] = useState('UFS');
+  const [platformCode, setPlatformCode] = useState('FRONT');
   const [tags, setTags] = useState([]);
   const [ruleKind, setRuleKind] = useState('');
   const [scope, setScope] = useState('');
@@ -190,7 +191,7 @@ export default function RuleEditor() {
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
       setTeamCode(data.team_code || '');
-      setPlatformCode(data.platform_code || 'UFS');
+      setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || '');
@@ -250,7 +251,7 @@ export default function RuleEditor() {
       setRuleId(data.rule_id || '');
       setCodingAgent(data.coding_agent || '');
       setTeamCode(data.team_code || '');
-      setPlatformCode(data.platform_code || 'UFS');
+      setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || '');
@@ -381,7 +382,7 @@ export default function RuleEditor() {
     setRuleId('');
     setCodingAgent('');
     setTeamCode('');
-    setPlatformCode('UFS');
+    setPlatformCode('FRONT');
     setTags([]);
     setRuleKind('');
     setScope('');
@@ -626,64 +627,70 @@ export default function RuleEditor() {
             )}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Text className="muted">Coding agent</Text>
+            <Text className="muted">{requiredLabel('Coding agent')}</Text>
             <Select
               value={codingAgent || undefined}
               onChange={handleCodingAgentChange}
               options={codingAgentOptions}
               placeholder="Select coding agent"
+              title="Для какого coding-agent будет выполняться правило."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Name</Text>
+            <Text className="muted">{requiredLabel('Name')}</Text>
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Project rule"
+              title="Короткое отображаемое имя правила."
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Description</Text>
+            <Text className="muted">{requiredLabel('Description')}</Text>
             <Input.TextArea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Briefly describe the purpose of the rule"
               rows={2}
+              title="Кратко объясняет, когда и зачем использовать правило."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">ID Rule</Text>
+            <Text className="muted">{requiredLabel('ID Rule')}</Text>
             <Input
               value={ruleId}
               onChange={(event) => setRuleId(event.target.value)}
               placeholder="project-rule"
+              title="Стабильный идентификатор правила для canonical_name и ссылок."
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Team code</Text>
+            <Text className="muted">{requiredLabel('Team code')}</Text>
             <Input
               value={teamCode}
               onChange={(event) => setTeamCode(event.target.value)}
               placeholder="platform-team"
+              title="Код команды-владельца правила."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Platform</Text>
+            <Text className="muted">{requiredLabel('Platform')}</Text>
             <Select
               value={platformCode || undefined}
               onChange={setPlatformCode}
               options={platformOptions}
               placeholder="Select platform"
+              title="Платформа применения правила: FRONT, BACK или DATA."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -695,6 +702,7 @@ export default function RuleEditor() {
               value={tags}
               onChange={(nextTags) => setTags(nextTags)}
               placeholder="Add tags"
+              title="Теги для поиска и фильтрации."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -706,6 +714,7 @@ export default function RuleEditor() {
               onChange={setRuleKind}
               options={ruleKindOptions}
               placeholder="Select rule kind"
+              title="Категория правила (архитектура, безопасность и т.п.)."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -717,6 +726,7 @@ export default function RuleEditor() {
               onChange={setScope}
               options={scopeOptions}
               placeholder="Select scope"
+              title="Область действия правила: global или project."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -728,6 +738,7 @@ export default function RuleEditor() {
               onChange={setEnvironment}
               options={environmentOptions}
               placeholder="Select environment"
+              title="Среда использования версии: dev или prod."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -739,6 +750,7 @@ export default function RuleEditor() {
               onChange={setVisibility}
               options={visibilityOptions}
               placeholder="Select visibility"
+              title="Видимость версии внутри платформы."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -750,6 +762,7 @@ export default function RuleEditor() {
               onChange={setLifecycleStatus}
               options={lifecycleOptions}
               placeholder="Select lifecycle status"
+              title="Состояние жизненного цикла: active/deprecated/retired."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />

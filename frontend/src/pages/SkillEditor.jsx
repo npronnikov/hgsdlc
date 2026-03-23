@@ -40,8 +40,8 @@ const codingAgentOptions = [
   { value: 'cursor', label: 'cursor' },
 ];
 const platformOptions = [
-  { value: 'UFS', label: 'UFS' },
-  { value: 'PPRB', label: 'PPRB' },
+  { value: 'FRONT', label: 'FRONT' },
+  { value: 'BACK', label: 'BACK' },
   { value: 'DATA', label: 'DATA' },
 ];
 const environmentOptions = [
@@ -136,6 +136,7 @@ const getDraftForMajor = (versions, major) => (
     return parsed.valid && parsed.major === major;
   })
 );
+const requiredLabel = (label) => `${label} *`;
 
 export default function SkillEditor() {
   const { isDark } = useThemeMode();
@@ -157,7 +158,7 @@ export default function SkillEditor() {
   const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [teamCode, setTeamCode] = useState('');
-  const [platformCode, setPlatformCode] = useState('UFS');
+  const [platformCode, setPlatformCode] = useState('FRONT');
   const [tags, setTags] = useState([]);
   const [tagOptions, setTagOptions] = useState([]);
   const [skillKind, setSkillKind] = useState('');
@@ -187,7 +188,7 @@ export default function SkillEditor() {
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
       setTeamCode(data.team_code || '');
-      setPlatformCode(data.platform_code || 'UFS');
+      setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
       setEnvironment(data.environment || 'dev');
@@ -387,7 +388,7 @@ export default function SkillEditor() {
     setSkillId('');
     setCodingAgent('');
     setTeamCode('');
-    setPlatformCode('UFS');
+      setPlatformCode('FRONT');
     setTags([]);
     setSkillKind('');
     setEnvironment('dev');
@@ -635,64 +636,70 @@ export default function SkillEditor() {
             )}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Text className="muted">Coding agent</Text>
+            <Text className="muted">{requiredLabel('Coding agent')}</Text>
             <Select
               value={codingAgent || undefined}
               onChange={handleCodingAgentChange}
               options={codingAgentOptions}
               placeholder="Select coding agent"
+              title="Для какого coding-agent будет выполняться skill."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Name</Text>
+            <Text className="muted">{requiredLabel('Name')}</Text>
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Update requirements"
+              title="Короткое отображаемое имя skill в каталоге."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">ID Skill</Text>
+            <Text className="muted">{requiredLabel('ID Skill')}</Text>
             <Input
               value={skillId}
               onChange={(event) => setSkillId(event.target.value)}
               placeholder="update-requirements"
+              title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedSkillId}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Description</Text>
+            <Text className="muted">{requiredLabel('Description')}</Text>
             <Input.TextArea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
               placeholder="Brief description of the Skill purpose"
+              title="Краткое описание назначения skill для поиска и карточки."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Team code</Text>
+            <Text className="muted">{requiredLabel('Team code')}</Text>
             <Input
               value={teamCode}
               onChange={(event) => setTeamCode(event.target.value)}
               placeholder="platform-team"
+              title="Код команды-владельца skill."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
           <div style={{ marginTop: 12 }}>
-            <Text className="muted">Platform</Text>
+            <Text className="muted">{requiredLabel('Platform')}</Text>
             <Select
               value={platformCode || undefined}
               onChange={setPlatformCode}
               options={platformOptions}
               placeholder="Select platform"
+              title="Платформа применения skill: FRONT, BACK или DATA."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -705,6 +712,7 @@ export default function SkillEditor() {
               onChange={(nextTags) => setTags(nextTags)}
               options={tagOptions}
               placeholder="Add tags"
+              title="Теги для фильтрации и поиска."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -716,6 +724,7 @@ export default function SkillEditor() {
               onChange={setSkillKind}
               options={skillKindOptions}
               placeholder="Select skill kind"
+              title="Тип skill (analysis/generation/refactor/qa/ops)."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -727,6 +736,7 @@ export default function SkillEditor() {
               onChange={setEnvironment}
               options={environmentOptions}
               placeholder="Select environment"
+              title="Среда, для которой предназначена версия: dev или prod."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -738,6 +748,7 @@ export default function SkillEditor() {
               onChange={setVisibility}
               options={visibilityOptions}
               placeholder="Select visibility"
+              title="Видимость версии внутри платформы."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -749,6 +760,7 @@ export default function SkillEditor() {
               onChange={setLifecycleStatus}
               options={lifecycleOptions}
               placeholder="Select lifecycle status"
+              title="Состояние жизненного цикла версии: active/deprecated/retired."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />

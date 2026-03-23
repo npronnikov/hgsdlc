@@ -10,17 +10,32 @@ import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
+import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
+import ru.hgd.sdlc.flow.domain.FlowContentSource;
+import ru.hgd.sdlc.flow.domain.FlowEnvironment;
+import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
+import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
 import ru.hgd.sdlc.project.domain.ProjectStatus;
 import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
+import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
+import ru.hgd.sdlc.rule.domain.RuleContentSource;
+import ru.hgd.sdlc.rule.domain.RuleEnvironment;
+import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.rule.domain.RuleVisibility;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
+import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
+import ru.hgd.sdlc.skill.domain.SkillContentSource;
+import ru.hgd.sdlc.skill.domain.SkillEnvironment;
+import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
+import ru.hgd.sdlc.skill.domain.SkillVisibility;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Component
@@ -366,6 +381,7 @@ nodes:
         }
         String canonicalName = ruleId + "@" + version;
         RuleVersion entity = new RuleVersion();
+        Instant now = Instant.now();
         entity.setId(deterministicId("rule", ruleId, version));
         entity.setRuleId(ruleId);
         entity.setVersion(version);
@@ -376,8 +392,23 @@ nodes:
         entity.setCodingAgent(provider);
         entity.setRuleMarkdown(markdown.trim());
         entity.setChecksum(status == RuleStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);
+        entity.setTeamCode("platform-architecture");
+        entity.setPlatformCode("BACK");
+        entity.setTags(List.of("architecture", "docs", "java"));
+        entity.setRuleKind("architecture");
+        entity.setScope("project");
+        entity.setEnvironment(RuleEnvironment.PROD);
+        entity.setApprovalStatus(RuleApprovalStatus.PUBLISHED);
+        entity.setApprovedBy("seed-approver");
+        entity.setApprovedAt(now);
+        entity.setPublishedAt(now);
+        entity.setSourceRef("0000000000000000000000000000000000000001");
+        entity.setSourcePath("rules/" + ruleId + "/" + version);
+        entity.setContentSource(RuleContentSource.GIT);
+        entity.setVisibility(RuleVisibility.INTERNAL);
+        entity.setLifecycleStatus(RuleLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
         entity.setResourceVersion(0L);
         ruleRepository.save(entity);
     }
@@ -396,6 +427,7 @@ nodes:
         }
         String canonicalName = skillId + "@" + version;
         SkillVersion entity = new SkillVersion();
+        Instant now = Instant.now();
         entity.setId(deterministicId("skill", skillId, version));
         entity.setSkillId(skillId);
         entity.setVersion(version);
@@ -406,8 +438,22 @@ nodes:
         entity.setCodingAgent(provider);
         entity.setSkillMarkdown(markdown.trim());
         entity.setChecksum(status == SkillStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);
+        entity.setTeamCode("platform-runtime");
+        entity.setPlatformCode("FRONT");
+        entity.setTags(List.of("analysis", "architecture", "seed"));
+        entity.setSkillKind("analysis");
+        entity.setEnvironment(SkillEnvironment.DEV);
+        entity.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
+        entity.setApprovedBy("seed-approver");
+        entity.setApprovedAt(now);
+        entity.setPublishedAt(now);
+        entity.setSourceRef("0000000000000000000000000000000000000002");
+        entity.setSourcePath("skills/" + skillId + "/" + version);
+        entity.setContentSource(SkillContentSource.GIT);
+        entity.setVisibility(SkillVisibility.INTERNAL);
+        entity.setLifecycleStatus(SkillLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
         entity.setResourceVersion(0L);
         skillRepository.save(entity);
     }
@@ -428,6 +474,7 @@ nodes:
         }
         String canonicalName = flowId + "@" + version;
         FlowVersion entity = new FlowVersion();
+        Instant now = Instant.now();
         entity.setId(deterministicId("flow", flowId, version));
         entity.setFlowId(flowId);
         entity.setVersion(version);
@@ -440,8 +487,23 @@ nodes:
         entity.setCodingAgent(codingAgent);
         entity.setFlowYaml(flowYaml.trim());
         entity.setChecksum(status == FlowStatus.PUBLISHED ? ChecksumUtil.sha256(flowYaml) : null);
+        entity.setTeamCode("platform-runtime");
+        entity.setPlatformCode("DATA");
+        entity.setTags(List.of("architecture", "orchestration", "seed"));
+        entity.setFlowKind("orchestration");
+        entity.setRiskLevel("medium");
+        entity.setEnvironment(FlowEnvironment.PROD);
+        entity.setApprovalStatus(FlowApprovalStatus.PUBLISHED);
+        entity.setApprovedBy("seed-approver");
+        entity.setApprovedAt(now);
+        entity.setPublishedAt(now);
+        entity.setSourceRef("0000000000000000000000000000000000000003");
+        entity.setSourcePath("flows/" + flowId + "/" + version);
+        entity.setContentSource(FlowContentSource.GIT);
+        entity.setVisibility(FlowVisibility.INTERNAL);
+        entity.setLifecycleStatus(FlowLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
         entity.setResourceVersion(0L);
         flowRepository.save(entity);
     }

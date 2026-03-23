@@ -170,8 +170,8 @@ function FlowNode({ data, selected }) {
 
 const nodeTypes = { flowNode: FlowNode };
 const platformOptions = [
-  { value: 'UFS', label: 'UFS' },
-  { value: 'PPRB', label: 'PPRB' },
+  { value: 'FRONT', label: 'FRONT' },
+  { value: 'BACK', label: 'BACK' },
   { value: 'DATA', label: 'DATA' },
 ];
 const environmentOptions = [
@@ -200,6 +200,7 @@ const riskLevelOptions = [
   { value: 'high', label: 'high' },
   { value: 'critical', label: 'critical' },
 ];
+const requiredLabel = (label) => `${label} *`;
 
 const emptyFlow = {
   title: '',
@@ -209,7 +210,7 @@ const emptyFlow = {
   codingAgent: '',
   ruleRefs: [],
   teamCode: '',
-  platformCode: 'UFS',
+  platformCode: 'FRONT',
   tags: [],
   flowKind: '',
   riskLevel: '',
@@ -962,7 +963,7 @@ export default function FlowEditor() {
         codingAgent: data.coding_agent || prev.codingAgent,
         ruleRefs: data.rule_refs || [],
         teamCode: data.team_code || '',
-        platformCode: data.platform_code || 'UFS',
+        platformCode: data.platform_code || 'FRONT',
         tags: data.tags || [],
         flowKind: data.flow_kind || '',
         riskLevel: data.risk_level || '',
@@ -1005,7 +1006,7 @@ export default function FlowEditor() {
         codingAgent: data.coding_agent || prev.codingAgent,
         ruleRefs: data.rule_refs || [],
         teamCode: data.team_code || '',
-        platformCode: data.platform_code || 'UFS',
+        platformCode: data.platform_code || 'FRONT',
         tags: data.tags || [],
         flowKind: data.flow_kind || '',
         riskLevel: data.risk_level || '',
@@ -1543,7 +1544,7 @@ export default function FlowEditor() {
               </div>
               <div className="form-stack">
               <div>
-                <Text className="muted">Coding agent</Text>
+                <Text className="muted">{requiredLabel('Coding agent')}</Text>
                 <div className="field-control">
                   <Select
                     value={flowMeta.codingAgent}
@@ -1555,26 +1556,29 @@ export default function FlowEditor() {
                       { value: 'cursor', label: 'cursor' },
                     ]}
                     placeholder="Select coding agent"
+                    title="Для какого coding-agent выполняется flow."
                   />
                 </div>
               </div>
               <div>
-                <Text className="muted">Name</Text>
+                <Text className="muted">{requiredLabel('Name')}</Text>
                 <div className="field-control">
                   <Input
                     value={flowMeta.title}
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ title: event.target.value })}
+                    title="Короткое отображаемое имя flow."
                   />
                 </div>
               </div>
               <div>
-                <Text className="muted">ID Flow</Text>
+                <Text className="muted">{requiredLabel('ID Flow')}</Text>
                 <div className="field-control">
                   <Input
                     value={flowMeta.flowId}
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ flowId: event.target.value })}
+                    title="Стабильный идентификатор flow для canonical_name и ссылок."
                   />
                 </div>
               </div>
@@ -1586,21 +1590,23 @@ export default function FlowEditor() {
                     value={flowMeta.description}
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ description: event.target.value })}
+                    title="Краткое описание сценария flow и его назначения."
                   />
                 </div>
               </div>
               <div>
-                <Text className="muted">Team code</Text>
+                <Text className="muted">{requiredLabel('Team code')}</Text>
                 <div className="field-control">
                   <Input
                     value={flowMeta.teamCode}
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ teamCode: event.target.value })}
+                    title="Код команды-владельца flow."
                   />
                 </div>
               </div>
               <div>
-                <Text className="muted">Platform</Text>
+                <Text className="muted">{requiredLabel('Platform')}</Text>
                 <div className="field-control">
                   <Select
                     value={flowMeta.platformCode || undefined}
@@ -1608,6 +1614,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ platformCode: value })}
                     options={platformOptions}
                     placeholder="Select platform"
+                    title="Платформа применения flow: FRONT, BACK или DATA."
                   />
                 </div>
               </div>
@@ -1620,6 +1627,7 @@ export default function FlowEditor() {
                     disabled={isReadOnly}
                     onChange={(value) => updateFlowMeta({ tags: value })}
                     placeholder="Add tags"
+                    title="Теги для фильтрации и поиска flow."
                   />
                 </div>
               </div>
@@ -1632,6 +1640,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ flowKind: value })}
                     options={flowKindOptions}
                     placeholder="Select flow kind"
+                    title="Тип flow (orchestration/governance/analysis/delivery)."
                   />
                 </div>
               </div>
@@ -1644,6 +1653,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ riskLevel: value })}
                     options={riskLevelOptions}
                     placeholder="Select risk level"
+                    title="Уровень риска исполнения flow."
                   />
                 </div>
               </div>
@@ -1656,6 +1666,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ environment: value })}
                     options={environmentOptions}
                     placeholder="Select environment"
+                    title="Среда использования версии: dev или prod."
                   />
                 </div>
               </div>
@@ -1668,6 +1679,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ visibility: value })}
                     options={visibilityOptions}
                     placeholder="Select visibility"
+                    title="Видимость версии flow внутри платформы."
                   />
                 </div>
               </div>
@@ -1680,6 +1692,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ lifecycleStatus: value })}
                     options={lifecycleOptions}
                     placeholder="Select lifecycle status"
+                    title="Состояние жизненного цикла версии."
                   />
                 </div>
               </div>
@@ -1696,13 +1709,14 @@ export default function FlowEditor() {
                 </div>
               )}
               <div>
-                <Text className="muted">Start node</Text>
+                <Text className="muted">{requiredLabel('Start node')}</Text>
                 <div className="field-control">
                   <Select
                     value={flowMeta.startNodeId}
                     disabled={isReadOnly}
                     onChange={handleStartNodeChange}
                     options={nodes.map((node) => ({ value: node.id, label: node.id }))}
+                    title="Узел, с которого начинается исполнение flow."
                   />
                 </div>
               </div>
@@ -1790,11 +1804,12 @@ export default function FlowEditor() {
               </div>
               <div className="form-stack">
                 <div>
-                  <Text className="muted">Node ID</Text>
+                  <Text className="muted">{requiredLabel('Node ID')}</Text>
                   <div className="field-control">
                     <Input
                       value={nodeIdDraft}
                       disabled={!canEditNodeId}
+                      title="Уникальный идентификатор узла внутри flow."
                       onChange={(event) => {
                         if (!canEditNodeId) {
                           return;
@@ -1817,11 +1832,12 @@ export default function FlowEditor() {
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Name</Text>
+                  <Text className="muted">{requiredLabel('Name')}</Text>
                   <div className="field-control">
                     <Input
                       value={selectedNode.data.title}
                       disabled={isReadOnly}
+                      title="Короткое отображаемое имя узла."
                       onChange={(event) => updateSelectedNode({ title: event.target.value })}
                     />
                   </div>
@@ -1833,16 +1849,18 @@ export default function FlowEditor() {
                       rows={2}
                       value={selectedNode.data.description}
                       disabled={isReadOnly}
+                      title="Описание назначения узла."
                       onChange={(event) => updateSelectedNode({ description: event.target.value })}
                     />
                   </div>
                 </div>
                 <div>
-                  <Text className="muted">Node type</Text>
+                  <Text className="muted">{requiredLabel('Node type')}</Text>
                   <div className="field-control">
                     <Select
                       value={selectedNode.data.nodeKind || selectedNode.data.type}
                       disabled={isReadOnly}
+                      title="Тип узла определяет его поведение в runtime."
                       onChange={(value) => {
                         updateSelectedNode({
                           nodeKind: value,
@@ -1886,6 +1904,7 @@ export default function FlowEditor() {
                                 value={entry.type}
                                 options={EXECUTION_CONTEXT_TYPES}
                                 disabled={isReadOnly}
+                                title="Тип входного контекста узла."
                                 onChange={(value) => updateSelectedNodeList(
                                   'executionContext',
                                   index,
@@ -1907,6 +1926,7 @@ export default function FlowEditor() {
                                   value={entry.scope || 'run'}
                                   options={SCOPE_OPTIONS}
                                   disabled={isReadOnly}
+                                  title="Область поиска артефакта: run или project."
                                   onChange={(value) => updateSelectedNodeList('executionContext', index, {
                                     scope: value,
                                     node_id: value === 'project' ? undefined : entry.node_id,
@@ -1918,6 +1938,7 @@ export default function FlowEditor() {
                                     options={nodeIdOptions.filter((opt) => opt.value !== selectedNode.id)}
                                     placeholder="source-node"
                                     disabled={isReadOnly}
+                                    title="Узел-источник артефакта в текущем run."
                                     allowClear
                                     popupClassName="node-source-select-dropdown"
                                     popupMatchSelectWidth
@@ -1930,6 +1951,7 @@ export default function FlowEditor() {
                                   value={entry.path || ''}
                                   placeholder="file name"
                                   disabled={isReadOnly}
+                                  title="Путь к входному артефакту."
                                   onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
                                 />
                               </div>
@@ -1960,6 +1982,7 @@ export default function FlowEditor() {
                           rows={3}
                           value={selectedNode.data.instruction}
                           disabled={isReadOnly}
+                          title="Инструкция для AI-узла."
                           onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                         />
                       </div>
@@ -2002,6 +2025,7 @@ export default function FlowEditor() {
                         rows={3}
                         value={selectedNode.data.instruction}
                         disabled={isReadOnly}
+                        title="Текст инструкции, которую увидит пользователь на шаге ввода."
                         onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                       />
                     </div>
@@ -2019,6 +2043,7 @@ export default function FlowEditor() {
                           value={selectedNode.data.instruction}
                           placeholder={'#!/usr/bin/env bash\nset -euo pipefail\necho "Hello"'}
                           disabled={isReadOnly}
+                          title="Команды, выполняемые command-узлом."
                           onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                         />
                       </div>
@@ -2100,12 +2125,14 @@ export default function FlowEditor() {
                               value={selectedNodeKind === 'human_input' ? 'run' : (entry.scope || 'run')}
                               options={SCOPE_OPTIONS}
                               disabled={isReadOnly || selectedNodeKind === 'human_input'}
+                              title="Область, где будет создан артефакт."
                               onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
                             />
                             <Input
                               value={entry.path || ''}
                               placeholder="path"
                               disabled={isReadOnly}
+                              title="Путь создаваемого артефакта."
                               onChange={(event) =>
                                 updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
                               }
@@ -2144,12 +2171,14 @@ export default function FlowEditor() {
                               value={entry.scope || 'project'}
                               options={SCOPE_OPTIONS}
                               disabled={isReadOnly}
+                              title="Область применения ожидаемого изменения."
                               onChange={(value) => updateSelectedNodeList('expectedMutations', index, { scope: value })}
                             />
                             <Input
                               value={entry.path || ''}
                               placeholder="path"
                               disabled={isReadOnly}
+                              title="Путь файла, который должен быть изменён."
                               onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
                             />
                             <Button
@@ -2188,6 +2217,7 @@ export default function FlowEditor() {
                                 allowClear
                                 options={nodeIdOptions}
                                 placeholder="Select node"
+                                title="Узел перехода при успешном завершении."
                                 onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
                               />
                             </div>
@@ -2201,6 +2231,7 @@ export default function FlowEditor() {
                                 allowClear
                                 options={nodeIdOptions}
                                 placeholder="Select node"
+                                title="Узел перехода при ошибке."
                                 onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
                               />
                             </div>
@@ -2217,6 +2248,7 @@ export default function FlowEditor() {
                               allowClear
                               options={nodeIdOptions}
                               placeholder="Select node"
+                              title="Узел перехода после пользовательского ввода."
                               onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
                             />
                           </div>
@@ -2233,6 +2265,7 @@ export default function FlowEditor() {
                                 allowClear
                                 options={nodeIdOptions}
                                 placeholder="Select node"
+                                title="Узел перехода после approve."
                                 onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
                               />
                             </div>
@@ -2263,6 +2296,7 @@ export default function FlowEditor() {
                                 allowClear
                                 options={nodeIdOptions}
                                 placeholder="Select node"
+                                title="Узел перехода при rework."
                                 onChange={(value) => {
                                   const current = selectedNode.data.onRework || DEFAULT_REWORK;
                                   updateSelectedNode({
