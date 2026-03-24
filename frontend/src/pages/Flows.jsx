@@ -1,11 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  AlertOutlined,
+  ApartmentOutlined,
+  ClusterOutlined,
+  EyeOutlined,
+  FilterOutlined,
+  NodeIndexOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const truncateCardName = (value, max = 26) => {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+};
 
 export default function Flows() {
   const navigate = useNavigate();
@@ -28,10 +43,18 @@ export default function Flows() {
         name: flow.title || flow.flow_id,
         flowId: flow.flow_id,
         description: flow.description || '',
+        codingAgent: flow.coding_agent,
+        teamCode: flow.team_code,
+        platformCode: flow.platform_code,
+        tags: flow.tags || [],
+        flowKind: flow.flow_kind,
+        riskLevel: flow.risk_level,
+        startNodeId: flow.start_node_id,
+        approvalStatus: flow.approval_status,
+        visibility: flow.visibility,
         status: flow.status,
         version: flow.version,
         canonical: flow.canonical_name,
-        savedBy: flow.saved_by || '',
       }));
       setFlows(mapped);
     } catch (err) {
@@ -98,22 +121,51 @@ export default function Flows() {
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
-                    <span className="resource-card-name">{flow.name}</span>
+                    <span className="resource-card-name" title={flow.name}>
+                      {truncateCardName(flow.name)}
+                    </span>
+                    <span className="resource-card-subtitle mono">{flow.flowId}@{flow.version}</span>
                   </div>
-                  <StatusTag value={flow.status} />
+                  <span className="resource-chip resource-chip-agent">
+                    <RobotOutlined />
+                    {flow.codingAgent || 'no agent'}
+                  </span>
                 </div>
                 {flow.description && (
                   <Text type="secondary" className="resource-card-description">
                     {flow.description}
                   </Text>
                 )}
-                <div className="resource-card-footer resource-card-footer-stack">
-                  <span className="resource-canonical mono">{flow.canonical}</span>
-                  <div className="resource-card-chips resource-card-chips-right">
-                    <span className="resource-chip">
-                      <UserOutlined />
-                      {flow.savedBy || 'unknown'}
-                    </span>
+                <div className="resource-meta-list">
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ApartmentOutlined />Type</span>
+                    <span className="resource-meta-value">{flow.flowKind || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><AlertOutlined />Risk</span>
+                    <span className="resource-meta-value">{flow.riskLevel || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ClusterOutlined />Platform</span>
+                    <span className="resource-meta-value">{flow.platformCode || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><NodeIndexOutlined />Start node</span>
+                    <span className="resource-meta-value">{flow.startNodeId || '—'}</span>
+                  </div>
+                </div>
+                {(flow.tags || []).length > 0 && (
+                  <div className="resource-tags-row">
+                    {(flow.tags || []).slice(0, 5).map((tag) => (
+                      <span key={`${flow.key}-${tag}`} className="resource-tag">#{tag}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="resource-card-footer">
+                  <div className="resource-card-chips">
+                    {flow.visibility && <span className="resource-chip"><EyeOutlined />{flow.visibility}</span>}
+                    {flow.approvalStatus && <span className="resource-chip"><SafetyCertificateOutlined />{flow.approvalStatus}</span>}
+                    {flow.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{flow.teamCode}</span>}
                   </div>
                 </div>
               </Card>
