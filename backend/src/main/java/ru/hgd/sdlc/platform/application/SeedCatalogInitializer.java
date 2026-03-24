@@ -402,9 +402,9 @@ nodes:
         entity.setApprovedBy("seed-approver");
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
-        entity.setSourceRef("0000000000000000000000000000000000000001");
-        entity.setSourcePath("rules/" + ruleId + "/" + version);
-        entity.setContentSource(RuleContentSource.GIT);
+        entity.setSourceRef(null);
+        entity.setSourcePath(null);
+        entity.setContentSource(RuleContentSource.DB);
         entity.setVisibility(RuleVisibility.INTERNAL);
         entity.setLifecycleStatus(RuleLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");
@@ -447,9 +447,9 @@ nodes:
         entity.setApprovedBy("seed-approver");
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
-        entity.setSourceRef("0000000000000000000000000000000000000002");
-        entity.setSourcePath("skills/" + skillId + "/" + version);
-        entity.setContentSource(SkillContentSource.GIT);
+        entity.setSourceRef(null);
+        entity.setSourcePath(null);
+        entity.setContentSource(SkillContentSource.DB);
         entity.setVisibility(SkillVisibility.INTERNAL);
         entity.setLifecycleStatus(SkillLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");
@@ -497,9 +497,9 @@ nodes:
         entity.setApprovedBy("seed-approver");
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
-        entity.setSourceRef("0000000000000000000000000000000000000003");
-        entity.setSourcePath("flows/" + flowId + "/" + version);
-        entity.setContentSource(FlowContentSource.GIT);
+        entity.setSourceRef(null);
+        entity.setSourcePath(null);
+        entity.setContentSource(FlowContentSource.DB);
         entity.setVisibility(FlowVisibility.INTERNAL);
         entity.setLifecycleStatus(FlowLifecycleStatus.ACTIVE);
         entity.setSavedBy("seed");

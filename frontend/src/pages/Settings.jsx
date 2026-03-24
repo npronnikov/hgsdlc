@@ -141,8 +141,8 @@ export default function Settings() {
   const handleRepair = async () => {
     if (repairMode === 'from_scratch') {
       Modal.confirm({
-        title: 'Rebuild from scratch?',
-        content: 'This will delete all local catalog index entries for rules, skills, and flows, then rebuild from repository.',
+        title: 'Warning: rebuild catalog from scratch?',
+        content: 'Catalog index entries (rules/skills/flows) will be deleted and rebuilt again from the git repository.',
         okText: 'Run from scratch',
         okButtonProps: { danger: true },
         onOk: () => runRepair('from_scratch'),

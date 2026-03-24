@@ -1,11 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  ApartmentOutlined,
+  ClusterOutlined,
+  EyeOutlined,
+  FilterOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const truncateCardName = (value, max = 26) => {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+};
 
 export default function Skills() {
   const [skills, setSkills] = useState([]);
@@ -35,12 +48,16 @@ export default function Skills() {
         skillId: skill.skill_id,
         description: skill.description || '',
         codingAgent: skill.coding_agent,
+        teamCode: skill.team_code,
         status: skill.status,
         approvalStatus: skill.approval_status,
         environment: skill.environment,
         platformCode: skill.platform_code,
         contentSource: skill.content_source,
         tags: skill.tags || [],
+        visibility: skill.visibility,
+        lifecycleStatus: skill.lifecycle_status,
+        skillKind: skill.skill_kind,
         version: skill.version,
         canonical: skill.canonical_name,
       }));
@@ -147,22 +164,49 @@ export default function Skills() {
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
-                    <span className="resource-card-name">{skill.name}</span>
+                    <span className="resource-card-name" title={skill.name}>
+                      {truncateCardName(skill.name)}
+                    </span>
+                    <span className="resource-card-subtitle mono">{skill.skillId}@{skill.version}</span>
                   </div>
-                  <StatusTag value={skill.status} />
+                  <span className="resource-chip resource-chip-agent">
+                    <RobotOutlined />
+                    {skill.codingAgent || 'no agent'}
+                  </span>
                 </div>
                 {skill.description && (
                   <Text type="secondary" className="resource-card-description">
                     {skill.description}
                   </Text>
                 )}
+                <div className="resource-meta-list">
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ApartmentOutlined />Type</span>
+                    <span className="resource-meta-value">{skill.skillKind || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ClusterOutlined />Platform</span>
+                    <span className="resource-meta-value">{skill.platformCode || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><EyeOutlined />Visibility</span>
+                    <span className="resource-meta-value">{skill.visibility || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><SafetyCertificateOutlined />Approval</span>
+                    <span className="resource-meta-value">{skill.approvalStatus || '—'}</span>
+                  </div>
+                </div>
+                {(skill.tags || []).length > 0 && (
+                  <div className="resource-tags-row">
+                    {(skill.tags || []).slice(0, 5).map((tag) => (
+                      <span key={`${skill.key}-${tag}`} className="resource-tag">#{tag}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="resource-card-footer">
-                  <span className="resource-canonical mono">{skill.canonical}</span>
                   <div className="resource-card-chips">
-                    <span className="resource-chip">{skill.codingAgent || 'no agent'}</span>
-                    {skill.environment && <span className="resource-chip">{skill.environment}</span>}
-                    {skill.platformCode && <span className="resource-chip">{skill.platformCode}</span>}
-                    {skill.approvalStatus && <span className="resource-chip">{skill.approvalStatus}</span>}
+                    {skill.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{skill.teamCode}</span>}
                   </div>
                 </div>
               </Card>

@@ -1,11 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  ApartmentOutlined,
+  BranchesOutlined,
+  ClusterOutlined,
+  EyeOutlined,
+  FilterOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const truncateCardName = (value, max = 26) => {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+};
 
 export default function Rules() {
   const [rules, setRules] = useState([]);
@@ -29,6 +43,16 @@ export default function Rules() {
         description: rule.description || '',
         ruleId: rule.rule_id,
         codingAgent: rule.coding_agent,
+        teamCode: rule.team_code,
+        platformCode: rule.platform_code,
+        tags: rule.tags || [],
+        ruleKind: rule.rule_kind,
+        scope: rule.scope,
+        environment: rule.environment,
+        approvalStatus: rule.approval_status,
+        contentSource: rule.content_source,
+        visibility: rule.visibility,
+        lifecycleStatus: rule.lifecycle_status,
         status: rule.status,
         version: rule.version,
         canonical: rule.canonical_name,
@@ -98,19 +122,50 @@ export default function Rules() {
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
-                    <span className="resource-card-name">{rule.name}</span>
+                    <span className="resource-card-name" title={rule.name}>
+                      {truncateCardName(rule.name)}
+                    </span>
+                    <span className="resource-card-subtitle mono">{rule.ruleId}@{rule.version}</span>
                   </div>
-                  <StatusTag value={rule.status} />
+                  <span className="resource-chip resource-chip-agent">
+                    <RobotOutlined />
+                    {rule.codingAgent || 'no agent'}
+                  </span>
                 </div>
                 {rule.description && (
                   <Text type="secondary" className="resource-card-description">
                     {rule.description}
                   </Text>
                 )}
+                <div className="resource-meta-list">
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ApartmentOutlined />Type</span>
+                    <span className="resource-meta-value">{rule.ruleKind || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><BranchesOutlined />Scope</span>
+                    <span className="resource-meta-value">{rule.scope || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><ClusterOutlined />Platform</span>
+                    <span className="resource-meta-value">{rule.platformCode || '—'}</span>
+                  </div>
+                  <div className="resource-meta-row">
+                    <span className="resource-meta-key"><EyeOutlined />Visibility</span>
+                    <span className="resource-meta-value">{rule.visibility || '—'}</span>
+                  </div>
+                </div>
+                {(rule.tags || []).length > 0 && (
+                  <div className="resource-tags-row">
+                    {(rule.tags || []).slice(0, 5).map((tag) => (
+                      <span key={`${rule.key}-${tag}`} className="resource-tag">#{tag}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="resource-card-footer">
-                  <span className="resource-canonical mono">{rule.canonical}</span>
                   <div className="resource-card-chips">
-                    <span className="resource-chip">{rule.codingAgent || 'no agent'}</span>
+                    {rule.approvalStatus && <span className="resource-chip"><SafetyCertificateOutlined />{rule.approvalStatus}</span>}
+                    {rule.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{rule.teamCode}</span>}
                   </div>
                 </div>
               </Card>
