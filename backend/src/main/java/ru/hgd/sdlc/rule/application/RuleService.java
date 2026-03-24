@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
@@ -67,6 +68,40 @@ public class RuleService {
             latestByRule.put(version.getRuleId(), published != null ? published : latestDraft.get(version.getRuleId()));
         }
         return new ArrayList<>(latestByRule.values());
+    }
+
+    @Transactional(readOnly = true)
+    public RuleCatalogPage queryLatestForCatalog(RuleCatalogQuery query) {
+        int effectiveLimit = clampLimit(query.limit());
+        InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
+        List<RuleVersion> rows = repository.queryLatestForCatalog(
+                normalizeFilter(query.search()),
+                normalizeFilter(query.codingAgent()),
+                normalizeFilter(query.status()),
+                normalizeFilter(query.teamCode()),
+                normalizeFilter(query.platformCode()),
+                normalizeFilter(query.ruleKind()),
+                normalizeFilter(query.scope()),
+                normalizeFilter(query.environment()),
+                normalizeFilter(query.approvalStatus()),
+                normalizeFilter(query.contentSource()),
+                normalizeFilter(query.visibility()),
+                normalizeFilter(query.lifecycleStatus()),
+                normalizeFilter(query.tag()),
+                normalizeFilter(query.version()),
+                query.hasDescription(),
+                parsedCursor == null ? null : parsedCursor.savedAt(),
+                parsedCursor == null ? null : parsedCursor.id(),
+                effectiveLimit + 1
+        );
+        boolean hasMore = rows.size() > effectiveLimit;
+        List<RuleVersion> page = hasMore ? rows.subList(0, effectiveLimit) : rows;
+        String nextCursor = null;
+        if (hasMore && !page.isEmpty()) {
+            RuleVersion last = page.get(page.size() - 1);
+            nextCursor = InstantUuidCursor.encode(last.getSavedAt(), last.getId());
+        }
+        return new RuleCatalogPage(page, nextCursor, hasMore);
     }
 
     @Transactional(readOnly = true)
@@ -332,6 +367,21 @@ public class RuleService {
         return user.getUsername();
     }
 
+    private int clampLimit(Integer requestedLimit) {
+        if (requestedLimit == null) {
+            return 24;
+        }
+        return Math.min(Math.max(requestedLimit, 1), 100);
+    }
+
+    private String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
     private RuleProvider parseCodingAgent(String codingAgent) {
         if (codingAgent == null || codingAgent.isBlank()) {
             return null;
@@ -454,5 +504,33 @@ public class RuleService {
     private String releaseVersion(String version) {
         int[] parts = parseVersion(version);
         return (parts[0] + 1) + ".0";
+    }
+
+    public record RuleCatalogQuery(
+            String cursor,
+            Integer limit,
+            String search,
+            String codingAgent,
+            String teamCode,
+            String platformCode,
+            String ruleKind,
+            String scope,
+            String environment,
+            String approvalStatus,
+            String contentSource,
+            String visibility,
+            String lifecycleStatus,
+            String tag,
+            String status,
+            String version,
+            Boolean hasDescription
+    ) {
+    }
+
+    public record RuleCatalogPage(
+            List<RuleVersion> items,
+            String nextCursor,
+            boolean hasMore
+    ) {
     }
 }

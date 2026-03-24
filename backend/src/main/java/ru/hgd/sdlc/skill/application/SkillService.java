@@ -15,6 +15,7 @@ import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
@@ -73,6 +74,38 @@ public class SkillService {
             latestBySkill.put(version.getSkillId(), published != null ? published : latestDraft.get(version.getSkillId()));
         }
         return new ArrayList<>(latestBySkill.values());
+    }
+
+    @Transactional(readOnly = true)
+    public SkillCatalogPage queryLatestForCatalog(SkillCatalogQuery query) {
+        int effectiveLimit = clampLimit(query.limit());
+        InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
+        List<SkillVersion> rows = repository.queryLatestForCatalog(
+                normalizeFilter(query.search()),
+                normalizeFilter(query.codingAgent()),
+                normalizeFilter(query.status()),
+                normalizeFilter(query.approvalStatus()),
+                normalizeFilter(query.teamCode()),
+                normalizeFilter(query.environment()),
+                normalizeFilter(query.platformCode()),
+                normalizeFilter(query.skillKind()),
+                normalizeFilter(query.contentSource()),
+                normalizeFilter(query.visibility()),
+                normalizeFilter(query.version()),
+                normalizeFilter(query.tag()),
+                query.hasDescription(),
+                parsedCursor == null ? null : parsedCursor.savedAt(),
+                parsedCursor == null ? null : parsedCursor.id(),
+                effectiveLimit + 1
+        );
+        boolean hasMore = rows.size() > effectiveLimit;
+        List<SkillVersion> page = hasMore ? rows.subList(0, effectiveLimit) : rows;
+        String nextCursor = null;
+        if (hasMore && !page.isEmpty()) {
+            SkillVersion last = page.get(page.size() - 1);
+            nextCursor = InstantUuidCursor.encode(last.getSavedAt(), last.getId());
+        }
+        return new SkillCatalogPage(page, nextCursor, hasMore);
     }
 
     @Transactional(readOnly = true)
@@ -413,6 +446,21 @@ public class SkillService {
         return user.getUsername();
     }
 
+    private int clampLimit(Integer requestedLimit) {
+        if (requestedLimit == null) {
+            return 24;
+        }
+        return Math.min(Math.max(requestedLimit, 1), 100);
+    }
+
+    private String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
     private SkillProvider parseCodingAgent(String codingAgent) {
         if (codingAgent == null || codingAgent.isBlank()) {
             return null;
@@ -564,6 +612,32 @@ public class SkillService {
     private String nextMinor(String version) {
         int[] parts = parseVersion(version);
         return parts[0] + "." + (parts[1] + 1);
+    }
+
+    public record SkillCatalogQuery(
+            String cursor,
+            Integer limit,
+            String search,
+            String codingAgent,
+            String status,
+            String approvalStatus,
+            String teamCode,
+            String environment,
+            String platformCode,
+            String skillKind,
+            String contentSource,
+            String visibility,
+            String version,
+            String tag,
+            Boolean hasDescription
+    ) {
+    }
+
+    public record SkillCatalogPage(
+            List<SkillVersion> items,
+            String nextCursor,
+            boolean hasMore
+    ) {
     }
 
 }

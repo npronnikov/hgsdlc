@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.api.FlowSaveRequest;
@@ -76,6 +77,29 @@ public class FlowService {
             latestByFlow.put(version.getFlowId(), published != null ? published : latestDraft.get(version.getFlowId()));
         }
         return new ArrayList<>(latestByFlow.values());
+    }
+
+    @Transactional(readOnly = true)
+    public FlowCatalogPage queryLatestForCatalog(FlowCatalogQuery query) {
+        int effectiveLimit = clampLimit(query.limit());
+        InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
+        List<FlowVersion> rows = repository.queryLatestForCatalog(
+                normalizeFilter(query.search()),
+                normalizeFilter(query.status()),
+                normalizeFilter(query.version()),
+                query.hasDescription(),
+                parsedCursor == null ? null : parsedCursor.savedAt(),
+                parsedCursor == null ? null : parsedCursor.id(),
+                effectiveLimit + 1
+        );
+        boolean hasMore = rows.size() > effectiveLimit;
+        List<FlowVersion> page = hasMore ? rows.subList(0, effectiveLimit) : rows;
+        String nextCursor = null;
+        if (hasMore && !page.isEmpty()) {
+            FlowVersion last = page.get(page.size() - 1);
+            nextCursor = InstantUuidCursor.encode(last.getSavedAt(), last.getId());
+        }
+        return new FlowCatalogPage(page, nextCursor, hasMore);
     }
 
     @Transactional(readOnly = true)
@@ -478,6 +502,21 @@ public class FlowService {
         return user.getUsername();
     }
 
+    private int clampLimit(Integer requestedLimit) {
+        if (requestedLimit == null) {
+            return 24;
+        }
+        return Math.min(Math.max(requestedLimit, 1), 100);
+    }
+
+    private String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
     private int[] parseVersion(String version) {
         if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
             throw new ValidationException("Invalid version: " + version);
@@ -502,5 +541,22 @@ public class FlowService {
     private String releaseVersion(String version) {
         int[] parts = parseVersion(version);
         return (parts[0] + 1) + ".0";
+    }
+
+    public record FlowCatalogQuery(
+            String cursor,
+            Integer limit,
+            String search,
+            String status,
+            String version,
+            Boolean hasDescription
+    ) {
+    }
+
+    public record FlowCatalogPage(
+            List<FlowVersion> items,
+            String nextCursor,
+            boolean hasMore
+    ) {
     }
 }

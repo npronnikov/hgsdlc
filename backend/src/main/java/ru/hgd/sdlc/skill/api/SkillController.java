@@ -1,5 +1,6 @@
 package ru.hgd.sdlc.skill.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
@@ -35,6 +37,50 @@ public class SkillController {
     @GetMapping
     public List<SkillSummaryResponse> list() {
         return skillService.listLatest().stream().map(SkillSummaryResponse::from).toList();
+    }
+
+    @GetMapping("/query")
+    public SkillCatalogQueryResponse query(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String codingAgent,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String approvalStatus,
+            @RequestParam(required = false) String teamCode,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String platformCode,
+            @RequestParam(required = false) String skillKind,
+            @RequestParam(required = false) String contentSource,
+            @RequestParam(required = false) String visibility,
+            @RequestParam(required = false) String version,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Boolean hasDescription
+    ) {
+        SkillService.SkillCatalogPage page = skillService.queryLatestForCatalog(
+                new SkillService.SkillCatalogQuery(
+                        cursor,
+                        limit,
+                        search,
+                        codingAgent,
+                        status,
+                        approvalStatus,
+                        teamCode,
+                        environment,
+                        platformCode,
+                        skillKind,
+                        contentSource,
+                        visibility,
+                        version,
+                        tag,
+                        hasDescription
+                )
+        );
+        return new SkillCatalogQueryResponse(
+                page.items().stream().map(SkillSummaryResponse::from).toList(),
+                page.nextCursor(),
+                page.hasMore()
+        );
     }
 
     @GetMapping("/tags")
@@ -115,5 +161,12 @@ public class SkillController {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<String> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    public record SkillCatalogQueryResponse(
+            @JsonProperty("items") List<SkillSummaryResponse> items,
+            @JsonProperty("next_cursor") String nextCursor,
+            @JsonProperty("has_more") boolean hasMore
+    ) {
     }
 }

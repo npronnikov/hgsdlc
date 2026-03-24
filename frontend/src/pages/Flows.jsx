@@ -17,6 +17,8 @@ import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const PAGE_LIMIT = 24;
+
 const truncateCardName = (value, max = 26) => {
   if (!value) return '';
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -26,6 +28,9 @@ export default function Flows() {
   const navigate = useNavigate();
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
@@ -34,11 +39,23 @@ export default function Flows() {
     hasDescription: null,
   });
 
-  const loadFlows = async () => {
-    setLoading(true);
+  const loadFlows = async ({ cursor = null, append = false } = {}) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const data = await apiRequest('/flows');
-      const mapped = data.map((flow) => ({
+      const params = new URLSearchParams();
+      params.set('limit', String(PAGE_LIMIT));
+      if (cursor) params.set('cursor', cursor);
+      if (filters.search.trim()) params.set('search', filters.search.trim());
+      if (filters.status) params.set('status', filters.status);
+      if (filters.version.trim()) params.set('version', filters.version.trim());
+      if (filters.hasDescription !== null) params.set('hasDescription', String(filters.hasDescription));
+
+      const data = await apiRequest(`/flows/query?${params.toString()}`);
+      const mapped = (data.items || []).map((flow) => ({
         key: flow.flow_id,
         name: flow.title || flow.flow_id,
         flowId: flow.flow_id,
@@ -49,54 +66,39 @@ export default function Flows() {
         tags: flow.tags || [],
         flowKind: flow.flow_kind,
         riskLevel: flow.risk_level,
-        startNodeId: flow.start_node_id,
+        nodeCount: flow.node_count,
         approvalStatus: flow.approval_status,
         visibility: flow.visibility,
         status: flow.status,
         version: flow.version,
         canonical: flow.canonical_name,
       }));
-      setFlows(mapped);
+      if (append) {
+        setFlows((prev) => [...prev, ...mapped]);
+      } else {
+        setFlows(mapped);
+      }
+      setNextCursor(data.next_cursor || null);
+      setHasMore(Boolean(data.has_more));
     } catch (err) {
       message.error(err.message || 'Failed to load Flows');
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadFlows();
-  }, []);
+    const handle = setTimeout(() => {
+      loadFlows({ cursor: null, append: false });
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [filters.search, filters.status, filters.version, filters.hasDescription]);
 
-  const statuses = useMemo(
-    () => Array.from(new Set(flows.map((flow) => flow.status).filter(Boolean))),
-    [flows]
-  );
-
-  const filteredFlows = useMemo(() => {
-    const search = filters.search.trim().toLowerCase();
-    const version = filters.version.trim().toLowerCase();
-    return flows.filter((flow) => {
-      if (filters.status && flow.status !== filters.status) {
-        return false;
-      }
-      if (filters.hasDescription === true && !flow.description) {
-        return false;
-      }
-      if (filters.hasDescription === false && flow.description) {
-        return false;
-      }
-      if (version && (flow.version || '').toLowerCase() !== version) {
-        return false;
-      }
-      if (!search) {
-        return true;
-      }
-      return [flow.name, flow.flowId, flow.canonical, flow.description]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(search));
-    });
-  }, [flows, filters]);
+  const statuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.status).filter(Boolean))), [flows]);
 
   return (
     <div className="cards-page">
@@ -112,7 +114,7 @@ export default function Flows() {
           <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
-            {filteredFlows.map((flow) => (
+            {flows.map((flow) => (
               <Card
                 key={flow.key}
                 className={`resource-card flow-card status-${(flow.status || 'unknown').toLowerCase()}`}
@@ -121,38 +123,17 @@ export default function Flows() {
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
-                    <span className="resource-card-name" title={flow.name}>
-                      {truncateCardName(flow.name)}
-                    </span>
+                    <span className="resource-card-name" title={flow.name}>{truncateCardName(flow.name)}</span>
                     <span className="resource-card-subtitle mono">{flow.flowId}@{flow.version}</span>
                   </div>
-                  <span className="resource-chip resource-chip-agent">
-                    <RobotOutlined />
-                    {flow.codingAgent || 'no agent'}
-                  </span>
+                  <span className="resource-chip resource-chip-agent"><RobotOutlined />{flow.codingAgent || 'no agent'}</span>
                 </div>
-                {flow.description && (
-                  <Text type="secondary" className="resource-card-description">
-                    {flow.description}
-                  </Text>
-                )}
+                {flow.description && <Text type="secondary" className="resource-card-description">{flow.description}</Text>}
                 <div className="resource-meta-list">
-                  <div className="resource-meta-row">
-                    <span className="resource-meta-key"><ApartmentOutlined />Type</span>
-                    <span className="resource-meta-value">{flow.flowKind || '—'}</span>
-                  </div>
-                  <div className="resource-meta-row">
-                    <span className="resource-meta-key"><AlertOutlined />Risk</span>
-                    <span className="resource-meta-value">{flow.riskLevel || '—'}</span>
-                  </div>
-                  <div className="resource-meta-row">
-                    <span className="resource-meta-key"><ClusterOutlined />Platform</span>
-                    <span className="resource-meta-value">{flow.platformCode || '—'}</span>
-                  </div>
-                  <div className="resource-meta-row">
-                    <span className="resource-meta-key"><NodeIndexOutlined />Start node</span>
-                    <span className="resource-meta-value">{flow.startNodeId || '—'}</span>
-                  </div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><ApartmentOutlined />Type</span><span className="resource-meta-value">{flow.flowKind || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><AlertOutlined />Risk</span><span className="resource-meta-value">{flow.riskLevel || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{flow.platformCode || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><NodeIndexOutlined />Node Count</span><span className="resource-meta-value">{flow.nodeCount ?? '—'}</span></div>
                 </div>
                 {(flow.tags || []).length > 0 && (
                   <div className="resource-tags-row">
@@ -170,9 +151,19 @@ export default function Flows() {
                 </div>
               </Card>
             ))}
-            {filteredFlows.length === 0 && (
-              <div className="card-muted">Flows not found.</div>
-            )}
+            {flows.length === 0 && <div className="card-muted">Flows not found.</div>}
+          </div>
+        )}
+        {!loading && flows.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <Button
+              type="default"
+              onClick={() => loadFlows({ cursor: nextCursor, append: true })}
+              loading={loadingMore}
+              disabled={!hasMore || loadingMore}
+            >
+              {hasMore ? 'Load more' : 'No more flows'}
+            </Button>
           </div>
         )}
       </div>

@@ -3,7 +3,9 @@ package ru.hgd.sdlc.flow.infrastructure;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.query.Param;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 
@@ -18,4 +20,46 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
     List<FlowVersion> findByFlowIdOrderBySavedAtDesc(String flowId);
 
     List<FlowVersion> findAllByOrderBySavedAtDesc();
+
+    @Query(value = """
+            WITH ranked AS (
+                SELECT f.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY f.flow_id
+                           ORDER BY CASE WHEN f.status = 'PUBLISHED' THEN 0 ELSE 1 END, f.saved_at DESC, f.id DESC
+                       ) AS rn
+                FROM flows f
+            ),
+            latest AS (
+                SELECT *
+                FROM ranked
+                WHERE rn = 1
+            )
+            SELECT l.*
+            FROM latest l
+            WHERE (:search IS NULL OR LOWER(COALESCE(l.title, '') || ' ' || COALESCE(l.flow_id, '') || ' '
+                || COALESCE(l.canonical_name, '') || ' ' || COALESCE(l.description, '')) LIKE CONCAT('%', LOWER(:search), '%'))
+              AND (:status IS NULL OR l.status = :status)
+              AND (:version IS NULL OR l.version = :version)
+              AND (
+                  :hasDescription IS NULL
+                  OR (:hasDescription = TRUE AND l.description IS NOT NULL AND BTRIM(l.description) <> '')
+                  OR (:hasDescription = FALSE AND (l.description IS NULL OR BTRIM(l.description) = ''))
+              )
+              AND (
+                  :cursorSavedAt IS NULL OR :cursorId IS NULL
+                  OR (l.saved_at, l.id) < (:cursorSavedAt, :cursorId)
+              )
+            ORDER BY l.saved_at DESC, l.id DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<FlowVersion> queryLatestForCatalog(
+            @Param("search") String search,
+            @Param("status") String status,
+            @Param("version") String version,
+            @Param("hasDescription") Boolean hasDescription,
+            @Param("cursorSavedAt") java.time.Instant cursorSavedAt,
+            @Param("cursorId") UUID cursorId,
+            @Param("limit") int limit
+    );
 }

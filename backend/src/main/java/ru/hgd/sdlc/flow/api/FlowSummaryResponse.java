@@ -10,6 +10,7 @@ public record FlowSummaryResponse(
         @JsonProperty("title") String title,
         @JsonProperty("description") String description,
         @JsonProperty("start_node_id") String startNodeId,
+        @JsonProperty("node_count") Integer nodeCount,
         @JsonProperty("rule_refs") List<String> ruleRefs,
         @JsonProperty("coding_agent") String codingAgent,
         @JsonProperty("team_code") String teamCode,
@@ -35,6 +36,35 @@ public record FlowSummaryResponse(
                 version.getTitle(),
                 version.getDescription(),
                 version.getStartNodeId(),
+                null,
+                version.getRuleRefs(),
+                version.getCodingAgent(),
+                version.getTeamCode(),
+                version.getPlatformCode(),
+                version.getTags(),
+                version.getFlowKind(),
+                version.getRiskLevel(),
+                version.getEnvironment() == null ? null : version.getEnvironment().name().toLowerCase(),
+                version.getApprovalStatus() == null ? null : version.getApprovalStatus().name().toLowerCase(),
+                version.getContentSource() == null ? null : version.getContentSource().name().toLowerCase(),
+                version.getVisibility() == null ? null : version.getVisibility().name().toLowerCase(),
+                version.getLifecycleStatus() == null ? null : version.getLifecycleStatus().name().toLowerCase(),
+                version.getVersion(),
+                version.getCanonicalName(),
+                version.getStatus().name().toLowerCase(),
+                version.getSavedBy(),
+                version.getSavedAt(),
+                version.getResourceVersion()
+        );
+    }
+
+    public static FlowSummaryResponse from(FlowVersion version, Integer nodeCount) {
+        return new FlowSummaryResponse(
+                version.getFlowId(),
+                version.getTitle(),
+                version.getDescription(),
+                version.getStartNodeId(),
+                nodeCount,
                 version.getRuleRefs(),
                 version.getCodingAgent(),
                 version.getTeamCode(),

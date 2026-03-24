@@ -1,5 +1,6 @@
 package ru.hgd.sdlc.flow.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
@@ -37,7 +39,33 @@ public class FlowController {
 
     @GetMapping
     public List<FlowSummaryResponse> list() {
-        return flowService.listLatest().stream().map(FlowSummaryResponse::from).toList();
+        return flowService.listLatest().stream().map(this::toFlowSummary).toList();
+    }
+
+    @GetMapping("/query")
+    public FlowCatalogQueryResponse query(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String version,
+            @RequestParam(required = false) Boolean hasDescription
+    ) {
+        FlowService.FlowCatalogPage page = flowService.queryLatestForCatalog(
+                new FlowService.FlowCatalogQuery(
+                        cursor,
+                        limit,
+                        search,
+                        status,
+                        version,
+                        hasDescription
+                )
+        );
+        return new FlowCatalogQueryResponse(
+                page.items().stream().map(this::toFlowSummary).toList(),
+                page.nextCursor(),
+                page.hasMore()
+        );
     }
 
     @GetMapping("/{flowId}")
@@ -98,5 +126,23 @@ public class FlowController {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<String> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    private FlowSummaryResponse toFlowSummary(ru.hgd.sdlc.flow.domain.FlowVersion version) {
+        Integer nodeCount = null;
+        try {
+            var model = flowYamlParser.parse(version.getFlowYaml());
+            nodeCount = model.getNodes() == null ? 0 : model.getNodes().size();
+        } catch (RuntimeException ignored) {
+            // Keep list endpoint resilient even if legacy flow_yaml cannot be parsed.
+        }
+        return FlowSummaryResponse.from(version, nodeCount);
+    }
+
+    public record FlowCatalogQueryResponse(
+            @JsonProperty("items") List<FlowSummaryResponse> items,
+            @JsonProperty("next_cursor") String nextCursor,
+            @JsonProperty("has_more") boolean hasMore
+    ) {
     }
 }

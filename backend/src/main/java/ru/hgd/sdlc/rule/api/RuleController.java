@@ -1,5 +1,6 @@
 package ru.hgd.sdlc.rule.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
@@ -35,6 +37,54 @@ public class RuleController {
     @GetMapping
     public List<RuleSummaryResponse> list() {
         return ruleService.listLatest().stream().map(RuleSummaryResponse::from).toList();
+    }
+
+    @GetMapping("/query")
+    public RuleCatalogQueryResponse query(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String codingAgent,
+            @RequestParam(required = false) String teamCode,
+            @RequestParam(required = false) String platformCode,
+            @RequestParam(required = false) String ruleKind,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String approvalStatus,
+            @RequestParam(required = false) String contentSource,
+            @RequestParam(required = false) String visibility,
+            @RequestParam(required = false) String lifecycleStatus,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String version,
+            @RequestParam(required = false) Boolean hasDescription
+    ) {
+        RuleService.RuleCatalogPage page = ruleService.queryLatestForCatalog(
+                new RuleService.RuleCatalogQuery(
+                        cursor,
+                        limit,
+                        search,
+                        codingAgent,
+                        teamCode,
+                        platformCode,
+                        ruleKind,
+                        scope,
+                        environment,
+                        approvalStatus,
+                        contentSource,
+                        visibility,
+                        lifecycleStatus,
+                        tag,
+                        status,
+                        version,
+                        hasDescription
+                )
+        );
+        return new RuleCatalogQueryResponse(
+                page.items().stream().map(RuleSummaryResponse::from).toList(),
+                page.nextCursor(),
+                page.hasMore()
+        );
     }
 
     @GetMapping("/{ruleId}")
@@ -87,5 +137,12 @@ public class RuleController {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<String> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    public record RuleCatalogQueryResponse(
+            @JsonProperty("items") List<RuleSummaryResponse> items,
+            @JsonProperty("next_cursor") String nextCursor,
+            @JsonProperty("has_more") boolean hasMore
+    ) {
     }
 }
