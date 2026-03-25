@@ -14,13 +14,22 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.publication.application.PublicationService;
+import ru.hgd.sdlc.publication.domain.PublicationStatus;
+import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.rule.api.RuleSaveRequest;
+import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
+import ru.hgd.sdlc.rule.domain.RuleContentSource;
+import ru.hgd.sdlc.rule.domain.RuleEnvironment;
+import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.rule.domain.RuleVisibility;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 
 @Service
@@ -31,14 +40,17 @@ public class RuleService {
     private final RuleVersionRepository repository;
     private final MarkdownFrontmatterParser frontmatterParser;
     private final RuleTemplateService templateService;
+    private final PublicationService publicationService;
 
     public RuleService(
             RuleVersionRepository repository,
-            RuleTemplateService templateService
+            RuleTemplateService templateService,
+            PublicationService publicationService
     ) {
         this.repository = repository;
         this.frontmatterParser = new MarkdownFrontmatterParser();
         this.templateService = templateService;
+        this.publicationService = publicationService;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +74,40 @@ public class RuleService {
             latestByRule.put(version.getRuleId(), published != null ? published : latestDraft.get(version.getRuleId()));
         }
         return new ArrayList<>(latestByRule.values());
+    }
+
+    @Transactional(readOnly = true)
+    public RuleCatalogPage queryLatestForCatalog(RuleCatalogQuery query) {
+        int effectiveLimit = clampLimit(query.limit());
+        InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
+        List<RuleVersion> rows = repository.queryLatestForCatalog(
+                normalizeFilter(query.search()),
+                normalizeEnumFilter(query.codingAgent()),
+                normalizeEnumFilter(query.status()),
+                normalizeFilter(query.teamCode()),
+                normalizeFilter(query.platformCode()),
+                normalizeFilter(query.ruleKind()),
+                normalizeFilter(query.scope()),
+                normalizeEnumFilter(query.environment()),
+                normalizeEnumFilter(query.approvalStatus()),
+                normalizeEnumFilter(query.contentSource()),
+                normalizeEnumFilter(query.visibility()),
+                normalizeEnumFilter(query.lifecycleStatus()),
+                normalizeFilter(query.tag()),
+                normalizeFilter(query.version()),
+                query.hasDescription(),
+                parsedCursor == null ? null : parsedCursor.savedAt(),
+                parsedCursor == null ? null : parsedCursor.id(),
+                effectiveLimit + 1
+        );
+        boolean hasMore = rows.size() > effectiveLimit;
+        List<RuleVersion> page = hasMore ? rows.subList(0, effectiveLimit) : rows;
+        String nextCursor = null;
+        if (hasMore && !page.isEmpty()) {
+            RuleVersion last = page.get(page.size() - 1);
+            nextCursor = InstantUuidCursor.encode(last.getSavedAt(), last.getId());
+        }
+        return new RuleCatalogPage(page, nextCursor, hasMore);
     }
 
     @Transactional(readOnly = true)
@@ -115,6 +161,10 @@ public class RuleService {
         RuleProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
+        boolean publishNow = false;
+        boolean requestPublish = publish;
+        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
+        String publishMode = request.publishMode();
         if (codingAgent == null) {
             throw new ValidationException("coding_agent is required");
         }
@@ -133,22 +183,14 @@ public class RuleService {
                 .toList();
         int baseMajor = resolveBaseMajor(request.baseVersion(), publishedVersions);
         RuleVersion existingDraft = findDraftForMajor(draftVersions, baseMajor);
-        RuleVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
-        if (publish) {
-            RuleVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
-            if (base != null && base.getResourceVersion() != request.resourceVersion()) {
-                throw new ConflictException("resource_version mismatch for publish");
-            }
-        } else {
-            if (existingDraft != null) {
-                if (existingDraft.getResourceVersion() != request.resourceVersion()) {
-                    throw new ConflictException("resource_version mismatch for draft");
-                }
-            } else if (request.resourceVersion() != 0L) {
+        if (existingDraft != null) {
+            if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
+        } else if (request.resourceVersion() != 0L) {
+            throw new ConflictException("resource_version mismatch for draft");
         }
 
         String version = publish
@@ -157,7 +199,7 @@ public class RuleService {
         String canonicalName = ruleId + "@" + version;
         String updatedMarkdown = request.ruleMarkdown();
 
-        boolean bumpDraftBeforeInsert = publish
+        boolean bumpDraftBeforeInsert = publishNow
                 && existingDraft != null
                 && existingDraft.getVersion().equals(version);
         if (bumpDraftBeforeInsert) {
@@ -165,7 +207,8 @@ public class RuleService {
         }
 
         RuleVersion entity;
-        if (!publish && existingDraft != null) {
+        boolean useExistingDraft = existingDraft != null && (!publish || !release);
+        if (useExistingDraft) {
             entity = existingDraft;
         } else {
             entity = new RuleVersion();
@@ -176,18 +219,61 @@ public class RuleService {
         entity.setRuleId(ruleId);
         entity.setVersion(version);
         entity.setCanonicalName(canonicalName);
-        entity.setStatus(publish ? RuleStatus.PUBLISHED : RuleStatus.DRAFT);
+        RuleStatus persistedStatus;
+        RuleApprovalStatus approvalStatus;
+        Instant now = Instant.now();
+        if (publishNow) {
+            persistedStatus = RuleStatus.PUBLISHED;
+            approvalStatus = RuleApprovalStatus.PUBLISHED;
+            entity.setApprovedBy(resolveSavedBy(user));
+            entity.setApprovedAt(now);
+            entity.setPublishedAt(now);
+        } else if (requestPublish) {
+            persistedStatus = RuleStatus.DRAFT;
+            approvalStatus = RuleApprovalStatus.PENDING_APPROVAL;
+        } else {
+            persistedStatus = RuleStatus.DRAFT;
+            approvalStatus = RuleApprovalStatus.DRAFT;
+        }
+        entity.setStatus(persistedStatus);
+        entity.setApprovalStatus(approvalStatus);
         entity.setTitle(request.title().trim());
         entity.setDescription(request.description() == null ? null : request.description().trim());
         entity.setCodingAgent(codingAgent);
         entity.setRuleMarkdown(updatedMarkdown);
-        entity.setChecksum(publish ? ChecksumUtil.sha256(updatedMarkdown) : null);
+        entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
+        entity.setTeamCode(normalizeOptional(request.teamCode()));
+        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setTags(normalizeTags(request.tags()));
+        entity.setRuleKind(normalizeOptional(request.ruleKind()));
+        entity.setScope(normalizeOptional(request.scope()));
+        entity.setEnvironment(parseEnvironment(request.environment()));
+        entity.setApprovedBy(publishNow ? entity.getApprovedBy() : null);
+        entity.setApprovedAt(publishNow ? entity.getApprovedAt() : null);
+        entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
+        entity.setSourceRef(normalizeOptional(request.sourceRef()));
+        entity.setSourcePath(normalizeOptional(request.sourcePath()));
+        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publishNow));
+        entity.setVisibility(parseVisibility(request.visibility()));
+        entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
+        entity.setPublicationTarget(publicationTarget);
+        if (requestPublish) {
+            entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
+            entity.setLastPublishError(null);
+            entity.setPublishedPrUrl(null);
+            entity.setPublishedCommitSha(null);
+        } else if (entity.getPublicationStatus() == null) {
+            entity.setPublicationStatus(PublicationStatus.DRAFT);
+        }
         entity.setSavedBy(resolveSavedBy(user));
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
 
         RuleVersion saved = repository.save(entity);
+        if (requestPublish) {
+            publicationService.upsertRuleRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+        }
 
-        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
+        if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
         }
 
@@ -312,6 +398,29 @@ public class RuleService {
         return user.getUsername();
     }
 
+    private int clampLimit(Integer requestedLimit) {
+        if (requestedLimit == null) {
+            return 24;
+        }
+        return Math.min(Math.max(requestedLimit, 1), 100);
+    }
+
+    private String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private String normalizeEnumFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toUpperCase();
+    }
+
     private RuleProvider parseCodingAgent(String codingAgent) {
         if (codingAgent == null || codingAgent.isBlank()) {
             return null;
@@ -321,6 +430,82 @@ public class RuleService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported coding_agent: " + codingAgent);
         }
+    }
+
+    private RuleEnvironment parseEnvironment(String environment) {
+        if (environment == null || environment.isBlank()) {
+            return RuleEnvironment.DEV;
+        }
+        try {
+            return RuleEnvironment.valueOf(environment.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported environment: " + environment);
+        }
+    }
+
+    private RuleVisibility parseVisibility(String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return RuleVisibility.INTERNAL;
+        }
+        try {
+            return RuleVisibility.valueOf(visibility.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported visibility: " + visibility);
+        }
+    }
+
+    private RuleLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
+        if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
+            return RuleLifecycleStatus.ACTIVE;
+        }
+        try {
+            return RuleLifecycleStatus.valueOf(lifecycleStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
+        }
+    }
+
+    private RuleContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
+        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
+            return RuleContentSource.GIT;
+        }
+        if (publishNow) {
+            return RuleContentSource.GIT;
+        }
+        return RuleContentSource.DB;
+    }
+
+    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
+        if (!publishRequested) {
+            return PublicationTarget.DB_ONLY;
+        }
+        try {
+            return PublicationTarget.from(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported publication_target: " + raw);
+        }
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String value = normalizeOptional(tag);
+            if (value != null && !normalized.contains(value)) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private void validateCodingAgentFrontmatter(RuleProvider codingAgent, ObjectNode frontmatter) {
@@ -369,5 +554,33 @@ public class RuleService {
     private String releaseVersion(String version) {
         int[] parts = parseVersion(version);
         return (parts[0] + 1) + ".0";
+    }
+
+    public record RuleCatalogQuery(
+            String cursor,
+            Integer limit,
+            String search,
+            String codingAgent,
+            String teamCode,
+            String platformCode,
+            String ruleKind,
+            String scope,
+            String environment,
+            String approvalStatus,
+            String contentSource,
+            String visibility,
+            String lifecycleStatus,
+            String tag,
+            String status,
+            String version,
+            Boolean hasDescription
+    ) {
+    }
+
+    public record RuleCatalogPage(
+            List<RuleVersion> items,
+            String nextCursor,
+            boolean hasMore
+    ) {
     }
 }

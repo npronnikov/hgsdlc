@@ -37,3 +37,19 @@ databaseChangeLog:
       file: db/changelog/023-runtime-node-checkpoint.sql
   - include:
       file: db/changelog/024-artifact-upsert-node-key.sql
+  - include:
+      file: db/changelog/025-skills-catalog.sql
+  - include:
+      file: db/changelog/026-auth-user-roles.sql
+  - include:
+      file: db/changelog/027-catalog-published-immutability.sql
+  - include:
+      file: db/changelog/028-rules-flows-catalog-parity.sql
+  - include:
+      file: db/changelog/029-seed-content-source-db.sql
+  - include:
+      file: db/changelog/030-catalog-query-indexes.sql
+  - include:
+      file: db/changelog/031-publication-pipeline.sql
+  - include:
+      file: db/changelog/032-rules-flows-publication-pipeline.sql

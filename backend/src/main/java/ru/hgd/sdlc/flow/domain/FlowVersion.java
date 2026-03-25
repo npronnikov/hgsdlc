@@ -17,6 +17,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ru.hgd.sdlc.common.StringListJsonConverter;
+import ru.hgd.sdlc.publication.domain.PublicationStatus;
+import ru.hgd.sdlc.publication.domain.PublicationTarget;
 
 @Getter
 @Setter
@@ -64,6 +66,74 @@ public class FlowVersion {
 
     @Column(name = "checksum", length = 128)
     private String checksum;
+
+    @Column(name = "team_code", length = 128)
+    private String teamCode;
+
+    @Column(name = "platform_code", length = 32)
+    private String platformCode;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "tags_json", columnDefinition = "TEXT")
+    private List<String> tags;
+
+    @Column(name = "flow_kind", length = 64)
+    private String flowKind;
+
+    @Column(name = "risk_level", length = 32)
+    private String riskLevel;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "environment", length = 16)
+    private FlowEnvironment environment;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", length = 32)
+    private FlowApprovalStatus approvalStatus;
+
+    @Column(name = "approved_by", length = 128)
+    private String approvedBy;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "source_ref", length = 128)
+    private String sourceRef;
+
+    @Column(name = "source_path", length = 512)
+    private String sourcePath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_source", length = 16)
+    private FlowContentSource contentSource;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", length = 32)
+    private FlowVisibility visibility;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifecycle_status", length = 32)
+    private FlowLifecycleStatus lifecycleStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publication_status", length = 32)
+    private PublicationStatus publicationStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publication_target", length = 32)
+    private PublicationTarget publicationTarget;
+
+    @Column(name = "published_commit_sha", length = 64)
+    private String publishedCommitSha;
+
+    @Column(name = "published_pr_url", length = 1024)
+    private String publishedPrUrl;
+
+    @Column(name = "last_publish_error", columnDefinition = "TEXT")
+    private String lastPublishError;
 
     @Column(name = "saved_by", nullable = false, length = 128)
     private String savedBy;

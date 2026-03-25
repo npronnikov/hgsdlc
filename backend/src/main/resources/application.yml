@@ -24,4 +24,4 @@ auth:
   session-ttl-seconds: 86400
   seed-username: admin
   seed-password: admin
-  seed-role: FLOW_CONFIGURATOR
+  seed-role: ADMIN

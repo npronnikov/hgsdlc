@@ -7,7 +7,7 @@ public class AuthProperties {
     private long sessionTtlSeconds = 86400;
     private String seedUsername = "admin";
     private String seedPassword = "admin";
-    private String seedRole = "FLOW_CONFIGURATOR";
+    private String seedRole = "ADMIN";
 
     public long getSessionTtlSeconds() {
         return sessionTtlSeconds;

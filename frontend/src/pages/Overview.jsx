@@ -1,11 +1,82 @@
-import React from 'react';
-import { Button, Card, Col, List, Row, Space, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Col, List, Row, Space, Typography, message } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
-import { gates, recentRuns } from '../data/mock.js';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const numberFormat = new Intl.NumberFormat('ru-RU');
+
+function formatNumber(value) {
+  return numberFormat.format(value || 0);
+}
+
+function shortId(value) {
+  if (!value) {
+    return '—';
+  }
+  return String(value).slice(0, 8);
+}
 
 export default function Overview() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [overview, setOverview] = useState({
+    metrics: {
+      active_runs: 0,
+      waiting_gates: 0,
+      awaiting_decision_gates: 0,
+      published_flows: 0,
+      draft_flows: 0,
+      audit_events_24h: 0,
+    },
+    recent_runs: [],
+    gate_inbox: [],
+  });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await apiRequest('/overview');
+      setOverview({
+        metrics: data?.metrics || {},
+        recent_runs: data?.recent_runs || [],
+        gate_inbox: data?.gate_inbox || [],
+      });
+    } catch (err) {
+      message.error(err.message || 'Failed to load overview');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const metrics = [
+    {
+      label: 'Active Runs',
+      value: formatNumber(overview.metrics.active_runs),
+      trend: 'Currently active',
+    },
+    {
+      label: 'Waiting Gates',
+      value: formatNumber(overview.metrics.waiting_gates),
+      trend: `${formatNumber(overview.metrics.awaiting_decision_gates)} require approval`,
+    },
+    {
+      label: 'Published Flows',
+      value: formatNumber(overview.metrics.published_flows),
+      trend: `${formatNumber(overview.metrics.draft_flows)} drafts`,
+    },
+    {
+      label: 'Audit Events',
+      value: formatNumber(overview.metrics.audit_events_24h),
+      trend: 'Last 24h',
+    },
+  ];
+
   return (
     <div>
       <div className="page-header">
@@ -14,14 +85,9 @@ export default function Overview() {
       </div>
 
       <Row gutter={[16, 16]}>
-        {[
-          { label: 'Active Runs', value: '3', trend: '+1 today' },
-          { label: 'Waiting Gates', value: '2', trend: '1 requires approval' },
-          { label: 'Published Flows', value: '8', trend: '2 drafts' },
-          { label: 'Audit Events', value: '1,248', trend: 'Last 24h' },
-        ].map((metric) => (
+        {metrics.map((metric) => (
           <Col key={metric.label} xs={24} sm={12} lg={6}>
-            <Card className="metric-card">
+            <Card className="metric-card" loading={loading}>
               <Text type="secondary" className="card-label">{metric.label}</Text>
               <div className="metric-value">{metric.value}</div>
               <Text type="secondary">{metric.trend}</Text>
@@ -34,11 +100,13 @@ export default function Overview() {
         <Col xs={24} lg={12}>
           <Card
             title="Recent Runs"
-            extra={<Button type="default">View all</Button>}
+            extra={<Button type="default" onClick={() => navigate('/run-console')}>View all</Button>}
+            loading={loading}
           >
             <List
               itemLayout="horizontal"
-              dataSource={recentRuns}
+              dataSource={overview.recent_runs}
+              locale={{ emptyText: 'No runs yet' }}
               renderItem={(item) => (
                 <List.Item>
                   <List.Item.Meta
@@ -47,7 +115,7 @@ export default function Overview() {
                   />
                   <Space>
                     <StatusTag value={item.status} />
-                    <Text className="mono">{item.key}</Text>
+                    <Text className="mono">{shortId(item.run_id)}</Text>
                   </Space>
                 </List.Item>
               )}
@@ -57,16 +125,18 @@ export default function Overview() {
         <Col xs={24} lg={12}>
           <Card
             title="Gate Inbox"
-            extra={<Button type="default">Open inbox</Button>}
+            extra={<Button type="default" onClick={() => navigate('/gates-inbox')}>Open inbox</Button>}
+            loading={loading}
           >
             <List
               itemLayout="horizontal"
-              dataSource={gates}
+              dataSource={overview.gate_inbox}
+              locale={{ emptyText: 'No open gates' }}
               renderItem={(gate) => (
                 <List.Item>
                   <List.Item.Meta
                     title={gate.title}
-                    description={`${gate.run} · ${gate.role}`}
+                    description={`${shortId(gate.run_id)} · ${gate.role || '—'}`}
                   />
                   <StatusTag value={gate.status} />
                 </List.Item>

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
-import { MoreOutlined } from '@ant-design/icons';
+import { Button, Card, Input, Modal, Select, Space, Typography, message } from 'antd';
 import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -38,6 +37,40 @@ const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
   { value: 'claude', label: 'claude' },
   { value: 'cursor', label: 'cursor' },
+];
+const platformOptions = [
+  { value: 'FRONT', label: 'FRONT' },
+  { value: 'BACK', label: 'BACK' },
+  { value: 'DATA', label: 'DATA' },
+];
+const environmentOptions = [
+  { value: 'dev', label: 'dev' },
+  { value: 'prod', label: 'prod' },
+];
+const visibilityOptions = [
+  { value: 'internal', label: 'internal' },
+  { value: 'restricted', label: 'restricted' },
+  { value: 'public', label: 'public' },
+];
+const lifecycleOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'deprecated', label: 'deprecated' },
+  { value: 'retired', label: 'retired' },
+];
+const publicationTargetOptions = [
+  { value: 'db_only', label: 'DB' },
+  { value: 'db_and_git', label: 'DB + Git' },
+];
+const publishModeOptions = [
+  { value: 'local', label: 'local (direct push)' },
+  { value: 'pr', label: 'pr (create Pull Request)' },
+];
+const skillKindOptions = [
+  { value: 'analysis', label: 'analysis' },
+  { value: 'generation', label: 'generation' },
+  { value: 'refactor', label: 'refactor' },
+  { value: 'qa', label: 'qa' },
+  { value: 'ops', label: 'ops' },
 ];
 
 const DEFAULT_VERSION = '0.1';
@@ -110,6 +143,7 @@ const getDraftForMajor = (versions, major) => (
     return parsed.valid && parsed.major === major;
   })
 );
+const requiredLabel = (label) => `${label} *`;
 
 export default function SkillEditor() {
   const { isDark } = useThemeMode();
@@ -130,6 +164,23 @@ export default function SkillEditor() {
   const [skillId, setSkillId] = useState('');
   const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
+  const [teamCode, setTeamCode] = useState('');
+  const [platformCode, setPlatformCode] = useState('FRONT');
+  const [tags, setTags] = useState([]);
+  const [tagOptions, setTagOptions] = useState([]);
+  const [skillKind, setSkillKind] = useState('');
+  const [environment, setEnvironment] = useState('dev');
+  const [visibility, setVisibility] = useState('internal');
+  const [lifecycleStatus, setLifecycleStatus] = useState('active');
+  const [approvalStatus, setApprovalStatus] = useState('');
+  const [contentSource, setContentSource] = useState('');
+  const [publicationStatus, setPublicationStatus] = useState('');
+  const [publicationTarget, setPublicationTarget] = useState('db_and_git');
+  const [publishMode, setPublishMode] = useState('pr');
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishVariant, setPublishVariant] = useState('minor');
+  const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
+  const [publishDialogMode, setPublishDialogMode] = useState('pr');
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const editorRef = useRef(null);
@@ -150,6 +201,17 @@ export default function SkillEditor() {
       setDescription(data.description || '');
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
+      setTeamCode(data.team_code || '');
+      setPlatformCode(data.platform_code || 'FRONT');
+      setTags(data.tags || []);
+      setSkillKind(data.skill_kind || '');
+      setEnvironment(data.environment || 'dev');
+      setVisibility(data.visibility || 'internal');
+      setLifecycleStatus(data.lifecycle_status || 'active');
+      setApprovalStatus(data.approval_status || '');
+      setContentSource(data.content_source || '');
+      setPublicationStatus(data.publication_status || '');
+      setPublicationTarget(data.publication_target || 'db_and_git');
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(skillId, data.version);
@@ -160,6 +222,15 @@ export default function SkillEditor() {
       }
     } catch (err) {
       message.error(err.message || 'Failed to load Skill');
+    }
+  };
+
+  const loadTags = async () => {
+    try {
+      const data = await apiRequest('/skills/tags');
+      setTagOptions((data || []).map((tag) => ({ value: tag, label: tag })));
+    } catch (err) {
+      // ignore tags dictionary loading errors
     }
   };
 
@@ -200,6 +271,17 @@ export default function SkillEditor() {
       setDescription(data.description || '');
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
+      setTeamCode(data.team_code || '');
+      setPlatformCode(data.platform_code || 'FRONT');
+      setTags(data.tags || []);
+      setSkillKind(data.skill_kind || '');
+      setEnvironment(data.environment || 'dev');
+      setVisibility(data.visibility || 'internal');
+      setLifecycleStatus(data.lifecycle_status || 'active');
+      setApprovalStatus(data.approval_status || '');
+      setContentSource(data.content_source || '');
+      setPublicationStatus(data.publication_status || '');
+      setPublicationTarget(data.publication_target || 'db_and_git');
       setIsNewSkill(false);
       setIsEditing(keepEditing);
       if (data.coding_agent) {
@@ -254,7 +336,7 @@ export default function SkillEditor() {
     await applyChange(isNewSkill || !hasContent);
   };
 
-  const saveSkill = async ({ publish, release = false }) => {
+  const saveSkill = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
     if (!skillId) {
       message.error('Skill ID is required');
       return;
@@ -271,6 +353,14 @@ export default function SkillEditor() {
       message.error('Coding agent is required');
       return;
     }
+    if (!teamCode.trim()) {
+      message.error('Team code is required');
+      return;
+    }
+    if (!platformCode) {
+      message.error('Platform is required');
+      return;
+    }
     const effectiveVersion = skillId === selectedSkillId ? (resourceVersion ?? 0) : 0;
     try {
       const response = await apiRequest(`/skills/${skillId}/save`, {
@@ -283,8 +373,17 @@ export default function SkillEditor() {
           description: description.trim(),
           skill_id: skillId.trim(),
           coding_agent: codingAgent,
+          team_code: teamCode.trim(),
+          platform_code: platformCode,
+          tags,
+          skill_kind: skillKind || undefined,
+          environment,
+          visibility,
+          lifecycle_status: lifecycleStatus,
           skill_markdown: editorValue,
           publish,
+          publication_target: publicationTargetOverride || publicationTarget,
+          publish_mode: publishModeOverride || publishMode,
           release,
           base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
@@ -295,13 +394,23 @@ export default function SkillEditor() {
       setSkillVersion(response.version || skillVersion);
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
+      setApprovalStatus(response.approval_status || approvalStatus);
+      setContentSource(response.content_source || contentSource);
+      setPublicationStatus(response.publication_status || publicationStatus);
+      setPublicationTarget(response.publication_target || publicationTarget);
       setSelectedSkillId(response.skill_id || skillId);
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(response.skill_id || skillId, response.version || skillVersion);
-      message.success(publish ? 'Skill published' : 'Draft saved');
+      if (publish) {
+        message.success('Publication requested');
+      } else {
+        message.success('Draft saved');
+      }
+      return true;
     } catch (err) {
       message.error(toRussianError(err?.message, 'Failed to save Skill'));
+      return false;
     }
   };
 
@@ -311,6 +420,18 @@ export default function SkillEditor() {
     setDescription('');
     setSkillId('');
     setCodingAgent('');
+    setTeamCode('');
+      setPlatformCode('FRONT');
+    setTags([]);
+    setSkillKind('');
+    setEnvironment('dev');
+    setVisibility('internal');
+    setLifecycleStatus('active');
+    setApprovalStatus('');
+    setContentSource('db');
+    setPublicationStatus('draft');
+    setPublicationTarget('db_and_git');
+    setPublishMode('pr');
     setEditorValue('');
     setResourceVersion(0);
     setSkillVersion('');
@@ -332,6 +453,10 @@ export default function SkillEditor() {
       loadSkill(skillIdParam);
     }
   }, [skillIdParam, isCreateRoute]);
+
+  useEffect(() => {
+    loadTags();
+  }, []);
 
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
   const currentParsed = parseMajorMinor(skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
@@ -364,6 +489,25 @@ export default function SkillEditor() {
     setSkillVersion(nextDraftVersion);
   };
 
+  const openPublishDialog = () => {
+    setPublishVariant('minor');
+    setPublishDialogTarget(publicationTarget || 'db_and_git');
+    setPublishDialogMode(publishMode || 'pr');
+    setPublishDialogOpen(true);
+  };
+
+  const confirmPublish = async () => {
+    const success = await saveSkill({
+      publish: true,
+      release: publishVariant === 'major',
+      publicationTargetOverride: publishDialogTarget,
+      publishModeOverride: publishDialogMode,
+    });
+    if (success) {
+      setPublishDialogOpen(false);
+    }
+  };
+
   return (
     <div className="rule-editor-page">
       <div className="page-header">
@@ -373,29 +517,7 @@ export default function SkillEditor() {
             currentStatus === 'draft' ? (
               <>
                 <Button type="default" onClick={beginEditDraft}>Edit</Button>
-                <Dropdown
-                  menu={{
-                    items: [
-                      { key: 'publish', label: publishLabel },
-                      { key: 'release', label: releaseLabel },
-                    ],
-                    onClick: ({ key }) => {
-                      if (key === 'release') {
-                        Modal.confirm({
-                          title: 'Confirm major update?',
-                          content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
-                          okText: 'Release',
-                          cancelText: 'Cancel',
-                          onOk: () => saveSkill({ publish: true, release: true }),
-                        });
-                        return;
-                      }
-                      saveSkill({ publish: true, release: false });
-                    },
-                  }}
-                >
-                  <Button type="default" icon={<MoreOutlined />}>Publish</Button>
-                </Dropdown>
+                <Button type="default" onClick={openPublishDialog}>Request publication</Button>
               </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
@@ -406,29 +528,7 @@ export default function SkillEditor() {
           {isEditing && (
             <>
               <Button type="default" onClick={() => saveSkill({ publish: false })}>Save</Button>
-              <Dropdown
-                menu={{
-                  items: [
-                    { key: 'publish', label: publishLabel },
-                    { key: 'release', label: releaseLabel },
-                  ],
-                  onClick: ({ key }) => {
-                    if (key === 'release') {
-                      Modal.confirm({
-                        title: 'Confirm major update?',
-                        content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
-                        okText: 'Release',
-                        cancelText: 'Cancel',
-                        onOk: () => saveSkill({ publish: true, release: true }),
-                      });
-                      return;
-                    }
-                    saveSkill({ publish: true, release: false });
-                  },
-                }}
-              >
-                <Button type="default" icon={<MoreOutlined />}>Publish</Button>
-              </Dropdown>
+              <Button type="default" onClick={openPublishDialog}>Request publication</Button>
             </>
           )}
         </Space>
@@ -547,64 +647,196 @@ export default function SkillEditor() {
             )}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Text className="muted">Name</Text>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Update requirements"
-              style={{ marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">ID Skill</Text>
-            <Input
-              value={skillId}
-              onChange={(event) => setSkillId(event.target.value)}
-              placeholder="update-requirements"
-              style={{ marginTop: 4 }}
-              disabled={!isEditing || !!selectedSkillId}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Description</Text>
-            <Input.TextArea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={4}
-              placeholder="Brief description of the Skill purpose"
-              style={{ marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Coding agent</Text>
+            <Text className="muted">{requiredLabel('Coding agent')}</Text>
             <Select
               value={codingAgent || undefined}
               onChange={handleCodingAgentChange}
               options={codingAgentOptions}
               placeholder="Select coding agent"
+              title="Для какого coding-agent будет выполняться skill."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
-          <div style={{ marginTop: 16 }}>
-            <Title level={5}>Frontmatter hint</Title>
-            {frontmatterSummary.length === 0 ? (
-              <Text type="secondary">Select a coding agent to see the expected frontmatter fields.</Text>
-            ) : (
-              <Space direction="vertical" size={8}>
-                {frontmatterSummary.map((item) => (
-                  <div key={item.field}>
-                    <Text className="muted">{item.field}</Text>
-                    <div className="mono">{item.meaning}</div>
-                  </div>
-                ))}
-              </Space>
-            )}
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('Name')}</Text>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Update requirements"
+              title="Короткое отображаемое имя skill в каталоге."
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
           </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('ID Skill')}</Text>
+            <Input
+              value={skillId}
+              onChange={(event) => setSkillId(event.target.value)}
+              placeholder="update-requirements"
+              title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
+              style={{ marginTop: 4 }}
+              disabled={!isEditing || !!selectedSkillId}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('Description')}</Text>
+            <Input.TextArea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              placeholder="Brief description of the Skill purpose"
+              title="Краткое описание назначения skill для поиска и карточки."
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('Team code')}</Text>
+            <Input
+              value={teamCode}
+              onChange={(event) => setTeamCode(event.target.value)}
+              placeholder="platform-team"
+              title="Код команды-владельца skill."
+              style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('Platform')}</Text>
+            <Select
+              value={platformCode || undefined}
+              onChange={setPlatformCode}
+              options={platformOptions}
+              placeholder="Select platform"
+              title="Платформа применения skill: FRONT, BACK или DATA."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Tags</Text>
+            <Select
+              mode="tags"
+              value={tags}
+              onChange={(nextTags) => setTags(nextTags)}
+              options={tagOptions}
+              placeholder="Add tags"
+              title="Теги для фильтрации и поиска."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Skill kind</Text>
+            <Select
+              value={skillKind || undefined}
+              onChange={setSkillKind}
+              options={skillKindOptions}
+              placeholder="Select skill kind"
+              title="Тип skill (analysis/generation/refactor/qa/ops)."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Environment</Text>
+            <Select
+              value={environment || undefined}
+              onChange={setEnvironment}
+              options={environmentOptions}
+              placeholder="Select environment"
+              title="Среда, для которой предназначена версия: dev или prod."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Visibility</Text>
+            <Select
+              value={visibility || undefined}
+              onChange={setVisibility}
+              options={visibilityOptions}
+              placeholder="Select visibility"
+              title="Видимость версии внутри платформы."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">Lifecycle status</Text>
+            <Select
+              value={lifecycleStatus || undefined}
+              onChange={setLifecycleStatus}
+              options={lifecycleOptions}
+              placeholder="Select lifecycle status"
+              title="Состояние жизненного цикла версии: active/deprecated/retired."
+              style={{ width: '100%', marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Approval status</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
+            </div>
+          )}
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Publication status</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
+            </div>
+          )}
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Content source</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{contentSource || 'db'}</div>
+            </div>
+          )}
         </Card>
       </div>
+      <Modal
+        title="Request publication"
+        open={publishDialogOpen}
+        onCancel={() => setPublishDialogOpen(false)}
+        onOk={confirmPublish}
+        okText="Request"
+        cancelText="Cancel"
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div>
+            <Text className="muted">Version strategy</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishVariant}
+              onChange={setPublishVariant}
+              options={[
+                { value: 'minor', label: publishLabel },
+                { value: 'major', label: releaseLabel },
+              ]}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publication target</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogTarget}
+              onChange={setPublishDialogTarget}
+              options={publicationTargetOptions}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publish mode</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogMode}
+              onChange={setPublishDialogMode}
+              options={publishModeOptions}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

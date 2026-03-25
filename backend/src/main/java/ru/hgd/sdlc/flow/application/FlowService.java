@@ -12,14 +12,23 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.api.FlowSaveRequest;
+import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
+import ru.hgd.sdlc.flow.domain.FlowContentSource;
+import ru.hgd.sdlc.flow.domain.FlowEnvironment;
+import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
+import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
+import ru.hgd.sdlc.publication.application.PublicationService;
+import ru.hgd.sdlc.publication.domain.PublicationStatus;
+import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
@@ -35,19 +44,22 @@ public class FlowService {
     private final SkillVersionRepository skillRepository;
     private final FlowYamlParser flowYamlParser;
     private final FlowValidator flowValidator;
+    private final PublicationService publicationService;
 
     public FlowService(
             FlowVersionRepository repository,
             RuleVersionRepository ruleRepository,
             SkillVersionRepository skillRepository,
             FlowYamlParser flowYamlParser,
-            FlowValidator flowValidator
+            FlowValidator flowValidator,
+            PublicationService publicationService
     ) {
         this.repository = repository;
         this.ruleRepository = ruleRepository;
         this.skillRepository = skillRepository;
         this.flowYamlParser = flowYamlParser;
         this.flowValidator = flowValidator;
+        this.publicationService = publicationService;
     }
 
     @Transactional(readOnly = true)
@@ -71,6 +83,40 @@ public class FlowService {
             latestByFlow.put(version.getFlowId(), published != null ? published : latestDraft.get(version.getFlowId()));
         }
         return new ArrayList<>(latestByFlow.values());
+    }
+
+    @Transactional(readOnly = true)
+    public FlowCatalogPage queryLatestForCatalog(FlowCatalogQuery query) {
+        int effectiveLimit = clampLimit(query.limit());
+        InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
+        List<FlowVersion> rows = repository.queryLatestForCatalog(
+                normalizeFilter(query.search()),
+                normalizeAgentFilter(query.codingAgent()),
+                normalizeFilter(query.teamCode()),
+                normalizeFilter(query.platformCode()),
+                normalizeFilter(query.flowKind()),
+                normalizeFilter(query.riskLevel()),
+                normalizeEnumFilter(query.environment()),
+                normalizeEnumFilter(query.approvalStatus()),
+                normalizeEnumFilter(query.contentSource()),
+                normalizeEnumFilter(query.visibility()),
+                normalizeEnumFilter(query.lifecycleStatus()),
+                normalizeFilter(query.tag()),
+                normalizeEnumFilter(query.status()),
+                normalizeFilter(query.version()),
+                query.hasDescription(),
+                parsedCursor == null ? null : parsedCursor.savedAt(),
+                parsedCursor == null ? null : parsedCursor.id(),
+                effectiveLimit + 1
+        );
+        boolean hasMore = rows.size() > effectiveLimit;
+        List<FlowVersion> page = hasMore ? rows.subList(0, effectiveLimit) : rows;
+        String nextCursor = null;
+        if (hasMore && !page.isEmpty()) {
+            FlowVersion last = page.get(page.size() - 1);
+            nextCursor = InstantUuidCursor.encode(last.getSavedAt(), last.getId());
+        }
+        return new FlowCatalogPage(page, nextCursor, hasMore);
     }
 
     @Transactional(readOnly = true)
@@ -137,6 +183,10 @@ public class FlowService {
 
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
+        boolean publishNow = false;
+        boolean requestPublish = publish;
+        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
+        String publishMode = request.publishMode();
 
         List<String> validationErrors = flowValidator.validate(model);
         if (!validationErrors.isEmpty()) {
@@ -155,22 +205,14 @@ public class FlowService {
                 .toList();
         int baseMajor = resolveBaseMajor(request.baseVersion(), publishedVersions);
         FlowVersion existingDraft = findDraftForMajor(draftVersions, baseMajor);
-        FlowVersion latestPublishedForMajor = findPublishedForMajor(publishedVersions, baseMajor);
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
-        if (publish) {
-            FlowVersion base = existingDraft != null ? existingDraft : latestPublishedForMajor;
-            if (base != null && base.getResourceVersion() != request.resourceVersion()) {
-                throw new ConflictException("resource_version mismatch for publish");
-            }
-        } else {
-            if (existingDraft != null) {
-                if (existingDraft.getResourceVersion() != request.resourceVersion()) {
-                    throw new ConflictException("resource_version mismatch for draft");
-                }
-            } else if (request.resourceVersion() != 0L) {
+        if (existingDraft != null) {
+            if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
+        } else if (request.resourceVersion() != 0L) {
+            throw new ConflictException("resource_version mismatch for draft");
         }
 
         String version = publish
@@ -179,7 +221,7 @@ public class FlowService {
         String canonicalName = flowId + "@" + version;
         String updatedYaml = request.flowYaml();
 
-        boolean bumpDraftBeforeInsert = publish
+        boolean bumpDraftBeforeInsert = publishNow
                 && existingDraft != null
                 && existingDraft.getVersion().equals(version);
         if (bumpDraftBeforeInsert) {
@@ -187,7 +229,8 @@ public class FlowService {
         }
 
         FlowVersion entity;
-        if (!publish && existingDraft != null) {
+        boolean useExistingDraft = existingDraft != null && (!publish || !release);
+        if (useExistingDraft) {
             entity = existingDraft;
         } else {
             entity = new FlowVersion();
@@ -198,20 +241,63 @@ public class FlowService {
         entity.setFlowId(flowId);
         entity.setVersion(version);
         entity.setCanonicalName(canonicalName);
-        entity.setStatus(publish ? FlowStatus.PUBLISHED : FlowStatus.DRAFT);
+        FlowStatus persistedStatus;
+        FlowApprovalStatus approvalStatus;
+        Instant now = Instant.now();
+        if (publishNow) {
+            persistedStatus = FlowStatus.PUBLISHED;
+            approvalStatus = FlowApprovalStatus.PUBLISHED;
+            entity.setApprovedBy(resolveSavedBy(user));
+            entity.setApprovedAt(now);
+            entity.setPublishedAt(now);
+        } else if (requestPublish) {
+            persistedStatus = FlowStatus.DRAFT;
+            approvalStatus = FlowApprovalStatus.PENDING_APPROVAL;
+        } else {
+            persistedStatus = FlowStatus.DRAFT;
+            approvalStatus = FlowApprovalStatus.DRAFT;
+        }
+        entity.setStatus(persistedStatus);
+        entity.setApprovalStatus(approvalStatus);
         entity.setTitle(model.getTitle().trim());
         entity.setDescription(model.getDescription());
         entity.setStartNodeId(model.getStartNodeId().trim());
         entity.setRuleRefs(model.getRuleRefs());
         entity.setCodingAgent(codingAgent);
         entity.setFlowYaml(updatedYaml);
-        entity.setChecksum(publish ? ChecksumUtil.sha256(updatedYaml) : null);
+        entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedYaml) : null);
+        entity.setTeamCode(normalizeOptional(request.teamCode()));
+        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setTags(normalizeTags(request.tags()));
+        entity.setFlowKind(normalizeOptional(request.flowKind()));
+        entity.setRiskLevel(normalizeOptional(request.riskLevel()));
+        entity.setEnvironment(parseEnvironment(request.environment()));
+        entity.setApprovedBy(publishNow ? entity.getApprovedBy() : null);
+        entity.setApprovedAt(publishNow ? entity.getApprovedAt() : null);
+        entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
+        entity.setSourceRef(normalizeOptional(request.sourceRef()));
+        entity.setSourcePath(normalizeOptional(request.sourcePath()));
+        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publishNow));
+        entity.setVisibility(parseVisibility(request.visibility()));
+        entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
+        entity.setPublicationTarget(publicationTarget);
+        if (requestPublish) {
+            entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
+            entity.setLastPublishError(null);
+            entity.setPublishedPrUrl(null);
+            entity.setPublishedCommitSha(null);
+        } else if (entity.getPublicationStatus() == null) {
+            entity.setPublicationStatus(PublicationStatus.DRAFT);
+        }
         entity.setSavedBy(resolveSavedBy(user));
-        entity.setSavedAt(Instant.now());
+        entity.setSavedAt(now);
 
         FlowVersion saved = repository.save(entity);
+        if (requestPublish) {
+            publicationService.upsertFlowRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+        }
 
-        if (publish && existingDraft != null && !bumpDraftBeforeInsert) {
+        if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
         }
 
@@ -223,6 +309,82 @@ public class FlowService {
             return null;
         }
         return codingAgent.trim().toLowerCase().replace('-', '_');
+    }
+
+    private FlowEnvironment parseEnvironment(String environment) {
+        if (environment == null || environment.isBlank()) {
+            return FlowEnvironment.DEV;
+        }
+        try {
+            return FlowEnvironment.valueOf(environment.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported environment: " + environment);
+        }
+    }
+
+    private FlowVisibility parseVisibility(String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return FlowVisibility.INTERNAL;
+        }
+        try {
+            return FlowVisibility.valueOf(visibility.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported visibility: " + visibility);
+        }
+    }
+
+    private FlowLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
+        if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
+            return FlowLifecycleStatus.ACTIVE;
+        }
+        try {
+            return FlowLifecycleStatus.valueOf(lifecycleStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
+        }
+    }
+
+    private FlowContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
+        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
+            return FlowContentSource.GIT;
+        }
+        if (publishNow) {
+            return FlowContentSource.GIT;
+        }
+        return FlowContentSource.DB;
+    }
+
+    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
+        if (!publishRequested) {
+            return PublicationTarget.DB_ONLY;
+        }
+        try {
+            return PublicationTarget.from(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported publication_target: " + raw);
+        }
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String value = normalizeOptional(tag);
+            if (value != null && !normalized.contains(value)) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private void validateReferences(FlowModel model, String codingAgent) {
@@ -393,6 +555,37 @@ public class FlowService {
         return user.getUsername();
     }
 
+    private int clampLimit(Integer requestedLimit) {
+        if (requestedLimit == null) {
+            return 24;
+        }
+        return Math.min(Math.max(requestedLimit, 1), 100);
+    }
+
+    private String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private String normalizeEnumFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toUpperCase();
+    }
+
+    private String normalizeAgentFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toLowerCase();
+    }
+
     private int[] parseVersion(String version) {
         if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
             throw new ValidationException("Invalid version: " + version);
@@ -417,5 +610,33 @@ public class FlowService {
     private String releaseVersion(String version) {
         int[] parts = parseVersion(version);
         return (parts[0] + 1) + ".0";
+    }
+
+    public record FlowCatalogQuery(
+            String cursor,
+            Integer limit,
+            String search,
+            String codingAgent,
+            String teamCode,
+            String platformCode,
+            String flowKind,
+            String riskLevel,
+            String environment,
+            String approvalStatus,
+            String contentSource,
+            String visibility,
+            String lifecycleStatus,
+            String tag,
+            String status,
+            String version,
+            Boolean hasDescription
+    ) {
+    }
+
+    public record FlowCatalogPage(
+            List<FlowVersion> items,
+            String nextCursor,
+            boolean hasMore
+    ) {
     }
 }

@@ -14,6 +14,8 @@ public interface GateInstanceRepository extends JpaRepository<GateInstanceEntity
             Collection<GateStatus> statuses
     );
 
+    long countByStatusIn(Collection<GateStatus> statuses);
+
     List<GateInstanceEntity> findByStatusInOrderByOpenedAtAsc(Collection<GateStatus> statuses);
 
     List<GateInstanceEntity> findByRunIdOrderByOpenedAtDesc(UUID runId);

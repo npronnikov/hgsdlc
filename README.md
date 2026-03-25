@@ -9,6 +9,9 @@ Human Guided SDLC — это рабочая попытка построить к
 - Frontend: React + Vite, UI для редакторов `flows`, `rules`, `skills` и управления версиями.
 
 ## Запуск (dev)
+### Общие требования
+- На компьютере должен быть установлен coding-agent Qwen Coder (`Qwen Code`): https://github.com/QwenLM/qwen-code#installation
+
 ### Backend
 Требования: Java 21.
 1. `cd /Users/nick/IdeaProjects/human-guided-development/backend`

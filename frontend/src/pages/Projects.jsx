@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Dropdown, Form, Input, Modal, Typography, message } from 'antd';
-import { EditOutlined, EyeOutlined, InboxOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, InboxOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
@@ -112,7 +112,6 @@ export default function Projects() {
   };
 
   const projectMenuItems = (project) => ([
-    { key: 'open', label: 'Open', icon: <EyeOutlined /> },
     { key: 'edit', label: 'Edit', icon: <EditOutlined /> },
     {
       key: 'archive',
@@ -123,10 +122,6 @@ export default function Projects() {
   ]);
 
   const handleMenuClick = (project, key) => {
-    if (key === 'open') {
-      openView(project);
-      return;
-    }
     if (key === 'edit') {
       openEdit(project);
       return;
@@ -158,12 +153,13 @@ export default function Projects() {
                 key={project.id}
                 className={`resource-card project-card status-${(project.status || 'unknown').toLowerCase()}`}
                 hoverable
+                onClick={() => openView(project)}
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
                     <span className="resource-card-name">{project.name}</span>
                   </div>
-                  <div className="resource-card-actions">
+                  <div className="resource-card-actions" onClick={(event) => event.stopPropagation()}>
                     <StatusTag value={project.status} />
                     <Dropdown
                       trigger={['click']}
@@ -177,6 +173,7 @@ export default function Projects() {
                         size="small"
                         icon={<MoreOutlined />}
                         className="resource-card-menu"
+                        onClick={(event) => event.stopPropagation()}
                       />
                     </Dropdown>
                   </div>
@@ -229,7 +226,7 @@ export default function Projects() {
       </Modal>
 
       <Modal
-        title="Project details"
+        title="Project parameters"
         open={!!viewingProject}
         onCancel={closeView}
         footer={null}

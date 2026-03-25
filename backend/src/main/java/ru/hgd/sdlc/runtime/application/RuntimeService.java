@@ -95,6 +95,7 @@ public class RuntimeService {
     private final FlowYamlParser flowYamlParser;
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
+    private final CatalogContentResolver catalogContentResolver;
     private final Map<String, CodingAgentStrategy> codingAgentStrategiesByAgentId;
     private final int maxTickIterations;
 
@@ -111,6 +112,7 @@ public class RuntimeService {
             FlowYamlParser flowYamlParser,
             ObjectMapper objectMapper,
             SettingsService settingsService,
+            CatalogContentResolver catalogContentResolver,
             List<CodingAgentStrategy> codingAgentStrategies,
             @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations
     ) {
@@ -126,6 +128,7 @@ public class RuntimeService {
         this.flowYamlParser = flowYamlParser;
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
+        this.catalogContentResolver = catalogContentResolver;
         this.codingAgentStrategiesByAgentId = (codingAgentStrategies == null ? List.<CodingAgentStrategy>of() : codingAgentStrategies)
                 .stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
@@ -141,12 +144,9 @@ public class RuntimeService {
         validateCreateRunCommand(command);
         Project project = projectRepository.findById(command.projectId())
                 .orElseThrow(() -> new NotFoundException("Project not found: " + command.projectId()));
-        FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalNameAndStatus(
-                        command.flowCanonicalName(),
-                        FlowStatus.PUBLISHED
-                )
-                .orElseThrow(() -> new NotFoundException("Flow not found or not published: " + command.flowCanonicalName()));
-        FlowModel flowModel = flowYamlParser.parse(flowVersion.getFlowYaml());
+        FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
+                .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
+        FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
         if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
             throw new ValidationException("Flow has no nodes");
         }
@@ -559,13 +559,14 @@ public class RuntimeService {
 
     @Transactional(readOnly = true)
     public List<GateInstanceEntity> listInboxGates(User user) {
-        String role = user == null || user.getRole() == null ? null : user.getRole().name();
         List<GateInstanceEntity> all = gateInstanceRepository.findByStatusInOrderByOpenedAtAsc(OPEN_GATE_STATUSES);
-        if (role == null) {
+        if (user == null) {
             return all;
         }
         return all.stream()
-                .filter((gate) -> gate.getAssigneeRole() == null || gate.getAssigneeRole().isBlank() || role.equals(gate.getAssigneeRole()))
+                .filter((gate) -> gate.getAssigneeRole() == null
+                        || gate.getAssigneeRole().isBlank()
+                        || user.hasRoleName(gate.getAssigneeRole()))
                 .toList();
     }
 
@@ -853,7 +854,13 @@ public class RuntimeService {
             return false;
         }
         FlowModel flowModel = parseFlowSnapshot(run);
-        NodeModel node = requireNode(flowModel, run.getCurrentNodeId());
+        NodeModel node;
+        try {
+            node = requireNode(flowModel, run.getCurrentNodeId());
+        } catch (ValidationException | NodeFailureException ex) {
+            failRun(run, "INVALID_FLOW_SNAPSHOT", ex.getMessage());
+            return false;
+        }
         String nodeKind = normalizeNodeKind(node);
 
         NodeExecutionEntity execution = createNodeExecution(run, node, nodeKind);
@@ -1891,12 +1898,11 @@ public class RuntimeService {
     }
 
     private void enforceGateRole(NodeModel node, User user) {
-        String actorRole = user == null || user.getRole() == null ? null : user.getRole().name();
         List<String> allowedRoles = node.getAllowedRoles() == null ? List.of() : node.getAllowedRoles();
         if (allowedRoles.isEmpty()) {
             return;
         }
-        if (actorRole == null || allowedRoles.stream().noneMatch((role) -> role.equals(actorRole))) {
+        if (user == null || !user.hasAnyRoleName(allowedRoles)) {
             throw new ForbiddenException("Actor role is not allowed for this gate");
         }
     }

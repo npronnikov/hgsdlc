@@ -35,9 +35,11 @@ public class TokenAuthFilter extends OncePerRequestFilter {
             String token = header.substring("Bearer ".length());
             User user = authService.authenticate(token);
             if (user != null) {
-                SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
+                List<SimpleGrantedAuthority> authorities = user.getEffectiveRoles().stream()
+                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
+                        .toList();
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(user, null, List.of(authority));
+                        new UsernamePasswordAuthenticationToken(user, null, authorities);
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

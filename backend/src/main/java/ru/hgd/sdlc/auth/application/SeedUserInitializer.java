@@ -2,6 +2,7 @@ package ru.hgd.sdlc.auth.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -42,11 +43,12 @@ public class SeedUserInitializer implements ApplicationRunner {
                         properties.getSeedUsername(),
                         "All Roles",
                         seedRole,
+                        resolveSeedRoles(properties.getSeedUsername(), seedRole),
                         properties.getSeedPassword()
                 ),
-                new SeedUser("flow_configurator", "Flow Configurator", Role.FLOW_CONFIGURATOR, "admin"),
-                new SeedUser("product_owner", "Product Owner", Role.PRODUCT_OWNER, "admin"),
-                new SeedUser("tech_approver", "Tech Approver", Role.TECH_APPROVER, "admin")
+                new SeedUser("flow_configurator", "Flow Configurator", Role.FLOW_CONFIGURATOR, Set.of(Role.FLOW_CONFIGURATOR), "admin"),
+                new SeedUser("product_owner", "Product Owner", Role.PRODUCT_OWNER, Set.of(Role.PRODUCT_OWNER), "admin"),
+                new SeedUser("tech_approver", "Tech Approver", Role.TECH_APPROVER, Set.of(Role.TECH_APPROVER), "admin")
         );
 
         List<User> users = seeds.stream()
@@ -54,6 +56,7 @@ public class SeedUserInitializer implements ApplicationRunner {
                         .map(existing -> {
                             existing.setDisplayName(seed.displayName);
                             existing.setRole(seed.role);
+                            existing.setRoles(seed.roles);
                             existing.setPasswordHash(passwordEncoder.encode(seed.password));
                             existing.setEnabled(true);
                             if (existing.getCreatedAt() == null) {
@@ -66,6 +69,7 @@ public class SeedUserInitializer implements ApplicationRunner {
                                 .username(seed.username)
                                 .displayName(seed.displayName)
                                 .role(seed.role)
+                                .roles(seed.roles)
                                 .passwordHash(passwordEncoder.encode(seed.password))
                                 .enabled(true)
                                 .createdAt(now)
@@ -76,5 +80,12 @@ public class SeedUserInitializer implements ApplicationRunner {
         log.info("Seeded auth users: {}", users.stream().map(User::getUsername).toList());
     }
 
-    private record SeedUser(String username, String displayName, Role role, String password) {}
+    private Set<Role> resolveSeedRoles(String username, Role seedRole) {
+        if ("admin".equalsIgnoreCase(username)) {
+            return Set.of(Role.ADMIN, Role.FLOW_CONFIGURATOR, Role.PRODUCT_OWNER, Role.TECH_APPROVER);
+        }
+        return Set.of(seedRole);
+    }
+
+    private record SeedUser(String username, String displayName, Role role, Set<Role> roles, String password) {}
 }

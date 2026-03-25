@@ -1,5 +1,6 @@
 package ru.hgd.sdlc.runtime.infrastructure;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,6 +12,8 @@ import ru.hgd.sdlc.runtime.domain.AuditEventEntity;
 
 public interface AuditEventRepository extends JpaRepository<AuditEventEntity, UUID> {
     List<AuditEventEntity> findByRunIdOrderBySequenceNoAsc(UUID runId);
+
+    long countByEventTimeGreaterThanEqual(Instant eventTime);
 
     Optional<AuditEventEntity> findByIdAndRunId(UUID id, UUID runId);
 

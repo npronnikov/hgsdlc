@@ -13,12 +13,10 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
-import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
-import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
@@ -28,17 +26,20 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     private final SkillVersionRepository skillVersionRepository;
     private final RuntimeStepTxService runtimeStepTxService;
     private final AgentPromptBuilder agentPromptBuilder;
+    private final CatalogContentResolver catalogContentResolver;
 
     QwenCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
             SkillVersionRepository skillVersionRepository,
             RuntimeStepTxService runtimeStepTxService,
-            AgentPromptBuilder agentPromptBuilder
+            AgentPromptBuilder agentPromptBuilder,
+            CatalogContentResolver catalogContentResolver
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
         this.runtimeStepTxService = runtimeStepTxService;
         this.agentPromptBuilder = agentPromptBuilder;
+        this.catalogContentResolver = catalogContentResolver;
     }
 
     @Override
@@ -86,7 +87,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             Path skillDir = skillsRoot.resolve(skill.getCanonicalName());
             Path skillFile = skillDir.resolve("SKILL.md");
             createDirectories(skillDir);
-            writeFile(skillFile, skill.getSkillMarkdown().getBytes(StandardCharsets.UTF_8));
+            writeFile(skillFile, catalogContentResolver.resolveSkillMarkdown(skill).getBytes(StandardCharsets.UTF_8));
         }
         runtimeStepTxService.appendAudit(
                 run.getId(),
@@ -142,10 +143,10 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             if (ref == null || ref.isBlank()) {
                 continue;
             }
-            RuleVersion rule = ruleVersionRepository.findFirstByCanonicalNameAndStatus(ref, RuleStatus.PUBLISHED)
+            RuleVersion rule = ruleVersionRepository.findFirstByCanonicalName(ref)
                     .orElseThrow(() -> new CodingAgentException(
                             "RULE_NOT_FOUND",
-                            "Published rule not found: " + ref
+                            "Rule not found: " + ref
                     ));
             if (!codingAgent.equals(normalize(rule.getCodingAgent().name()))) {
                 throw new CodingAgentException(
@@ -166,10 +167,10 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             if (ref == null || ref.isBlank()) {
                 continue;
             }
-            SkillVersion skill = skillVersionRepository.findFirstByCanonicalNameAndStatus(ref, SkillStatus.PUBLISHED)
+            SkillVersion skill = skillVersionRepository.findFirstByCanonicalName(ref)
                     .orElseThrow(() -> new CodingAgentException(
                             "SKILL_NOT_FOUND",
-                            "Published skill not found: " + ref
+                            "Skill not found: " + ref
                     ));
             if (!codingAgent.equals(normalize(skill.getCodingAgent().name()))) {
                 throw new CodingAgentException(
@@ -193,7 +194,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         }
         for (RuleVersion rule : rules) {
             sb.append("## ").append(rule.getCanonicalName()).append("\n\n");
-            sb.append(rule.getRuleMarkdown()).append("\n\n");
+            sb.append(catalogContentResolver.resolveRuleMarkdown(rule)).append("\n\n");
         }
         return sb.toString();
     }

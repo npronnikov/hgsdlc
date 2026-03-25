@@ -11,6 +11,7 @@ import Rules from './pages/Rules.jsx';
 import RuleEditor from './pages/RuleEditor.jsx';
 import Skills from './pages/Skills.jsx';
 import SkillEditor from './pages/SkillEditor.jsx';
+import Requests from './pages/Requests.jsx';
 import RunLaunch from './pages/RunLaunch.jsx';
 import RunConsole from './pages/RunConsole.jsx';
 import GatesInbox from './pages/GatesInbox.jsx';
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="skills/create" element={<SkillEditor />} />
             <Route path="skills/:skillId" element={<SkillEditor />} />
             <Route path="skill-editor" element={<SkillEditor />} />
+            <Route path="requests" element={<Requests />} />
             <Route path="run-launch" element={<RunLaunch />} />
             <Route path="run-console" element={<RunConsole />} />
             <Route path="settings" element={<Settings />} />
@@ -83,6 +85,7 @@ export default function App() {
             <Route path="artifacts" element={<Artifacts />} />
             <Route path="delta-summary" element={<DeltaSummary />} />
             <Route path="versions" element={<Versions />} />
+            <Route path="publication-queue" element={<Navigate to="/requests" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>

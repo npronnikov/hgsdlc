@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   AppstoreOutlined,
+  ApartmentOutlined,
   AuditOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
+  GithubOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
@@ -13,7 +15,6 @@ import {
   ProjectOutlined,
   RobotOutlined,
   SettingOutlined,
-  SisternodeOutlined,
   SunOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -26,9 +27,10 @@ const { Text } = Typography;
 const navItems = [
   { key: '/overview', icon: <AppstoreOutlined />, label: 'Overview' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/flows', icon: <SisternodeOutlined />, label: 'Flows' },
+  { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
   { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
   { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
+  { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
   { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
@@ -44,6 +46,7 @@ const routeMeta = {
   '/rule-editor': { title: 'Rule Editor', menuKey: '/rules' },
   '/skills': { title: 'Skills', menuKey: '/skills' },
   '/skill-editor': { title: 'Skill Editor', menuKey: '/skills' },
+  '/requests': { title: 'Requests', menuKey: '/requests' },
   '/run-launch': { title: 'Run Launch', menuKey: '/run-launch' },
   '/run-console': { title: 'Run Console', menuKey: '/run-console' },
   '/settings': { title: 'Runtime Settings', menuKey: '/settings' },

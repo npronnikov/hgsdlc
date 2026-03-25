@@ -1,79 +1,177 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  AlertOutlined,
+  ApartmentOutlined,
+  ClusterOutlined,
+  EyeOutlined,
+  FilterOutlined,
+  NodeIndexOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
+import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const PAGE_LIMIT = 24;
+
+const truncateCardName = (value, max = 26) => {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+};
 
 export default function Flows() {
-  const navigate = useNavigate();
-  const [flows, setFlows] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
+  const defaultFilters = {
     search: '',
+    codingAgent: null,
+    teamCode: null,
+    platformCode: null,
+    flowKind: null,
+    riskLevel: null,
+    environment: null,
+    approvalStatus: null,
+    contentSource: null,
+    visibility: null,
+    lifecycleStatus: null,
+    tag: null,
     status: null,
     version: '',
     hasDescription: null,
-  });
+  };
+  const navigate = useNavigate();
+  const [flows, setFlows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState(defaultFilters);
 
-  const loadFlows = async () => {
-    setLoading(true);
+  const loadFlows = async ({ cursor = null, append = false } = {}) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const data = await apiRequest('/flows');
-      const mapped = data.map((flow) => ({
+      const params = new URLSearchParams();
+      params.set('limit', String(PAGE_LIMIT));
+      if (cursor) params.set('cursor', cursor);
+      if (filters.search.trim()) params.set('search', filters.search.trim());
+      if (filters.codingAgent) params.set('codingAgent', filters.codingAgent);
+      if (filters.teamCode) params.set('teamCode', filters.teamCode);
+      if (filters.platformCode) params.set('platformCode', filters.platformCode);
+      if (filters.flowKind) params.set('flowKind', filters.flowKind);
+      if (filters.riskLevel) params.set('riskLevel', filters.riskLevel);
+      if (filters.environment) params.set('environment', filters.environment);
+      if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
+      if (filters.contentSource) params.set('contentSource', filters.contentSource);
+      if (filters.visibility) params.set('visibility', filters.visibility);
+      if (filters.lifecycleStatus) params.set('lifecycleStatus', filters.lifecycleStatus);
+      if (filters.tag) params.set('tag', filters.tag);
+      if (filters.status) params.set('status', filters.status);
+      if (filters.version.trim()) params.set('version', filters.version.trim());
+      if (filters.hasDescription !== null) params.set('hasDescription', String(filters.hasDescription));
+
+      const data = await apiRequest(`/flows/query?${params.toString()}`);
+      const mapped = (data.items || []).map((flow) => ({
         key: flow.flow_id,
         name: flow.title || flow.flow_id,
         flowId: flow.flow_id,
         description: flow.description || '',
+        codingAgent: flow.coding_agent,
+        teamCode: flow.team_code,
+        platformCode: flow.platform_code,
+        tags: flow.tags || [],
+        flowKind: flow.flow_kind,
+        riskLevel: flow.risk_level,
+        environment: flow.environment,
+        contentSource: flow.content_source,
+        lifecycleStatus: flow.lifecycle_status,
+        nodeCount: flow.node_count,
+        approvalStatus: flow.approval_status,
+        visibility: flow.visibility,
         status: flow.status,
         version: flow.version,
         canonical: flow.canonical_name,
-        savedBy: flow.saved_by || '',
       }));
-      setFlows(mapped);
+      if (append) {
+        setFlows((prev) => [...prev, ...mapped]);
+      } else {
+        setFlows(mapped);
+      }
+      setNextCursor(data.next_cursor || null);
+      setHasMore(Boolean(data.has_more));
     } catch (err) {
       message.error(err.message || 'Failed to load Flows');
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadFlows();
-  }, []);
+    const handle = setTimeout(() => {
+      loadFlows({ cursor: null, append: false });
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [
+    filters.search,
+    filters.codingAgent,
+    filters.teamCode,
+    filters.platformCode,
+    filters.flowKind,
+    filters.riskLevel,
+    filters.environment,
+    filters.approvalStatus,
+    filters.contentSource,
+    filters.visibility,
+    filters.lifecycleStatus,
+    filters.tag,
+    filters.status,
+    filters.version,
+    filters.hasDescription,
+  ]);
 
-  const statuses = useMemo(
-    () => Array.from(new Set(flows.map((flow) => flow.status).filter(Boolean))),
-    [flows]
-  );
-
-  const filteredFlows = useMemo(() => {
-    const search = filters.search.trim().toLowerCase();
-    const version = filters.version.trim().toLowerCase();
-    return flows.filter((flow) => {
-      if (filters.status && flow.status !== filters.status) {
-        return false;
-      }
-      if (filters.hasDescription === true && !flow.description) {
-        return false;
-      }
-      if (filters.hasDescription === false && flow.description) {
-        return false;
-      }
-      if (version && (flow.version || '').toLowerCase() !== version) {
-        return false;
-      }
-      if (!search) {
-        return true;
-      }
-      return [flow.name, flow.flowId, flow.canonical, flow.description]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(search));
-    });
-  }, [flows, filters]);
+  const codingAgents = useMemo(() => Array.from(new Set(flows.map((flow) => flow.codingAgent).filter(Boolean))), [flows]);
+  const statuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.status).filter(Boolean))), [flows]);
+  const teamCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.teamCode).filter(Boolean))), [flows]);
+  const platformCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.platformCode).filter(Boolean))), [flows]);
+  const flowKinds = useMemo(() => Array.from(new Set(flows.map((flow) => flow.flowKind).filter(Boolean))), [flows]);
+  const riskLevels = useMemo(() => Array.from(new Set(flows.map((flow) => flow.riskLevel).filter(Boolean))), [flows]);
+  const environments = useMemo(() => Array.from(new Set(flows.map((flow) => flow.environment).filter(Boolean))), [flows]);
+  const approvalStatuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.approvalStatus).filter(Boolean))), [flows]);
+  const contentSources = useMemo(() => Array.from(new Set(flows.map((flow) => flow.contentSource).filter(Boolean))), [flows]);
+  const visibilityOptions = useMemo(() => Array.from(new Set(flows.map((flow) => flow.visibility).filter(Boolean))), [flows]);
+  const lifecycleStatuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.lifecycleStatus).filter(Boolean))), [flows]);
+  const tags = useMemo(() => Array.from(new Set(flows.flatMap((flow) => flow.tags || []).filter(Boolean))), [flows]);
+  const activeFilters = useMemo(() => {
+    const items = [];
+    if (filters.search.trim()) items.push({ key: 'search', label: `Search: ${filters.search.trim()}` });
+    if (filters.codingAgent) items.push({ key: 'codingAgent', label: `Agent: ${filters.codingAgent}` });
+    if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
+    if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
+    if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
+    if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
+    if (filters.flowKind) items.push({ key: 'flowKind', label: `Type: ${filters.flowKind}` });
+    if (filters.riskLevel) items.push({ key: 'riskLevel', label: `Risk: ${filters.riskLevel}` });
+    if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
+    if (filters.contentSource) items.push({ key: 'contentSource', label: `Source: ${filters.contentSource}` });
+    if (filters.visibility) items.push({ key: 'visibility', label: `Visibility: ${filters.visibility}` });
+    if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
+    if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
+    if (filters.hasDescription === true) items.push({ key: 'hasDescription', label: 'Description: yes' });
+    if (filters.hasDescription === false) items.push({ key: 'hasDescription', label: 'Description: no' });
+    return items;
+  }, [filters]);
 
   return (
     <div className="cards-page">
@@ -84,12 +182,31 @@ export default function Flows() {
           <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
+      {activeFilters.length > 0 && (
+        <div className="active-filters-row">
+          {activeFilters.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="active-filter-chip"
+              onClick={() => setFilters((prev) => ({ ...prev, [item.key]: defaultFilters[item.key] }))}
+              title="Clear filter"
+            >
+              <span>{item.label}</span>
+              <span className="active-filter-chip-close">x</span>
+            </button>
+          ))}
+          <Button size="small" type="default" onClick={() => setFilters(defaultFilters)}>
+            Clear all
+          </Button>
+        </div>
+      )}
       <div className="cards-fullscreen">
         {loading ? (
           <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
-            {filteredFlows.map((flow) => (
+            {flows.map((flow) => (
               <Card
                 key={flow.key}
                 className={`resource-card flow-card status-${(flow.status || 'unknown').toLowerCase()}`}
@@ -98,29 +215,47 @@ export default function Flows() {
               >
                 <div className="resource-card-header">
                   <div className="resource-card-title">
-                    <span className="resource-card-name">{flow.name}</span>
+                    <span className="resource-card-name" title={flow.name}>{truncateCardName(flow.name)}</span>
+                    <span className="resource-card-subtitle mono">{flow.flowId}@{flow.version}</span>
                   </div>
-                  <StatusTag value={flow.status} />
+                  <span className="resource-chip resource-chip-agent"><RobotOutlined />{flow.codingAgent || 'no agent'}</span>
                 </div>
-                {flow.description && (
-                  <Text type="secondary" className="resource-card-description">
-                    {flow.description}
-                  </Text>
+                {flow.description && <Text type="secondary" className="resource-card-description">{flow.description}</Text>}
+                <div className="resource-meta-list">
+                  <div className="resource-meta-row"><span className="resource-meta-key"><ApartmentOutlined />Type</span><span className="resource-meta-value">{flow.flowKind || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><AlertOutlined />Risk</span><span className="resource-meta-value">{flow.riskLevel || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{flow.platformCode || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><NodeIndexOutlined />Node Count</span><span className="resource-meta-value">{flow.nodeCount ?? '—'}</span></div>
+                </div>
+                {(flow.tags || []).length > 0 && (
+                  <div className="resource-tags-row">
+                    {(flow.tags || []).slice(0, 5).map((tag) => (
+                      <span key={`${flow.key}-${tag}`} className="resource-tag">#{tag}</span>
+                    ))}
+                  </div>
                 )}
-                <div className="resource-card-footer resource-card-footer-stack">
-                  <span className="resource-canonical mono">{flow.canonical}</span>
-                  <div className="resource-card-chips resource-card-chips-right">
-                    <span className="resource-chip">
-                      <UserOutlined />
-                      {flow.savedBy || 'unknown'}
-                    </span>
+                <div className="resource-card-footer">
+                  <div className="resource-card-chips">
+                    {flow.visibility && <span className="resource-chip"><EyeOutlined />{flow.visibility}</span>}
+                    {flow.approvalStatus && <span className="resource-chip"><SafetyCertificateOutlined />{flow.approvalStatus}</span>}
+                    {flow.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{flow.teamCode}</span>}
                   </div>
                 </div>
               </Card>
             ))}
-            {filteredFlows.length === 0 && (
-              <div className="card-muted">Flows not found.</div>
-            )}
+            {flows.length === 0 && <div className="card-muted">Flows not found.</div>}
+          </div>
+        )}
+        {!loading && flows.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <Button
+              type="default"
+              onClick={() => loadFlows({ cursor: nextCursor, append: true })}
+              loading={loadingMore}
+              disabled={!hasMore || loadingMore}
+            >
+              {hasMore ? 'Load more' : 'No more flows'}
+            </Button>
           </div>
         )}
       </div>
@@ -133,8 +268,8 @@ export default function Flows() {
         width={360}
         className="filter-drawer"
       >
-        <div className="filter-drawer-body">
-          <div className="filter-row">
+        <div className="filter-drawer-body filter-grid">
+          <div className="filter-row filter-row-span-2">
             <Text className="muted">Search</Text>
             <Input
               value={filters.search}
@@ -142,16 +277,18 @@ export default function Flows() {
               placeholder="Name, ID, description"
             />
           </div>
-          <div className="filter-row">
-            <Text className="muted">Status</Text>
-            <Select
-              allowClear
-              value={filters.status}
-              onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))}
-              options={statuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))}
-              placeholder="Select status"
-            />
-          </div>
+          <div className="filter-row"><Text className="muted">Coding Agent</Text><Select allowClear value={filters.codingAgent} onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))} options={codingAgents.map((value) => ({ value, label: value }))} placeholder="Select agent" /></div>
+          <div className="filter-row"><Text className="muted">Status</Text><Select allowClear value={filters.status} onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))} options={statuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))} placeholder="Select status" /></div>
+          <div className="filter-row"><Text className="muted">Approval</Text><Select allowClear value={filters.approvalStatus} onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))} options={approvalStatuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select approval" /></div>
+          <div className="filter-row"><Text className="muted">Team</Text><Select allowClear value={filters.teamCode} onChange={(value) => setFilters((prev) => ({ ...prev, teamCode: value || null }))} options={teamCodes.map((value) => ({ value, label: value }))} placeholder="Select team" /></div>
+          <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
+          <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.flowKind} onChange={(value) => setFilters((prev) => ({ ...prev, flowKind: value || null }))} options={flowKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
+          <div className="filter-row"><Text className="muted">Risk</Text><Select allowClear value={filters.riskLevel} onChange={(value) => setFilters((prev) => ({ ...prev, riskLevel: value || null }))} options={riskLevels.map((value) => ({ value, label: value }))} placeholder="Select risk" /></div>
+          <div className="filter-row"><Text className="muted">Environment</Text><Select allowClear value={filters.environment} onChange={(value) => setFilters((prev) => ({ ...prev, environment: value || null }))} options={environments.map((value) => ({ value, label: value }))} placeholder="Select environment" /></div>
+          <div className="filter-row"><Text className="muted">Content source</Text><Select allowClear value={filters.contentSource} onChange={(value) => setFilters((prev) => ({ ...prev, contentSource: value || null }))} options={contentSources.map((value) => ({ value, label: value }))} placeholder="Select content source" /></div>
+          <div className="filter-row"><Text className="muted">Visibility</Text><Select allowClear value={filters.visibility} onChange={(value) => setFilters((prev) => ({ ...prev, visibility: value || null }))} options={visibilityOptions.map((value) => ({ value, label: value }))} placeholder="Select visibility" /></div>
+          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
+          <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear showSearch value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row">
             <Text className="muted">Version</Text>
             <Input
@@ -177,7 +314,7 @@ export default function Flows() {
         <div className="filter-drawer-footer">
           <Button
             type="default"
-            onClick={() => setFilters({ search: '', status: null, version: '', hasDescription: null })}
+            onClick={() => setFilters(defaultFilters)}
           >
             Reset
           </Button>
