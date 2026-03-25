@@ -38,7 +38,7 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.domain.SkillVisibility;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
-@Component
+//@Component
 public class SeedCatalogInitializer implements ApplicationRunner {
     private final RuleVersionRepository ruleRepository;
     private final SkillVersionRepository skillRepository;

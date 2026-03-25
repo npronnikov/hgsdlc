@@ -17,19 +17,13 @@ import { apiRequest } from '../api/request.js';
 const { Title, Text } = Typography;
 const PAGE_LIMIT = 24;
 
-const truncateCardName = (value, max = 26) => {
+const truncateCardName = (value, max = 25) => {
   if (!value) return '';
-  return value.length > max ? `${value.slice(0, max)}...` : value;
+  return value.length > max ? `${value.slice(0, Math.max(0, max - 3))}...` : value;
 };
 
 export default function Skills() {
-  const [skills, setSkills] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
+  const defaultFilters = {
     search: '',
     codingAgent: null,
     status: null,
@@ -40,7 +34,14 @@ export default function Skills() {
     environment: null,
     visibility: null,
     tag: null,
-  });
+  };
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState(defaultFilters);
   const navigate = useNavigate();
 
   const loadSkills = async ({ cursor = null, append = false } = {}) => {
@@ -79,6 +80,9 @@ export default function Skills() {
         tags: skill.tags || [],
         visibility: skill.visibility,
         skillKind: skill.skill_kind,
+        publicationStatus: skill.publication_status,
+        publicationTarget: skill.publication_target,
+        publishedPrUrl: skill.published_pr_url,
         version: skill.version,
         canonical: skill.canonical_name,
       }));
@@ -127,6 +131,20 @@ export default function Skills() {
   const environments = useMemo(() => Array.from(new Set(skills.map((s) => s.environment).filter(Boolean))), [skills]);
   const visibilityOptions = useMemo(() => Array.from(new Set(skills.map((s) => s.visibility).filter(Boolean))), [skills]);
   const tags = useMemo(() => Array.from(new Set(skills.flatMap((s) => s.tags || []).filter(Boolean))), [skills]);
+  const activeFilters = useMemo(() => {
+    const items = [];
+    if (filters.search.trim()) items.push({ key: 'search', label: `Search: ${filters.search.trim()}` });
+    if (filters.codingAgent) items.push({ key: 'codingAgent', label: `Agent: ${filters.codingAgent}` });
+    if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
+    if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
+    if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
+    if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
+    if (filters.skillKind) items.push({ key: 'skillKind', label: `Type: ${filters.skillKind}` });
+    if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
+    if (filters.visibility) items.push({ key: 'visibility', label: `Visibility: ${filters.visibility}` });
+    if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
+    return items;
+  }, [filters]);
 
   return (
     <div className="cards-page">
@@ -137,6 +155,29 @@ export default function Skills() {
           <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
+      {activeFilters.length > 0 && (
+        <div className="active-filters-row">
+          {activeFilters.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="active-filter-chip"
+              onClick={() => setFilters((prev) => ({ ...prev, [item.key]: defaultFilters[item.key] }))}
+              title="Clear filter"
+            >
+              <span>{item.label}</span>
+              <span className="active-filter-chip-close">x</span>
+            </button>
+          ))}
+          <Button
+            size="small"
+            type="default"
+            onClick={() => setFilters(defaultFilters)}
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
       <div className="cards-fullscreen">
         {loading ? (
           <div className="card-muted">Loading...</div>
@@ -162,6 +203,7 @@ export default function Skills() {
                   <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{skill.platformCode || '—'}</span></div>
                   <div className="resource-meta-row"><span className="resource-meta-key"><EyeOutlined />Visibility</span><span className="resource-meta-value">{skill.visibility || '—'}</span></div>
                   <div className="resource-meta-row"><span className="resource-meta-key"><SafetyCertificateOutlined />Approval</span><span className="resource-meta-value">{skill.approvalStatus || '—'}</span></div>
+                  <div className="resource-meta-row"><span className="resource-meta-key"><SafetyCertificateOutlined />Publish</span><span className="resource-meta-value">{skill.publicationStatus || '—'}</span></div>
                 </div>
                 {(skill.tags || []).length > 0 && (
                   <div className="resource-tags-row">
@@ -173,6 +215,8 @@ export default function Skills() {
                 <div className="resource-card-footer">
                   <div className="resource-card-chips">
                     {skill.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{skill.teamCode}</span>}
+                    {skill.publicationTarget && <span className="resource-chip">{skill.publicationTarget}</span>}
+                    {skill.publishedPrUrl && <a href={skill.publishedPrUrl} target="_blank" rel="noreferrer" className="resource-chip">PR</a>}
                   </div>
                 </div>
               </Card>
@@ -217,18 +261,7 @@ export default function Skills() {
         <div className="filter-drawer-footer">
           <Button
             type="default"
-            onClick={() => setFilters({
-              search: '',
-              codingAgent: null,
-              status: null,
-              approvalStatus: null,
-              teamCode: null,
-              platformCode: null,
-              skillKind: null,
-              environment: null,
-              visibility: null,
-              tag: null,
-            })}
+            onClick={() => setFilters(defaultFilters)}
           >
             Reset
           </Button>

@@ -49,3 +49,5 @@ databaseChangeLog:
       file: db/changelog/029-seed-content-source-db.sql
   - include:
       file: db/changelog/030-catalog-query-indexes.sql
+  - include:
+      file: db/changelog/031-publication-pipeline.sql

@@ -10,6 +10,8 @@ import ru.hgd.sdlc.runtime.domain.RunStatus;
 public interface RunRepository extends JpaRepository<RunEntity, UUID> {
     List<RunEntity> findAllByOrderByCreatedAtDesc();
 
+    long countByStatusIn(Collection<RunStatus> statuses);
+
     boolean existsByProjectIdAndTargetBranchAndStatusIn(
             UUID projectId,
             String targetBranch,

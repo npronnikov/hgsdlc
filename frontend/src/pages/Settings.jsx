@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, InputNumber, Modal, Select, Space, Tabs, Typography, message } from 'antd';
+import { Button, Card, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from 'antd';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
+const DEFAULT_CATALOG_REPO_URL = 'https://github.com/npronnikov/catalog.git';
 
 export default function Settings() {
   const [form] = Form.useForm();
@@ -19,14 +20,8 @@ export default function Settings() {
         workspace_root: data?.workspace_root || '/tmp/workspace',
         coding_agent: data?.coding_agent || 'qwen',
         ai_timeout_seconds: data?.ai_timeout_seconds ?? 900,
-        catalog_repo_url: data?.catalog_repo_url || '',
+        catalog_repo_url: data?.catalog_repo_url || DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: data?.catalog_default_branch || 'main',
-        publish_mode: data?.publish_mode || 'pr',
-        git_ssh_private_key: data?.git_ssh_private_key || '',
-        git_ssh_public_key: data?.git_ssh_public_key || '',
-        git_ssh_passphrase: data?.git_ssh_passphrase || '',
-        git_certificate: data?.git_certificate || '',
-        git_certificate_key: data?.git_certificate_key || '',
         git_username: data?.git_username || '',
         git_password_or_pat: data?.git_password_or_pat || '',
       };
@@ -38,14 +33,8 @@ export default function Settings() {
         workspace_root: '/tmp/workspace',
         coding_agent: 'qwen',
         ai_timeout_seconds: 900,
-        catalog_repo_url: '',
+        catalog_repo_url: DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: 'main',
-        publish_mode: 'pr',
-        git_ssh_private_key: '',
-        git_ssh_public_key: '',
-        git_ssh_passphrase: '',
-        git_certificate: '',
-        git_certificate_key: '',
         git_username: '',
         git_password_or_pat: '',
       });
@@ -81,12 +70,6 @@ export default function Settings() {
         body: JSON.stringify({
           catalog_repo_url: values.catalog_repo_url,
           catalog_default_branch: values.catalog_default_branch,
-          publish_mode: values.publish_mode,
-          git_ssh_private_key: values.git_ssh_private_key,
-          git_ssh_public_key: values.git_ssh_public_key,
-          git_ssh_passphrase: values.git_ssh_passphrase,
-          git_certificate: values.git_certificate,
-          git_certificate_key: values.git_certificate_key,
           git_username: values.git_username,
           git_password_or_pat: values.git_password_or_pat,
         }),
@@ -234,65 +217,16 @@ export default function Settings() {
               >
                 <Input placeholder="main" />
               </Form.Item>
-              <Form.Item
-                label="Catalog publish mode"
-                name="publish_mode"
-                extra="local - direct local commit, pr - publish through feature branch and PR."
-              >
-                <Select
-                  options={[
-                    { value: 'local', label: 'local' },
-                    { value: 'pr', label: 'pr' },
-                  ]}
-                />
-              </Form.Item>
             </div>
             <Title level={5} style={{ marginTop: 8 }}>Authentication Settings</Title>
-            <Tabs
-              items={[
-                {
-                  key: 'key',
-                  label: 'Account',
-                  children: (
-                    <>
-                      <div className="catalog-settings-grid">
-                        <Form.Item label="Git username" name="git_username">
-                          <Input placeholder="git-bot" />
-                        </Form.Item>
-                        <Form.Item label="Git password / PAT" name="git_password_or_pat">
-                          <Input.Password placeholder="Personal access token" />
-                        </Form.Item>
-                      </div>
-                    </>
-                  ),
-                },
-                {
-                  key: 'cert',
-                  label: 'Git client certificate',
-                  children: (
-                    <>
-                      <div className="catalog-settings-grid">
-                        <Form.Item className="catalog-settings-span-2" label="Git client certificate" name="git_certificate">
-                          <Input.TextArea rows={4} placeholder="-----BEGIN CERTIFICATE-----" />
-                        </Form.Item>
-                        <Form.Item className="catalog-settings-span-2" label="Git certificate key" name="git_certificate_key">
-                          <Input.TextArea rows={4} placeholder="-----BEGIN PRIVATE KEY-----" />
-                        </Form.Item>
-                      </div>
-                    </>
-                  ),
-                },
-              ]}
-            />
-            <Form.Item name="git_ssh_private_key" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="git_ssh_public_key" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="git_ssh_passphrase" hidden>
-              <Input />
-            </Form.Item>
+            <div className="catalog-settings-grid">
+              <Form.Item label="Git username" name="git_username">
+                <Input placeholder="git-bot" />
+              </Form.Item>
+              <Form.Item label="Git password / PAT" name="git_password_or_pat">
+                <Input.Password placeholder="Personal access token" />
+              </Form.Item>
+            </div>
           </Form>
         )}
       </Card>

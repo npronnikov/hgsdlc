@@ -1,0 +1,26 @@
+entity_type: flow
+id: restore-architecture-flow
+version: "1.0"
+canonical_name: restore-architecture-flow@1.0
+display_name: "Restore architecture flow"
+description: "Flow to reconstruct architecture artifacts from code."
+coding_agent: qwen
+team_code: platform-runtime
+platform_code: DATA
+tags:
+  - architecture
+  - orchestration
+  - seed
+flow_kind: orchestration
+risk_level: medium
+environment: prod
+approval_status: published
+approved_by: seed-approver
+approved_at: "2026-03-24T00:00:00Z"
+published_at: "2026-03-24T00:00:00Z"
+source_ref: main
+source_path: "flows/restore-architecture-flow/1.0"
+content_source: git
+visibility: internal
+lifecycle_status: active
+checksum: "278a55a453a12c911dbcc83f26e64db7eb4fb3e63f058539ba3630860f21614b"

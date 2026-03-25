@@ -76,17 +76,17 @@ public class RuleService {
         InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
         List<RuleVersion> rows = repository.queryLatestForCatalog(
                 normalizeFilter(query.search()),
-                normalizeFilter(query.codingAgent()),
-                normalizeFilter(query.status()),
+                normalizeEnumFilter(query.codingAgent()),
+                normalizeEnumFilter(query.status()),
                 normalizeFilter(query.teamCode()),
                 normalizeFilter(query.platformCode()),
                 normalizeFilter(query.ruleKind()),
                 normalizeFilter(query.scope()),
-                normalizeFilter(query.environment()),
-                normalizeFilter(query.approvalStatus()),
-                normalizeFilter(query.contentSource()),
-                normalizeFilter(query.visibility()),
-                normalizeFilter(query.lifecycleStatus()),
+                normalizeEnumFilter(query.environment()),
+                normalizeEnumFilter(query.approvalStatus()),
+                normalizeEnumFilter(query.contentSource()),
+                normalizeEnumFilter(query.visibility()),
+                normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.tag()),
                 normalizeFilter(query.version()),
                 query.hasDescription(),
@@ -380,6 +380,14 @@ public class RuleService {
         }
         String trimmed = value.trim();
         return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private String normalizeEnumFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toUpperCase();
     }
 
     private RuleProvider parseCodingAgent(String codingAgent) {

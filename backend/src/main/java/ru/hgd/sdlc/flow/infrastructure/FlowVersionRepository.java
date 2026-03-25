@@ -38,9 +38,22 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
             SELECT l.*
             FROM latest l
             WHERE (:search IS NULL OR LOWER(COALESCE(l.title, '') || ' ' || COALESCE(l.flow_id, '') || ' '
-                || COALESCE(l.canonical_name, '') || ' ' || COALESCE(l.description, '')) LIKE CONCAT('%', LOWER(:search), '%'))
+                || COALESCE(l.canonical_name, '') || ' ' || COALESCE(l.description, '') || ' '
+                || COALESCE(l.coding_agent, '') || ' ' || COALESCE(l.platform_code, '') || ' '
+                || COALESCE(l.team_code, '')) LIKE CONCAT('%', LOWER(:search), '%'))
+              AND (:codingAgent IS NULL OR l.coding_agent = :codingAgent)
+              AND (:teamCode IS NULL OR l.team_code = :teamCode)
+              AND (:platformCode IS NULL OR l.platform_code = :platformCode)
+              AND (:flowKind IS NULL OR l.flow_kind = :flowKind)
+              AND (:riskLevel IS NULL OR l.risk_level = :riskLevel)
+              AND (:environment IS NULL OR l.environment = :environment)
+              AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
+              AND (:contentSource IS NULL OR l.content_source = :contentSource)
+              AND (:visibility IS NULL OR l.visibility = :visibility)
+              AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:status IS NULL OR l.status = :status)
               AND (:version IS NULL OR l.version = :version)
+              AND (:tag IS NULL OR LOWER(COALESCE(l.tags_json, '')) LIKE CONCAT('%', LOWER(:tag), '%'))
               AND (
                   :hasDescription IS NULL
                   OR (:hasDescription = TRUE AND l.description IS NOT NULL AND BTRIM(l.description) <> '')
@@ -55,6 +68,17 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
             """, nativeQuery = true)
     List<FlowVersion> queryLatestForCatalog(
             @Param("search") String search,
+            @Param("codingAgent") String codingAgent,
+            @Param("teamCode") String teamCode,
+            @Param("platformCode") String platformCode,
+            @Param("flowKind") String flowKind,
+            @Param("riskLevel") String riskLevel,
+            @Param("environment") String environment,
+            @Param("approvalStatus") String approvalStatus,
+            @Param("contentSource") String contentSource,
+            @Param("visibility") String visibility,
+            @Param("lifecycleStatus") String lifecycleStatus,
+            @Param("tag") String tag,
             @Param("status") String status,
             @Param("version") String version,
             @Param("hasDescription") Boolean hasDescription,

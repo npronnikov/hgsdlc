@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -70,7 +72,7 @@ public class SettingsService {
     private static final String DEFAULT_WORKSPACE_ROOT = "/tmp/workspace";
     private static final String DEFAULT_CODING_AGENT = "qwen";
     private static final int DEFAULT_AI_TIMEOUT_SECONDS = 900;
-    private static final String DEFAULT_CATALOG_REPO_URL = "";
+    private static final String DEFAULT_CATALOG_REPO_URL = "https://github.com/npronnikov/catalog.git";
     private static final String DEFAULT_CATALOG_DEFAULT_BRANCH = "main";
     private static final String DEFAULT_CATALOG_PUBLISH_MODE = "pr";
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
@@ -131,6 +133,7 @@ public class SettingsService {
     public String getCatalogRepoUrl() {
         return repository.findById(CATALOG_REPO_URL_KEY)
                 .map(SystemSetting::getSettingValue)
+                .filter((value) -> !value.isBlank())
                 .orElse(DEFAULT_CATALOG_REPO_URL);
     }
 
@@ -202,7 +205,7 @@ public class SettingsService {
                 workspaceSetting.map(SystemSetting::getSettingValue).orElse(getWorkspaceRoot()),
                 codingAgentSetting.map(SystemSetting::getSettingValue).orElse(getRuntimeCodingAgent()),
                 aiTimeoutSetting.map(SystemSetting::getSettingValue).map(Integer::parseInt).orElse(DEFAULT_AI_TIMEOUT_SECONDS),
-                catalogRepoUrl.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_REPO_URL),
+                catalogRepoUrl.map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 catalogBranch.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 publishMode.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
                 sshPrivate.map(SystemSetting::getSettingValue).orElse(""),
@@ -227,7 +230,7 @@ public class SettingsService {
                 workspaceSetting.getSettingValue(),
                 codingAgentSetting.getSettingValue(),
                 Integer.parseInt(aiTimeoutSetting.getSettingValue()),
-                repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_REPO_URL),
+                repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 repository.findById(CATALOG_DEFAULT_BRANCH_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 repository.findById(CATALOG_PUBLISH_MODE_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
                 repository.findById(CATALOG_GIT_SSH_PRIVATE_KEY).map(SystemSetting::getSettingValue).orElse(""),
@@ -302,7 +305,11 @@ public class SettingsService {
         try {
         List<RepairError> errors = new ArrayList<>();
 
-        String repoUrl = repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).orElse("").trim();
+        String repoUrl = repository.findById(CATALOG_REPO_URL_KEY)
+                .map(SystemSetting::getSettingValue)
+                .filter((value) -> !value.isBlank())
+                .orElse(DEFAULT_CATALOG_REPO_URL)
+                .trim();
         String branch = repository.findById(CATALOG_DEFAULT_BRANCH_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH);
         if (repoUrl.isBlank()) {
             throw new ValidationException("catalog_repo_url is required before repair");
@@ -812,6 +819,22 @@ public class SettingsService {
     }
 
     private void syncMirror(String repoUrl, String branch, Path mirrorPath) throws IOException, InterruptedException {
+        try {
+            syncMirrorInternal(repoUrl, branch, mirrorPath);
+            return;
+        } catch (ValidationException ex) {
+            if (!isGitAuthorizationError(ex.getMessage())) {
+                throw ex;
+            }
+        }
+        String anonymousRepoUrl = toAnonymousRepoUrl(repoUrl);
+        if (anonymousRepoUrl.equals(repoUrl)) {
+            throw new ValidationException("Git authorization failed for repository: " + repoUrl);
+        }
+        syncMirrorInternal(anonymousRepoUrl, branch, mirrorPath);
+    }
+
+    private void syncMirrorInternal(String repoUrl, String branch, Path mirrorPath) throws IOException, InterruptedException {
         Files.createDirectories(mirrorPath.getParent());
         if (!Files.isDirectory(mirrorPath.resolve(".git"))) {
             runCommand(
@@ -824,6 +847,43 @@ public class SettingsService {
             runCommand(List.of("git", "-C", mirrorPath.toString(), "fetch", "--prune", "--tags", "origin"), null, Duration.ofMinutes(5));
             runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", "-B", branch, "origin/" + branch), null, Duration.ofMinutes(1));
             runCommand(List.of("git", "-C", mirrorPath.toString(), "reset", "--hard", "origin/" + branch), null, Duration.ofMinutes(1));
+        }
+    }
+
+    private boolean isGitAuthorizationError(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("401")
+                || normalized.contains("unauthorized")
+                || normalized.contains("authentication failed")
+                || normalized.contains("access denied");
+    }
+
+    private String toAnonymousRepoUrl(String repoUrl) {
+        if (repoUrl == null || repoUrl.isBlank()) {
+            return "";
+        }
+        try {
+            URI parsed = URI.create(repoUrl.trim());
+            if (!"http".equalsIgnoreCase(parsed.getScheme()) && !"https".equalsIgnoreCase(parsed.getScheme())) {
+                return repoUrl;
+            }
+            if (parsed.getUserInfo() == null || parsed.getUserInfo().isBlank()) {
+                return repoUrl;
+            }
+            return new URI(
+                    parsed.getScheme(),
+                    null,
+                    parsed.getHost(),
+                    parsed.getPort(),
+                    parsed.getPath(),
+                    parsed.getQuery(),
+                    parsed.getFragment()
+            ).toString();
+        } catch (IllegalArgumentException | URISyntaxException ex) {
+            return repoUrl;
         }
     }
 
@@ -866,7 +926,26 @@ public class SettingsService {
     }
 
     private void purgeCatalogIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE flows, skills, rules CASCADE");
+        if (tryExecuteCleanup("TRUNCATE TABLE flows, skills, rules CASCADE")) {
+            return;
+        }
+        if (tryExecuteCleanup("TRUNCATE TABLE flows")
+                && tryExecuteCleanup("TRUNCATE TABLE skills")
+                && tryExecuteCleanup("TRUNCATE TABLE rules")) {
+            return;
+        }
+        jdbcTemplate.execute("DELETE FROM flows");
+        jdbcTemplate.execute("DELETE FROM skills");
+        jdbcTemplate.execute("DELETE FROM rules");
+    }
+
+    private boolean tryExecuteCleanup(String sql) {
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     private SystemSetting upsert(String key, String value, String actorId) {

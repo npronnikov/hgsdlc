@@ -1267,6 +1267,36 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.active-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.active-filter-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.active-filter-chip-close {
+  font-weight: 700;
+  line-height: 1;
+}
+
 .transition-list {
   display: flex;
   flex-direction: column;

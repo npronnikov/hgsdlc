@@ -85,7 +85,18 @@ public class FlowService {
         InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
         List<FlowVersion> rows = repository.queryLatestForCatalog(
                 normalizeFilter(query.search()),
-                normalizeFilter(query.status()),
+                normalizeAgentFilter(query.codingAgent()),
+                normalizeFilter(query.teamCode()),
+                normalizeFilter(query.platformCode()),
+                normalizeFilter(query.flowKind()),
+                normalizeFilter(query.riskLevel()),
+                normalizeEnumFilter(query.environment()),
+                normalizeEnumFilter(query.approvalStatus()),
+                normalizeEnumFilter(query.contentSource()),
+                normalizeEnumFilter(query.visibility()),
+                normalizeEnumFilter(query.lifecycleStatus()),
+                normalizeFilter(query.tag()),
+                normalizeEnumFilter(query.status()),
                 normalizeFilter(query.version()),
                 query.hasDescription(),
                 parsedCursor == null ? null : parsedCursor.savedAt(),
@@ -517,6 +528,22 @@ public class FlowService {
         return trimmed.isBlank() ? null : trimmed;
     }
 
+    private String normalizeEnumFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toUpperCase();
+    }
+
+    private String normalizeAgentFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toLowerCase();
+    }
+
     private int[] parseVersion(String version) {
         if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
             throw new ValidationException("Invalid version: " + version);
@@ -547,6 +574,17 @@ public class FlowService {
             String cursor,
             Integer limit,
             String search,
+            String codingAgent,
+            String teamCode,
+            String platformCode,
+            String flowKind,
+            String riskLevel,
+            String environment,
+            String approvalStatus,
+            String contentSource,
+            String visibility,
+            String lifecycleStatus,
+            String tag,
             String status,
             String version,
             Boolean hasDescription

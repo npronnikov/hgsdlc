@@ -112,6 +112,20 @@ export default function Login() {
             <Button htmlType="submit" block>
               Sign in
             </Button>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginTop: 12 }}
+              message="Тестовые пользователи"
+              description={(
+                <div>
+                  <div><b>admin</b> (ADMIN) / <code>admin</code></div>
+                  <div><b>flow_configurator</b> (FLOW_CONFIGURATOR) / <code>admin</code></div>
+                  <div><b>product_owner</b> (PRODUCT_OWNER) / <code>admin</code></div>
+                  <div><b>tech_approver</b> (TECH_APPROVER) / <code>admin</code></div>
+                </div>
+              )}
+            />
           </Form>
         </Card>
       </div>

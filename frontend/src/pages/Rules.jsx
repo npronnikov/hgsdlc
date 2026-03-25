@@ -18,19 +18,13 @@ import { apiRequest } from '../api/request.js';
 const { Title, Text } = Typography;
 const PAGE_LIMIT = 24;
 
-const truncateCardName = (value, max = 26) => {
+const truncateCardName = (value, max = 25) => {
   if (!value) return '';
-  return value.length > max ? `${value.slice(0, max)}...` : value;
+  return value.length > max ? `${value.slice(0, Math.max(0, max - 3))}...` : value;
 };
 
 export default function Rules() {
-  const [rules, setRules] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
+  const defaultFilters = {
     search: '',
     codingAgent: null,
     teamCode: null,
@@ -46,7 +40,14 @@ export default function Rules() {
     status: null,
     version: '',
     hasDescription: null,
-  });
+  };
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState(defaultFilters);
   const navigate = useNavigate();
 
   const loadRules = async ({ cursor = null, append = false } = {}) => {
@@ -149,6 +150,26 @@ export default function Rules() {
   const visibilityOptions = useMemo(() => Array.from(new Set(rules.map((rule) => rule.visibility).filter(Boolean))), [rules]);
   const lifecycleStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.lifecycleStatus).filter(Boolean))), [rules]);
   const tags = useMemo(() => Array.from(new Set(rules.flatMap((rule) => rule.tags || []).filter(Boolean))), [rules]);
+  const activeFilters = useMemo(() => {
+    const items = [];
+    if (filters.search.trim()) items.push({ key: 'search', label: `Search: ${filters.search.trim()}` });
+    if (filters.codingAgent) items.push({ key: 'codingAgent', label: `Agent: ${filters.codingAgent}` });
+    if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
+    if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
+    if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
+    if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
+    if (filters.ruleKind) items.push({ key: 'ruleKind', label: `Type: ${filters.ruleKind}` });
+    if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
+    if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
+    if (filters.contentSource) items.push({ key: 'contentSource', label: `Source: ${filters.contentSource}` });
+    if (filters.visibility) items.push({ key: 'visibility', label: `Visibility: ${filters.visibility}` });
+    if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
+    if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
+    if (filters.hasDescription === true) items.push({ key: 'hasDescription', label: 'Description: yes' });
+    if (filters.hasDescription === false) items.push({ key: 'hasDescription', label: 'Description: no' });
+    return items;
+  }, [filters]);
 
   return (
     <div className="cards-page">
@@ -159,6 +180,25 @@ export default function Rules() {
           <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>
+      {activeFilters.length > 0 && (
+        <div className="active-filters-row">
+          {activeFilters.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="active-filter-chip"
+              onClick={() => setFilters((prev) => ({ ...prev, [item.key]: defaultFilters[item.key] }))}
+              title="Clear filter"
+            >
+              <span>{item.label}</span>
+              <span className="active-filter-chip-close">x</span>
+            </button>
+          ))}
+          <Button size="small" type="default" onClick={() => setFilters(defaultFilters)}>
+            Clear all
+          </Button>
+        </div>
+      )}
       <div className="cards-fullscreen">
         {loading ? (
           <div className="card-muted">Loading...</div>
@@ -218,8 +258,8 @@ export default function Rules() {
       </div>
 
       <Drawer title="Rules filter" placement="right" open={isFilterOpen} onClose={() => setIsFilterOpen(false)} width={360} className="filter-drawer">
-        <div className="filter-drawer-body">
-          <div className="filter-row">
+        <div className="filter-drawer-body filter-grid">
+          <div className="filter-row filter-row-span-2">
             <Text className="muted">Search</Text>
             <Input
               value={filters.search}
@@ -238,30 +278,14 @@ export default function Rules() {
           <div className="filter-row"><Text className="muted">Content source</Text><Select allowClear value={filters.contentSource} onChange={(value) => setFilters((prev) => ({ ...prev, contentSource: value || null }))} options={contentSources.map((value) => ({ value, label: value }))} placeholder="Select content source" /></div>
           <div className="filter-row"><Text className="muted">Visibility</Text><Select allowClear value={filters.visibility} onChange={(value) => setFilters((prev) => ({ ...prev, visibility: value || null }))} options={visibilityOptions.map((value) => ({ value, label: value }))} placeholder="Select visibility" /></div>
           <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
-          <div className="filter-row"><Text className="muted">Tag</Text><Select allowClear value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
+          <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row"><Text className="muted">Version</Text><Input value={filters.version} onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))} placeholder="For example 1.0.0" /></div>
           <div className="filter-row"><Text className="muted">Description</Text><Select allowClear value={filters.hasDescription} onChange={(value) => setFilters((prev) => ({ ...prev, hasDescription: value ?? null }))} options={[{ value: true, label: 'Has description' }, { value: false, label: 'No description' }]} placeholder="Any" /></div>
         </div>
         <div className="filter-drawer-footer">
           <Button
             type="default"
-            onClick={() => setFilters({
-              search: '',
-              codingAgent: null,
-              teamCode: null,
-              platformCode: null,
-              ruleKind: null,
-              scope: null,
-              environment: null,
-              approvalStatus: null,
-              contentSource: null,
-              visibility: null,
-              lifecycleStatus: null,
-              tag: null,
-              status: null,
-              version: '',
-              hasDescription: null,
-            })}
+            onClick={() => setFilters(defaultFilters)}
           >
             Reset
           </Button>

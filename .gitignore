@@ -120,3 +120,6 @@ docker-compose.override.yml
 
 # Memory can be kept or ignored depending on preference
 # .claude/memory/
+
+# Catalog repository
+/catalog-repo/*

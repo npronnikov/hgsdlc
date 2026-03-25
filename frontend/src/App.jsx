@@ -85,6 +85,7 @@ export default function App() {
             <Route path="artifacts" element={<Artifacts />} />
             <Route path="delta-summary" element={<DeltaSummary />} />
             <Route path="versions" element={<Versions />} />
+            <Route path="publication-queue" element={<Navigate to="/requests" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>

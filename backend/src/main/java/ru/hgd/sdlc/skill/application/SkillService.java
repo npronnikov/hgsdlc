@@ -19,6 +19,9 @@ import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.publication.application.PublicationService;
+import ru.hgd.sdlc.publication.domain.PublicationStatus;
+import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.skill.api.SkillSaveRequest;
 import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
 import ru.hgd.sdlc.skill.domain.SkillContentSource;
@@ -41,16 +44,19 @@ public class SkillService {
     private final TagRepository tagRepository;
     private final MarkdownFrontmatterParser frontmatterParser;
     private final SkillTemplateService templateService;
+    private final PublicationService publicationService;
 
     public SkillService(
             SkillVersionRepository repository,
             TagRepository tagRepository,
-            SkillTemplateService templateService
+            SkillTemplateService templateService,
+            PublicationService publicationService
     ) {
         this.repository = repository;
         this.tagRepository = tagRepository;
         this.frontmatterParser = new MarkdownFrontmatterParser();
         this.templateService = templateService;
+        this.publicationService = publicationService;
     }
 
     @Transactional(readOnly = true)
@@ -82,15 +88,15 @@ public class SkillService {
         InstantUuidCursor.Parsed parsedCursor = InstantUuidCursor.decode(query.cursor(), "cursor");
         List<SkillVersion> rows = repository.queryLatestForCatalog(
                 normalizeFilter(query.search()),
-                normalizeFilter(query.codingAgent()),
-                normalizeFilter(query.status()),
-                normalizeFilter(query.approvalStatus()),
+                normalizeEnumFilter(query.codingAgent()),
+                normalizeEnumFilter(query.status()),
+                normalizeEnumFilter(query.approvalStatus()),
                 normalizeFilter(query.teamCode()),
-                normalizeFilter(query.environment()),
+                normalizeEnumFilter(query.environment()),
                 normalizeFilter(query.platformCode()),
                 normalizeFilter(query.skillKind()),
-                normalizeFilter(query.contentSource()),
-                normalizeFilter(query.visibility()),
+                normalizeEnumFilter(query.contentSource()),
+                normalizeEnumFilter(query.visibility()),
                 normalizeFilter(query.version()),
                 normalizeFilter(query.tag()),
                 query.hasDescription(),
@@ -136,17 +142,11 @@ public class SkillService {
         entity.setApprovedBy(resolveSavedBy(user));
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
-        entity.setContentSource(SkillContentSource.GIT);
         entity.setChecksum(ChecksumUtil.sha256(entity.getSkillMarkdown()));
-        if (entity.getSourceRef() == null || entity.getSourceRef().isBlank()) {
-            entity.setSourceRef("pending-git");
-        }
-        if (entity.getSourcePath() == null || entity.getSourcePath().isBlank()) {
-            entity.setSourcePath("skills/" + entity.getSkillId() + "/" + entity.getVersion());
-        }
         entity.setSavedAt(now);
         entity.setSavedBy(resolveSavedBy(user));
-        return repository.save(entity);
+        repository.save(entity);
+        return publicationService.approveSkillPublication(skillId, version, user);
     }
 
     @Transactional
@@ -161,7 +161,9 @@ public class SkillService {
         entity.setStatus(SkillStatus.DRAFT);
         entity.setSavedAt(Instant.now());
         entity.setSavedBy(resolveSavedBy(user));
-        return repository.save(entity);
+        entity.setPublicationStatus(PublicationStatus.REJECTED);
+        repository.save(entity);
+        return publicationService.rejectSkillPublication(skillId, version, user, "Rejected by approver");
     }
 
     @Transactional(readOnly = true)
@@ -223,6 +225,8 @@ public class SkillService {
         boolean release = Boolean.TRUE.equals(request.release());
         boolean publishNow = false;
         boolean requestPublish = publish;
+        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
+        String publishMode = request.publishMode();
         SkillEnvironment environment = parseEnvironment(request.environment());
         SkillVisibility visibility = parseVisibility(request.visibility());
         SkillLifecycleStatus lifecycleStatus = parseLifecycleStatus(request.lifecycleStatus());
@@ -313,13 +317,25 @@ public class SkillService {
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
         entity.setContentSource(contentSource);
+        entity.setPublicationTarget(publicationTarget);
         entity.setSkillMarkdown(updatedMarkdown);
         entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(now);
+        if (requestPublish) {
+            entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
+            entity.setLastPublishError(null);
+            entity.setPublishedPrUrl(null);
+            entity.setPublishedCommitSha(null);
+        } else if (entity.getPublicationStatus() == null) {
+            entity.setPublicationStatus(PublicationStatus.DRAFT);
+        }
 
         SkillVersion saved = repository.save(entity);
         ensureTagsExist(normalizedTags);
+        if (requestPublish) {
+            publicationService.upsertSkillRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+        }
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);
@@ -461,6 +477,14 @@ public class SkillService {
         return trimmed.isBlank() ? null : trimmed;
     }
 
+    private String normalizeEnumFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replace('-', '_').toUpperCase();
+    }
+
     private SkillProvider parseCodingAgent(String codingAgent) {
         if (codingAgent == null || codingAgent.isBlank()) {
             return null;
@@ -504,6 +528,17 @@ public class SkillService {
             return SkillContentSource.GIT;
         }
         return SkillContentSource.DB;
+    }
+
+    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
+        if (!publishRequested) {
+            return PublicationTarget.DB_ONLY;
+        }
+        try {
+            return PublicationTarget.from(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException("Unsupported publication_target: " + raw);
+        }
     }
 
     private String normalizePlatformCode(String platformCode) {
