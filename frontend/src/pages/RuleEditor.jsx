@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
-import { MoreOutlined } from '@ant-design/icons';
+import { Button, Card, Input, Modal, Select, Space, Typography, message } from 'antd';
 import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -57,6 +56,14 @@ const lifecycleOptions = [
   { value: 'active', label: 'active' },
   { value: 'deprecated', label: 'deprecated' },
   { value: 'retired', label: 'retired' },
+];
+const publicationTargetOptions = [
+  { value: 'db_only', label: 'DB' },
+  { value: 'db_and_git', label: 'DB + Git' },
+];
+const publishModeOptions = [
+  { value: 'local', label: 'local (direct push)' },
+  { value: 'pr', label: 'pr (create Pull Request)' },
 ];
 const ruleKindOptions = [
   { value: 'architecture', label: 'architecture' },
@@ -169,6 +176,13 @@ export default function RuleEditor() {
   const [lifecycleStatus, setLifecycleStatus] = useState('active');
   const [approvalStatus, setApprovalStatus] = useState('');
   const [contentSource, setContentSource] = useState('');
+  const [publicationStatus, setPublicationStatus] = useState('');
+  const [publicationTarget, setPublicationTarget] = useState('db_and_git');
+  const [publishMode, setPublishMode] = useState('pr');
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishVariant, setPublishVariant] = useState('minor');
+  const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
+  const [publishDialogMode, setPublishDialogMode] = useState('pr');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [isNewRule, setIsNewRule] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -200,6 +214,8 @@ export default function RuleEditor() {
       setLifecycleStatus(data.lifecycle_status || 'active');
       setApprovalStatus(data.approval_status || '');
       setContentSource(data.content_source || '');
+      setPublicationStatus(data.publication_status || '');
+      setPublicationTarget(data.publication_target || 'db_and_git');
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(ruleId, data.version);
@@ -260,6 +276,8 @@ export default function RuleEditor() {
       setLifecycleStatus(data.lifecycle_status || 'active');
       setApprovalStatus(data.approval_status || '');
       setContentSource(data.content_source || '');
+      setPublicationStatus(data.publication_status || '');
+      setPublicationTarget(data.publication_target || 'db_and_git');
       setIsNewRule(false);
       setIsEditing(keepEditing);
       if (data.coding_agent) {
@@ -314,7 +332,7 @@ export default function RuleEditor() {
     await applyChange(isNewRule || !hasContent);
   };
 
-  const saveRule = async ({ publish, release = false }) => {
+  const saveRule = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
     if (!ruleId) {
       message.error('Rule ID is required');
       return;
@@ -353,6 +371,8 @@ export default function RuleEditor() {
           lifecycle_status: lifecycleStatus,
           rule_markdown: editorValue,
           publish,
+          publication_target: publicationTargetOverride || publicationTarget,
+          publish_mode: publishModeOverride || publishMode,
           release,
           base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
@@ -366,12 +386,16 @@ export default function RuleEditor() {
       setSelectedRuleId(response.rule_id || ruleId);
       setApprovalStatus(response.approval_status || approvalStatus);
       setContentSource(response.content_source || contentSource);
+      setPublicationStatus(response.publication_status || publicationStatus);
+      setPublicationTarget(response.publication_target || publicationTarget);
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(response.rule_id || ruleId, response.version || ruleVersion);
-      message.success(publish ? 'Rule published' : 'Draft saved');
+      message.success(publish ? 'Publication requested' : 'Draft saved');
+      return true;
     } catch (err) {
       message.error(toRussianError(err?.message, 'Failed to save Rule'));
+      return false;
     }
   };
 
@@ -391,6 +415,9 @@ export default function RuleEditor() {
     setLifecycleStatus('active');
     setApprovalStatus('');
     setContentSource('');
+    setPublicationStatus('draft');
+    setPublicationTarget('db_and_git');
+    setPublishMode('pr');
     setEditorValue('');
     setResourceVersion(0);
     setRuleVersion('');
@@ -444,6 +471,25 @@ export default function RuleEditor() {
     setRuleVersion(nextDraftVersion);
   };
 
+  const openPublishDialog = () => {
+    setPublishVariant('minor');
+    setPublishDialogTarget(publicationTarget || 'db_and_git');
+    setPublishDialogMode(publishMode || 'pr');
+    setPublishDialogOpen(true);
+  };
+
+  const confirmPublish = async () => {
+    const success = await saveRule({
+      publish: true,
+      release: publishVariant === 'major',
+      publicationTargetOverride: publishDialogTarget,
+      publishModeOverride: publishDialogMode,
+    });
+    if (success) {
+      setPublishDialogOpen(false);
+    }
+  };
+
   return (
     <div className="rule-editor-page">
       <div className="page-header">
@@ -453,29 +499,7 @@ export default function RuleEditor() {
             currentStatus === 'draft' ? (
               <>
                 <Button type="default" onClick={beginEditDraft}>Edit</Button>
-                <Dropdown
-                  menu={{
-                    items: [
-                      { key: 'publish', label: publishLabel },
-                      { key: 'release', label: releaseLabel },
-                    ],
-                    onClick: ({ key }) => {
-                      if (key === 'release') {
-                        Modal.confirm({
-                          title: 'Confirm major update?',
-                          content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
-                          okText: 'Release',
-                          cancelText: 'Cancel',
-                          onOk: () => saveRule({ publish: true, release: true }),
-                        });
-                        return;
-                      }
-                      saveRule({ publish: true, release: false });
-                    },
-                  }}
-                >
-                  <Button type="default" icon={<MoreOutlined />}>Publish</Button>
-                </Dropdown>
+                <Button type="default" onClick={openPublishDialog}>Request publication</Button>
               </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
@@ -486,29 +510,7 @@ export default function RuleEditor() {
           {isEditing && (
             <>
               <Button type="default" onClick={() => saveRule({ publish: false })}>Save</Button>
-              <Dropdown
-                menu={{
-                  items: [
-                    { key: 'publish', label: publishLabel },
-                    { key: 'release', label: releaseLabel },
-                  ],
-                  onClick: ({ key }) => {
-                    if (key === 'release') {
-                      Modal.confirm({
-                        title: 'Confirm major update?',
-                        content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
-                        okText: 'Release',
-                        cancelText: 'Cancel',
-                        onOk: () => saveRule({ publish: true, release: true }),
-                      });
-                      return;
-                    }
-                    saveRule({ publish: true, release: false });
-                  },
-                }}
-              >
-                <Button type="default" icon={<MoreOutlined />}>Publish</Button>
-              </Dropdown>
+              <Button type="default" onClick={openPublishDialog}>Request publication</Button>
             </>
           )}
         </Space>
@@ -775,12 +777,59 @@ export default function RuleEditor() {
           )}
           {!isCreateRoute && (
             <div style={{ marginTop: 12 }}>
+              <Text className="muted">Publication status</Text>
+              <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
+            </div>
+          )}
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
               <Text className="muted">Content source</Text>
               <div className="mono" style={{ marginTop: 4 }}>{contentSource || 'db'}</div>
             </div>
           )}
         </Card>
       </div>
+      <Modal
+        title="Request publication"
+        open={publishDialogOpen}
+        onCancel={() => setPublishDialogOpen(false)}
+        onOk={confirmPublish}
+        okText="Request"
+        cancelText="Cancel"
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div>
+            <Text className="muted">Version strategy</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishVariant}
+              onChange={setPublishVariant}
+              options={[
+                { value: 'minor', label: publishLabel },
+                { value: 'major', label: releaseLabel },
+              ]}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publication target</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogTarget}
+              onChange={setPublishDialogTarget}
+              options={publicationTargetOptions}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publish mode</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogMode}
+              onChange={setPublishDialogMode}
+              options={publishModeOptions}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

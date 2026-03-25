@@ -33,12 +33,18 @@ import ru.hgd.sdlc.publication.domain.PublicationJobStatus;
 import ru.hgd.sdlc.publication.domain.PublicationRequest;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
 import ru.hgd.sdlc.publication.domain.PublicationTarget;
+import ru.hgd.sdlc.rule.domain.RuleContentSource;
+import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.publication.infrastructure.PublicationApprovalRepository;
 import ru.hgd.sdlc.publication.infrastructure.PublicationJobRepository;
 import ru.hgd.sdlc.publication.infrastructure.PublicationRequestRepository;
 import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
+import ru.hgd.sdlc.flow.domain.FlowContentSource;
+import ru.hgd.sdlc.flow.domain.FlowVersion;
+import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.skill.domain.SkillContentSource;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
@@ -51,6 +57,8 @@ public class PublicationService {
     private final PublicationApprovalRepository publicationApprovalRepository;
     private final PublicationJobRepository publicationJobRepository;
     private final SkillVersionRepository skillVersionRepository;
+    private final RuleVersionRepository ruleVersionRepository;
+    private final FlowVersionRepository flowVersionRepository;
     private final SystemSettingRepository systemSettingRepository;
 
     public PublicationService(
@@ -58,12 +66,16 @@ public class PublicationService {
             PublicationApprovalRepository publicationApprovalRepository,
             PublicationJobRepository publicationJobRepository,
             SkillVersionRepository skillVersionRepository,
+            RuleVersionRepository ruleVersionRepository,
+            FlowVersionRepository flowVersionRepository,
             SystemSettingRepository systemSettingRepository
     ) {
         this.publicationRequestRepository = publicationRequestRepository;
         this.publicationApprovalRepository = publicationApprovalRepository;
         this.publicationJobRepository = publicationJobRepository;
         this.skillVersionRepository = skillVersionRepository;
+        this.ruleVersionRepository = ruleVersionRepository;
+        this.flowVersionRepository = flowVersionRepository;
         this.systemSettingRepository = systemSettingRepository;
     }
 
@@ -84,6 +96,56 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(skill.getCanonicalName());
+        request.setRequestedTarget(target);
+        request.setRequestedMode(normalizePublishMode(requestedMode));
+        request.setStatus(PublicationStatus.PENDING_APPROVAL);
+        request.setLastError(null);
+        request.setUpdatedAt(now);
+        publicationRequestRepository.save(request);
+    }
+
+    @Transactional
+    public void upsertRuleRequest(RuleVersion rule, String actorId, PublicationTarget target, String requestedMode) {
+        Instant now = Instant.now();
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.RULE, rule.getRuleId(), rule.getVersion())
+                .orElseGet(() -> PublicationRequest.builder()
+                        .id(UUID.randomUUID())
+                        .entityType(PublicationEntityType.RULE)
+                        .entityId(rule.getRuleId())
+                        .version(rule.getVersion())
+                        .canonicalName(rule.getCanonicalName())
+                        .author(actorId)
+                        .approvalCount(0)
+                        .requiredApprovals(1)
+                        .createdAt(now)
+                        .build());
+        request.setCanonicalName(rule.getCanonicalName());
+        request.setRequestedTarget(target);
+        request.setRequestedMode(normalizePublishMode(requestedMode));
+        request.setStatus(PublicationStatus.PENDING_APPROVAL);
+        request.setLastError(null);
+        request.setUpdatedAt(now);
+        publicationRequestRepository.save(request);
+    }
+
+    @Transactional
+    public void upsertFlowRequest(FlowVersion flow, String actorId, PublicationTarget target, String requestedMode) {
+        Instant now = Instant.now();
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.FLOW, flow.getFlowId(), flow.getVersion())
+                .orElseGet(() -> PublicationRequest.builder()
+                        .id(UUID.randomUUID())
+                        .entityType(PublicationEntityType.FLOW)
+                        .entityId(flow.getFlowId())
+                        .version(flow.getVersion())
+                        .canonicalName(flow.getCanonicalName())
+                        .author(actorId)
+                        .approvalCount(0)
+                        .requiredApprovals(1)
+                        .createdAt(now)
+                        .build());
+        request.setCanonicalName(flow.getCanonicalName());
         request.setRequestedTarget(target);
         request.setRequestedMode(normalizePublishMode(requestedMode));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
@@ -180,6 +242,176 @@ public class PublicationService {
         return runPublishJob(skill, request, user.getUsername());
     }
 
+    @Transactional
+    public RuleVersion approveRulePublication(String ruleId, String version, User approver) {
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.RULE, ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for rule: " + ruleId + "@" + version));
+        RuleVersion rule = ruleVersionRepository
+                .findFirstByRuleIdAndVersionOrderBySavedAtDesc(ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Rule version not found: " + ruleId + "@" + version));
+        requireApprover(approver);
+        String approverId = approver.getUsername();
+        if (approverId != null && approverId.equalsIgnoreCase(request.getAuthor())) {
+            throw new ValidationException("Self-approval is not allowed");
+        }
+        if (request.getStatus() != PublicationStatus.PENDING_APPROVAL) {
+            throw new ValidationException("Publication request is not pending approval");
+        }
+
+        Instant now = Instant.now();
+        request.setStatus(PublicationStatus.APPROVED);
+        request.setApprovalCount(request.getApprovalCount() + 1);
+        request.setUpdatedAt(now);
+        request.setLastError(null);
+        publicationRequestRepository.save(request);
+
+        publicationApprovalRepository.save(PublicationApproval.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .approver(approverId)
+                .decision(PublicationDecision.APPROVE)
+                .comment("approved")
+                .createdAt(now)
+                .build());
+
+        return runPublishRuleJob(rule, request, approverId);
+    }
+
+    @Transactional
+    public RuleVersion rejectRulePublication(String ruleId, String version, User approver, String reason) {
+        requireApprover(approver);
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.RULE, ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for rule: " + ruleId + "@" + version));
+        RuleVersion rule = ruleVersionRepository
+                .findFirstByRuleIdAndVersionOrderBySavedAtDesc(ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Rule version not found: " + ruleId + "@" + version));
+        request.setStatus(PublicationStatus.REJECTED);
+        request.setUpdatedAt(Instant.now());
+        request.setLastError(reason);
+        publicationRequestRepository.save(request);
+
+        publicationApprovalRepository.save(PublicationApproval.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .approver(approver.getUsername())
+                .decision(PublicationDecision.REJECT)
+                .comment(reason)
+                .createdAt(Instant.now())
+                .build());
+
+        rule.setPublicationStatus(PublicationStatus.REJECTED);
+        rule.setLastPublishError(reason);
+        rule.setSavedAt(Instant.now());
+        rule.setSavedBy(approver.getUsername());
+        return ruleVersionRepository.save(rule);
+    }
+
+    @Transactional
+    public RuleVersion retryRulePublication(String ruleId, String version, User user) {
+        requireApprover(user);
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.RULE, ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for rule: " + ruleId + "@" + version));
+        RuleVersion rule = ruleVersionRepository
+                .findFirstByRuleIdAndVersionOrderBySavedAtDesc(ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Rule version not found: " + ruleId + "@" + version));
+        if (request.getStatus() != PublicationStatus.FAILED && request.getStatus() != PublicationStatus.APPROVED) {
+            throw new ValidationException("Retry is allowed only for failed or approved requests");
+        }
+        request.setStatus(PublicationStatus.APPROVED);
+        request.setUpdatedAt(Instant.now());
+        request.setLastError(null);
+        publicationRequestRepository.save(request);
+        return runPublishRuleJob(rule, request, user.getUsername());
+    }
+
+    @Transactional
+    public FlowVersion approveFlowPublication(String flowId, String version, User approver) {
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.FLOW, flowId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for flow: " + flowId + "@" + version));
+        FlowVersion flow = flowVersionRepository
+                .findFirstByFlowIdAndVersionOrderBySavedAtDesc(flowId, version)
+                .orElseThrow(() -> new NotFoundException("Flow version not found: " + flowId + "@" + version));
+        requireApprover(approver);
+        String approverId = approver.getUsername();
+        if (approverId != null && approverId.equalsIgnoreCase(request.getAuthor())) {
+            throw new ValidationException("Self-approval is not allowed");
+        }
+        if (request.getStatus() != PublicationStatus.PENDING_APPROVAL) {
+            throw new ValidationException("Publication request is not pending approval");
+        }
+
+        Instant now = Instant.now();
+        request.setStatus(PublicationStatus.APPROVED);
+        request.setApprovalCount(request.getApprovalCount() + 1);
+        request.setUpdatedAt(now);
+        request.setLastError(null);
+        publicationRequestRepository.save(request);
+
+        publicationApprovalRepository.save(PublicationApproval.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .approver(approverId)
+                .decision(PublicationDecision.APPROVE)
+                .comment("approved")
+                .createdAt(now)
+                .build());
+
+        return runPublishFlowJob(flow, request, approverId);
+    }
+
+    @Transactional
+    public FlowVersion rejectFlowPublication(String flowId, String version, User approver, String reason) {
+        requireApprover(approver);
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.FLOW, flowId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for flow: " + flowId + "@" + version));
+        FlowVersion flow = flowVersionRepository
+                .findFirstByFlowIdAndVersionOrderBySavedAtDesc(flowId, version)
+                .orElseThrow(() -> new NotFoundException("Flow version not found: " + flowId + "@" + version));
+        request.setStatus(PublicationStatus.REJECTED);
+        request.setUpdatedAt(Instant.now());
+        request.setLastError(reason);
+        publicationRequestRepository.save(request);
+
+        publicationApprovalRepository.save(PublicationApproval.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .approver(approver.getUsername())
+                .decision(PublicationDecision.REJECT)
+                .comment(reason)
+                .createdAt(Instant.now())
+                .build());
+
+        flow.setPublicationStatus(PublicationStatus.REJECTED);
+        flow.setLastPublishError(reason);
+        flow.setSavedAt(Instant.now());
+        flow.setSavedBy(approver.getUsername());
+        return flowVersionRepository.save(flow);
+    }
+
+    @Transactional
+    public FlowVersion retryFlowPublication(String flowId, String version, User user) {
+        requireApprover(user);
+        PublicationRequest request = publicationRequestRepository
+                .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.FLOW, flowId, version)
+                .orElseThrow(() -> new NotFoundException("Publication request not found for flow: " + flowId + "@" + version));
+        FlowVersion flow = flowVersionRepository
+                .findFirstByFlowIdAndVersionOrderBySavedAtDesc(flowId, version)
+                .orElseThrow(() -> new NotFoundException("Flow version not found: " + flowId + "@" + version));
+        if (request.getStatus() != PublicationStatus.FAILED && request.getStatus() != PublicationStatus.APPROVED) {
+            throw new ValidationException("Retry is allowed only for failed or approved requests");
+        }
+        request.setStatus(PublicationStatus.APPROVED);
+        request.setUpdatedAt(Instant.now());
+        request.setLastError(null);
+        publicationRequestRepository.save(request);
+        return runPublishFlowJob(flow, request, user.getUsername());
+    }
+
     @Transactional(readOnly = true)
     public List<PublicationRequest> listRequests(String statusRaw) {
         if (statusRaw == null || statusRaw.isBlank()) {
@@ -272,6 +504,144 @@ public class PublicationService {
         }
     }
 
+    private RuleVersion runPublishRuleJob(RuleVersion rule, PublicationRequest request, String actor) {
+        Instant now = Instant.now();
+        int attempt = publicationJobRepository.findByRequestIdOrderByCreatedAtDesc(request.getId()).size() + 1;
+        PublicationJob job = PublicationJob.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .entityType(PublicationEntityType.RULE)
+                .entityId(rule.getRuleId())
+                .version(rule.getVersion())
+                .status(PublicationJobStatus.RUNNING)
+                .step("prepare")
+                .attemptNo(attempt)
+                .startedAt(now)
+                .createdAt(now)
+                .build();
+        publicationJobRepository.save(job);
+
+        rule.setPublicationTarget(request.getRequestedTarget());
+        rule.setPublicationStatus(PublicationStatus.PUBLISHING);
+        rule.setLastPublishError(null);
+        rule.setSavedAt(now);
+        rule.setSavedBy(actor);
+        ruleVersionRepository.save(rule);
+
+        try {
+            PublishResult publishResult = publishRule(rule, request, job);
+            job.setStatus(PublicationJobStatus.COMPLETED);
+            job.setStep("completed");
+            job.setCommitSha(publishResult.commitSha());
+            job.setPrUrl(publishResult.prUrl());
+            job.setPrNumber(publishResult.prNumber());
+            job.setFinishedAt(Instant.now());
+            publicationJobRepository.save(job);
+
+            request.setStatus(publishResult.awaitingMerge() ? PublicationStatus.PUBLISHING : PublicationStatus.PUBLISHED);
+            request.setUpdatedAt(Instant.now());
+            request.setLastError(null);
+            publicationRequestRepository.save(request);
+
+            rule.setPublishedCommitSha(publishResult.commitSha());
+            rule.setPublishedPrUrl(publishResult.prUrl());
+            rule.setLastPublishError(null);
+            rule.setContentSource(request.getRequestedTarget() == PublicationTarget.DB_ONLY ? RuleContentSource.DB : RuleContentSource.GIT);
+            rule.setSourcePath("rules/" + rule.getRuleId() + "/" + rule.getVersion());
+            rule.setSourceRef(publishResult.sourceRef());
+            if (!publishResult.awaitingMerge()) {
+                rule.setPublicationStatus(PublicationStatus.PUBLISHED);
+            }
+            return ruleVersionRepository.save(rule);
+        } catch (Exception ex) {
+            String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            job.setStatus(PublicationJobStatus.FAILED);
+            job.setStep("failed");
+            job.setError(error);
+            job.setFinishedAt(Instant.now());
+            publicationJobRepository.save(job);
+
+            request.setStatus(PublicationStatus.FAILED);
+            request.setUpdatedAt(Instant.now());
+            request.setLastError(error);
+            publicationRequestRepository.save(request);
+
+            rule.setPublicationStatus(PublicationStatus.FAILED);
+            rule.setLastPublishError(error);
+            ruleVersionRepository.save(rule);
+            throw new ValidationException("Publish failed: " + error);
+        }
+    }
+
+    private FlowVersion runPublishFlowJob(FlowVersion flow, PublicationRequest request, String actor) {
+        Instant now = Instant.now();
+        int attempt = publicationJobRepository.findByRequestIdOrderByCreatedAtDesc(request.getId()).size() + 1;
+        PublicationJob job = PublicationJob.builder()
+                .id(UUID.randomUUID())
+                .requestId(request.getId())
+                .entityType(PublicationEntityType.FLOW)
+                .entityId(flow.getFlowId())
+                .version(flow.getVersion())
+                .status(PublicationJobStatus.RUNNING)
+                .step("prepare")
+                .attemptNo(attempt)
+                .startedAt(now)
+                .createdAt(now)
+                .build();
+        publicationJobRepository.save(job);
+
+        flow.setPublicationTarget(request.getRequestedTarget());
+        flow.setPublicationStatus(PublicationStatus.PUBLISHING);
+        flow.setLastPublishError(null);
+        flow.setSavedAt(now);
+        flow.setSavedBy(actor);
+        flowVersionRepository.save(flow);
+
+        try {
+            PublishResult publishResult = publishFlow(flow, request, job);
+            job.setStatus(PublicationJobStatus.COMPLETED);
+            job.setStep("completed");
+            job.setCommitSha(publishResult.commitSha());
+            job.setPrUrl(publishResult.prUrl());
+            job.setPrNumber(publishResult.prNumber());
+            job.setFinishedAt(Instant.now());
+            publicationJobRepository.save(job);
+
+            request.setStatus(publishResult.awaitingMerge() ? PublicationStatus.PUBLISHING : PublicationStatus.PUBLISHED);
+            request.setUpdatedAt(Instant.now());
+            request.setLastError(null);
+            publicationRequestRepository.save(request);
+
+            flow.setPublishedCommitSha(publishResult.commitSha());
+            flow.setPublishedPrUrl(publishResult.prUrl());
+            flow.setLastPublishError(null);
+            flow.setContentSource(request.getRequestedTarget() == PublicationTarget.DB_ONLY ? FlowContentSource.DB : FlowContentSource.GIT);
+            flow.setSourcePath("flows/" + flow.getFlowId() + "/" + flow.getVersion());
+            flow.setSourceRef(publishResult.sourceRef());
+            if (!publishResult.awaitingMerge()) {
+                flow.setPublicationStatus(PublicationStatus.PUBLISHED);
+            }
+            return flowVersionRepository.save(flow);
+        } catch (Exception ex) {
+            String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            job.setStatus(PublicationJobStatus.FAILED);
+            job.setStep("failed");
+            job.setError(error);
+            job.setFinishedAt(Instant.now());
+            publicationJobRepository.save(job);
+
+            request.setStatus(PublicationStatus.FAILED);
+            request.setUpdatedAt(Instant.now());
+            request.setLastError(error);
+            publicationRequestRepository.save(request);
+
+            flow.setPublicationStatus(PublicationStatus.FAILED);
+            flow.setLastPublishError(error);
+            flowVersionRepository.save(flow);
+            throw new ValidationException("Publish failed: " + error);
+        }
+    }
+
     private PublishResult publish(SkillVersion skill, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
         if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
             return new PublishResult(null, null, null, "db", false);
@@ -317,6 +687,94 @@ public class PublicationService {
         return new PublishResult(commitSha, null, null, commitSha, false);
     }
 
+    private PublishResult publishRule(RuleVersion rule, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
+        if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
+            return new PublishResult(null, null, null, "db", false);
+        }
+        CatalogGitSettings settings = loadCatalogGitSettings();
+        Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
+        syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
+
+        String sourceDir = "rules/" + rule.getRuleId() + "/" + rule.getVersion();
+        String branchName;
+        String mode = normalizePublishMode(request.getRequestedMode());
+        if ("pr".equals(mode)) {
+            branchName = "publish/rule/" + rule.getRuleId() + "/" + rule.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
+        } else {
+            branchName = settings.defaultBranch();
+        }
+        job.setStep("git_prepare");
+        job.setBranchName(branchName);
+        publicationJobRepository.save(job);
+
+        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
+        if (!branchName.equals(settings.defaultBranch())) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+        }
+
+        writeRuleFiles(repoPath, sourceDir, rule, settings.defaultBranch());
+
+        job.setStep("git_commit");
+        publicationJobRepository.save(job);
+        runGit(List.of("git", "-C", repoPath.toString(), "add", sourceDir));
+        runGit(List.of("git", "-C", repoPath.toString(), "commit", "-m", "publish(rule): " + rule.getCanonicalName()));
+        String commitSha = runGitWithOutput(List.of("git", "-C", repoPath.toString(), "rev-parse", "HEAD")).trim();
+        String pushUrl = authenticatedRepoUrl(settings.repoUrl(), settings.gitUsername(), settings.gitPasswordOrPat());
+        runGit(List.of("git", "-C", repoPath.toString(), "push", pushUrl, branchName));
+
+        if ("pr".equals(mode)) {
+            job.setStep("create_pr");
+            publicationJobRepository.save(job);
+            PrResult prResult = createPullRequest(settings, branchName, rule.getCanonicalName());
+            return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
+        }
+        return new PublishResult(commitSha, null, null, commitSha, false);
+    }
+
+    private PublishResult publishFlow(FlowVersion flow, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
+        if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
+            return new PublishResult(null, null, null, "db", false);
+        }
+        CatalogGitSettings settings = loadCatalogGitSettings();
+        Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
+        syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
+
+        String sourceDir = "flows/" + flow.getFlowId() + "/" + flow.getVersion();
+        String branchName;
+        String mode = normalizePublishMode(request.getRequestedMode());
+        if ("pr".equals(mode)) {
+            branchName = "publish/flow/" + flow.getFlowId() + "/" + flow.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
+        } else {
+            branchName = settings.defaultBranch();
+        }
+        job.setStep("git_prepare");
+        job.setBranchName(branchName);
+        publicationJobRepository.save(job);
+
+        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
+        if (!branchName.equals(settings.defaultBranch())) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+        }
+
+        writeFlowFiles(repoPath, sourceDir, flow, settings.defaultBranch());
+
+        job.setStep("git_commit");
+        publicationJobRepository.save(job);
+        runGit(List.of("git", "-C", repoPath.toString(), "add", sourceDir));
+        runGit(List.of("git", "-C", repoPath.toString(), "commit", "-m", "publish(flow): " + flow.getCanonicalName()));
+        String commitSha = runGitWithOutput(List.of("git", "-C", repoPath.toString(), "rev-parse", "HEAD")).trim();
+        String pushUrl = authenticatedRepoUrl(settings.repoUrl(), settings.gitUsername(), settings.gitPasswordOrPat());
+        runGit(List.of("git", "-C", repoPath.toString(), "push", pushUrl, branchName));
+
+        if ("pr".equals(mode)) {
+            job.setStep("create_pr");
+            publicationJobRepository.save(job);
+            PrResult prResult = createPullRequest(settings, branchName, flow.getCanonicalName());
+            return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
+        }
+        return new PublishResult(commitSha, null, null, commitSha, false);
+    }
+
     private void writeSkillFiles(Path repoPath, String sourceDir, SkillVersion skill, String baseBranch) throws IOException {
         Path dir = repoPath.resolve(sourceDir);
         Files.createDirectories(dir);
@@ -325,16 +783,96 @@ public class PublicationService {
 
         String checksum = ChecksumUtil.sha256(skill.getSkillMarkdown());
         String metadata = String.join("\n",
-                "id: " + skill.getSkillId(),
-                "version: " + skill.getVersion(),
-                "canonical_name: " + skill.getCanonicalName(),
                 "entity_type: skill",
-                "display_name: " + skill.getName(),
+                "id: " + skill.getSkillId(),
+                "version: " + toYamlString(skill.getVersion()),
+                "canonical_name: " + skill.getCanonicalName(),
+                "display_name: " + toYamlString(skill.getName()),
                 "description: " + toYamlString(skill.getDescription()),
                 "coding_agent: " + (skill.getCodingAgent() == null ? "qwen" : skill.getCodingAgent().name().toLowerCase(Locale.ROOT)),
-                "source_ref: " + baseBranch,
-                "source_path: " + sourceDir,
-                "checksum: sha256:" + checksum,
+                "team_code: " + toYamlString(skill.getTeamCode()),
+                "platform_code: " + toYamlString(skill.getPlatformCode()),
+                "tags: " + toYamlInlineList(skill.getTags()),
+                "skill_kind: " + toYamlString(skill.getSkillKind()),
+                "environment: " + toYamlLowerName(skill.getEnvironment()),
+                "approval_status: " + toYamlLowerName(skill.getApprovalStatus()),
+                "approved_by: " + toYamlString(skill.getApprovedBy()),
+                "approved_at: " + toYamlInstant(skill.getApprovedAt()),
+                "published_at: " + toYamlInstant(skill.getPublishedAt()),
+                "source_ref: " + toYamlString(baseBranch),
+                "source_path: " + toYamlString(sourceDir),
+                "content_source: git",
+                "visibility: " + toYamlLowerName(skill.getVisibility()),
+                "lifecycle_status: " + toYamlLowerName(skill.getLifecycleStatus()),
+                "checksum: " + toYamlString(checksum),
+                "");
+        Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
+    }
+
+    private void writeRuleFiles(Path repoPath, String sourceDir, RuleVersion rule, String baseBranch) throws IOException {
+        Path dir = repoPath.resolve(sourceDir);
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("RULE.md"), rule.getRuleMarkdown(), StandardCharsets.UTF_8);
+
+        String checksum = ChecksumUtil.sha256(rule.getRuleMarkdown());
+        String metadata = String.join("\n",
+                "entity_type: rule",
+                "id: " + rule.getRuleId(),
+                "version: " + toYamlString(rule.getVersion()),
+                "canonical_name: " + rule.getCanonicalName(),
+                "display_name: " + toYamlString(rule.getTitle()),
+                "description: " + toYamlString(rule.getDescription()),
+                "coding_agent: " + (rule.getCodingAgent() == null ? "qwen" : rule.getCodingAgent().name().toLowerCase(Locale.ROOT)),
+                "team_code: " + toYamlString(rule.getTeamCode()),
+                "platform_code: " + toYamlString(rule.getPlatformCode()),
+                "tags: " + toYamlInlineList(rule.getTags()),
+                "rule_kind: " + toYamlString(rule.getRuleKind()),
+                "scope: " + toYamlString(rule.getScope()),
+                "environment: " + toYamlLowerName(rule.getEnvironment()),
+                "approval_status: " + toYamlLowerName(rule.getApprovalStatus()),
+                "approved_by: " + toYamlString(rule.getApprovedBy()),
+                "approved_at: " + toYamlInstant(rule.getApprovedAt()),
+                "published_at: " + toYamlInstant(rule.getPublishedAt()),
+                "source_ref: " + toYamlString(baseBranch),
+                "source_path: " + toYamlString(sourceDir),
+                "content_source: git",
+                "visibility: " + toYamlLowerName(rule.getVisibility()),
+                "lifecycle_status: " + toYamlLowerName(rule.getLifecycleStatus()),
+                "checksum: " + toYamlString(checksum),
+                "");
+        Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
+    }
+
+    private void writeFlowFiles(Path repoPath, String sourceDir, FlowVersion flow, String baseBranch) throws IOException {
+        Path dir = repoPath.resolve(sourceDir);
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("FLOW.yaml"), flow.getFlowYaml(), StandardCharsets.UTF_8);
+
+        String checksum = ChecksumUtil.sha256(flow.getFlowYaml());
+        String metadata = String.join("\n",
+                "entity_type: flow",
+                "id: " + flow.getFlowId(),
+                "version: " + toYamlString(flow.getVersion()),
+                "canonical_name: " + flow.getCanonicalName(),
+                "display_name: " + toYamlString(flow.getTitle()),
+                "description: " + toYamlString(flow.getDescription()),
+                "coding_agent: " + toYamlString(flow.getCodingAgent()),
+                "team_code: " + toYamlString(flow.getTeamCode()),
+                "platform_code: " + toYamlString(flow.getPlatformCode()),
+                "tags: " + toYamlInlineList(flow.getTags()),
+                "flow_kind: " + toYamlString(flow.getFlowKind()),
+                "risk_level: " + toYamlString(flow.getRiskLevel()),
+                "environment: " + toYamlLowerName(flow.getEnvironment()),
+                "approval_status: " + toYamlLowerName(flow.getApprovalStatus()),
+                "approved_by: " + toYamlString(flow.getApprovedBy()),
+                "approved_at: " + toYamlInstant(flow.getApprovedAt()),
+                "published_at: " + toYamlInstant(flow.getPublishedAt()),
+                "source_ref: " + toYamlString(baseBranch),
+                "source_path: " + toYamlString(sourceDir),
+                "content_source: git",
+                "visibility: " + toYamlLowerName(flow.getVisibility()),
+                "lifecycle_status: " + toYamlLowerName(flow.getLifecycleStatus()),
+                "checksum: " + toYamlString(checksum),
                 "");
         Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
     }
@@ -344,6 +882,35 @@ public class PublicationService {
             return "''";
         }
         return "\"" + value.replace("\"", "\\\"") + "\"";
+    }
+
+    private String toYamlInstant(Instant value) {
+        if (value == null) {
+            return "''";
+        }
+        return toYamlString(value.toString());
+    }
+
+    private String toYamlLowerName(Enum<?> value) {
+        if (value == null) {
+            return "''";
+        }
+        return value.name().toLowerCase(Locale.ROOT);
+    }
+
+    private String toYamlInlineList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "[]";
+        }
+        String joined = values.stream()
+                .filter((item) -> item != null && !item.isBlank())
+                .map(this::toYamlString)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        if (joined.isBlank()) {
+            return "[]";
+        }
+        return "[" + joined + "]";
     }
 
     private PrResult createPullRequest(CatalogGitSettings settings, String branchName, String canonicalName) {

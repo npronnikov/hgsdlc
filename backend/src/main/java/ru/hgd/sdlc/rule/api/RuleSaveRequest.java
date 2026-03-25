@@ -20,6 +20,8 @@ public record RuleSaveRequest(
         @JsonProperty("source_path") String sourcePath,
         @JsonProperty("rule_markdown") String ruleMarkdown,
         @JsonProperty("publish") Boolean publish,
+        @JsonProperty("publication_target") String publicationTarget,
+        @JsonProperty("publish_mode") String publishMode,
         @JsonProperty("release") Boolean release,
         @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion

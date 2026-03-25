@@ -80,9 +80,6 @@ export default function Skills() {
         tags: skill.tags || [],
         visibility: skill.visibility,
         skillKind: skill.skill_kind,
-        publicationStatus: skill.publication_status,
-        publicationTarget: skill.publication_target,
-        publishedPrUrl: skill.published_pr_url,
         version: skill.version,
         canonical: skill.canonical_name,
       }));
@@ -203,7 +200,6 @@ export default function Skills() {
                   <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{skill.platformCode || '—'}</span></div>
                   <div className="resource-meta-row"><span className="resource-meta-key"><EyeOutlined />Visibility</span><span className="resource-meta-value">{skill.visibility || '—'}</span></div>
                   <div className="resource-meta-row"><span className="resource-meta-key"><SafetyCertificateOutlined />Approval</span><span className="resource-meta-value">{skill.approvalStatus || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><SafetyCertificateOutlined />Publish</span><span className="resource-meta-value">{skill.publicationStatus || '—'}</span></div>
                 </div>
                 {(skill.tags || []).length > 0 && (
                   <div className="resource-tags-row">
@@ -215,8 +211,6 @@ export default function Skills() {
                 <div className="resource-card-footer">
                   <div className="resource-card-chips">
                     {skill.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{skill.teamCode}</span>}
-                    {skill.publicationTarget && <span className="resource-chip">{skill.publicationTarget}</span>}
-                    {skill.publishedPrUrl && <a href={skill.publishedPrUrl} target="_blank" rel="noreferrer" className="resource-chip">PR</a>}
                   </div>
                 </div>
               </Card>

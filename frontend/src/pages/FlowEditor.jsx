@@ -188,6 +188,14 @@ const lifecycleOptions = [
   { value: 'deprecated', label: 'deprecated' },
   { value: 'retired', label: 'retired' },
 ];
+const publicationTargetOptions = [
+  { value: 'db_only', label: 'DB' },
+  { value: 'db_and_git', label: 'DB + Git' },
+];
+const publishModeOptions = [
+  { value: 'local', label: 'local (direct push)' },
+  { value: 'pr', label: 'pr (create Pull Request)' },
+];
 const flowKindOptions = [
   { value: 'orchestration', label: 'orchestration' },
   { value: 'governance', label: 'governance' },
@@ -219,6 +227,9 @@ const emptyFlow = {
   lifecycleStatus: 'active',
   approvalStatus: '',
   contentSource: '',
+  publicationStatus: 'draft',
+  publicationTarget: 'db_and_git',
+  publishMode: 'pr',
   failOnMissingDeclaredOutput: false,
   failOnMissingExpectedMutation: false,
   responseSchema: '',
@@ -571,6 +582,10 @@ export default function FlowEditor() {
   const [nodeIdDraft, setNodeIdDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishVariant, setPublishVariant] = useState('minor');
+  const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
+  const [publishDialogMode, setPublishDialogMode] = useState('pr');
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
   const currentParsed = parseMajorMinor(flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
   const currentMajor = currentParsed.valid ? currentParsed.major : parseMajorMinor(DEFAULT_VERSION).major;
@@ -972,6 +987,8 @@ export default function FlowEditor() {
         lifecycleStatus: data.lifecycle_status || 'active',
         approvalStatus: data.approval_status || '',
         contentSource: data.content_source || '',
+        publicationStatus: data.publication_status || 'draft',
+        publicationTarget: data.publication_target || 'db_and_git',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -1015,6 +1032,8 @@ export default function FlowEditor() {
         lifecycleStatus: data.lifecycle_status || 'active',
         approvalStatus: data.approval_status || '',
         contentSource: data.content_source || '',
+        publicationStatus: data.publication_status || 'draft',
+        publicationTarget: data.publication_target || 'db_and_git',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -1149,7 +1168,7 @@ export default function FlowEditor() {
     return lines.join('\n');
   };
 
-  const saveFlow = async ({ publish, release = false }) => {
+  const saveFlow = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
     if (!flowMeta.flowId) {
       message.error('Flow ID is required');
       return false;
@@ -1186,6 +1205,8 @@ export default function FlowEditor() {
           lifecycle_status: flowMeta.lifecycleStatus,
           flow_yaml: flowYaml,
           publish,
+          publication_target: publicationTargetOverride || flowMeta.publicationTarget,
+          publish_mode: publishModeOverride || flowMeta.publishMode,
           release,
           base_version: baseVersion || undefined,
           resource_version: resourceVersion,
@@ -1210,6 +1231,9 @@ export default function FlowEditor() {
         lifecycleStatus: response.lifecycle_status || prev.lifecycleStatus,
         approvalStatus: response.approval_status || prev.approvalStatus,
         contentSource: response.content_source || prev.contentSource,
+        publicationStatus: response.publication_status || prev.publicationStatus,
+        publicationTarget: response.publication_target || prev.publicationTarget,
+        publishMode: publishModeOverride || prev.publishMode,
         failOnMissingDeclaredOutput: response.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: response.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: response.response_schema
@@ -1220,7 +1244,7 @@ export default function FlowEditor() {
       setCurrentStatus(response.status || currentStatus);
       setBaseVersion(response.version || baseVersion);
       setResourceVersion(response.resource_version ?? resourceVersion);
-      message.success(publish ? 'Flow published' : 'Draft saved');
+      message.success(publish ? 'Publication requested' : 'Draft saved');
       if (response.flow_id || flowMeta.flowId) {
         loadFlowVersions(response.flow_id || flowMeta.flowId);
       }
@@ -1318,6 +1342,25 @@ export default function FlowEditor() {
     setFlowVersion(nextDraftVersion);
   };
 
+  const openPublishDialog = () => {
+    setPublishVariant('minor');
+    setPublishDialogTarget(flowMeta.publicationTarget || 'db_and_git');
+    setPublishDialogMode(flowMeta.publishMode || 'pr');
+    setPublishDialogOpen(true);
+  };
+
+  const confirmPublish = async () => {
+    const ok = await saveFlow({
+      publish: true,
+      release: publishVariant === 'major',
+      publicationTargetOverride: publishDialogTarget,
+      publishModeOverride: publishDialogMode,
+    });
+    if (ok) {
+      setPublishDialogOpen(false);
+    }
+  };
+
   return (
     <div className="flow-editor-page">
       <div className="page-header">
@@ -1346,29 +1389,7 @@ export default function FlowEditor() {
               Save
             </Button>
           )}
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'publish', label: publishLabel },
-                { key: 'release', label: releaseLabel },
-              ],
-              onClick: ({ key }) => {
-                if (key === 'release') {
-                  Modal.confirm({
-                    title: 'Confirm major update?',
-                    content: `A breaking version will be released -> ${releaseVersion}. This is the next available major after ${maxPublishedMajor === null ? 'no published versions' : `${maxPublishedMajor}.x`}.`,
-                    okText: 'Release',
-                    cancelText: 'Cancel',
-                    onOk: () => saveFlow({ publish: true, release: true }),
-                  });
-                  return;
-                }
-                saveFlow({ publish: true, release: false });
-              },
-            }}
-          >
-            <Button type="default" icon={<MoreOutlined />}>Publish</Button>
-          </Dropdown>
+          <Button type="default" onClick={openPublishDialog}>Request publication</Button>
         </Space>
       </div>
 
@@ -1706,6 +1727,12 @@ export default function FlowEditor() {
                 <div>
                   <Text className="muted">Content source</Text>
                   <div className="mono">{flowMeta.contentSource || 'db'}</div>
+                </div>
+              )}
+              {!isCreateMode && (
+                <div>
+                  <Text className="muted">Publication status</Text>
+                  <div className="mono">{flowMeta.publicationStatus || 'draft'}</div>
                 </div>
               )}
               <div>
@@ -2331,6 +2358,47 @@ export default function FlowEditor() {
           </Card>
         </div>
       </div>
+      <Modal
+        title="Request publication"
+        open={publishDialogOpen}
+        onCancel={() => setPublishDialogOpen(false)}
+        onOk={confirmPublish}
+        okText="Request"
+        cancelText="Cancel"
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div>
+            <Text className="muted">Version strategy</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishVariant}
+              onChange={setPublishVariant}
+              options={[
+                { value: 'minor', label: publishLabel },
+                { value: 'major', label: releaseLabel },
+              ]}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publication target</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogTarget}
+              onChange={setPublishDialogTarget}
+              options={publicationTargetOptions}
+            />
+          </div>
+          <div>
+            <Text className="muted">Publish mode</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={publishDialogMode}
+              onChange={setPublishDialogMode}
+              options={publishModeOptions}
+            />
+          </div>
+        </div>
+      </Modal>
       <Modal
         open={!!pendingConnection}
         title="Select link type"

@@ -18,6 +18,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
     Optional<FlowVersion> findFirstByFlowIdAndVersionOrderBySavedAtDesc(String flowId, String version);
 
     List<FlowVersion> findByFlowIdOrderBySavedAtDesc(String flowId);
+    List<FlowVersion> findByApprovalStatusOrderBySavedAtDesc(ru.hgd.sdlc.flow.domain.FlowApprovalStatus approvalStatus);
 
     List<FlowVersion> findAllByOrderBySavedAtDesc();
 

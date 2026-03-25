@@ -36,8 +36,7 @@ export default function Requests() {
         apiRequest(`/publications/requests${query}`),
         apiRequest('/publications/jobs'),
       ]);
-      const reqItems = Array.isArray(reqData) ? reqData.filter((item) => item.entity_type === 'skill') : [];
-      setRequests(reqItems);
+      setRequests(Array.isArray(reqData) ? reqData : []);
       setJobs(Array.isArray(jobsData) ? jobsData : []);
     } catch (err) {
       message.error(err.message || 'Failed to load requests');
@@ -79,7 +78,7 @@ export default function Requests() {
 
   const approve = async (row) => {
     try {
-      await apiRequest(`/publications/skills/${row.entity_id}/versions/${row.version}/approve`, { method: 'POST' });
+      await apiRequest(`/publications/${row.entity_type}s/${row.entity_id}/versions/${row.version}/approve`, { method: 'POST' });
       message.success('Request approved');
       await load();
     } catch (err) {
@@ -89,7 +88,7 @@ export default function Requests() {
 
   const reject = async (row) => {
     try {
-      await apiRequest(`/publications/skills/${row.entity_id}/versions/${row.version}/reject`, {
+      await apiRequest(`/publications/${row.entity_type}s/${row.entity_id}/versions/${row.version}/reject`, {
         method: 'POST',
         body: JSON.stringify({ reason: rejectReason[row.id] || 'Rejected by approver' }),
       });
@@ -102,7 +101,7 @@ export default function Requests() {
 
   const retry = async (row) => {
     try {
-      await apiRequest(`/publications/skills/${row.entity_id}/versions/${row.version}/retry`, { method: 'POST' });
+      await apiRequest(`/publications/${row.entity_type}s/${row.entity_id}/versions/${row.version}/retry`, { method: 'POST' });
       message.success('Retry started');
       await load();
     } catch (err) {
@@ -124,7 +123,8 @@ export default function Requests() {
   }
 
   const columns = [
-    { title: 'Skill ID', dataIndex: 'entity_id', key: 'entity_id', width: 180, fixed: 'left' },
+    { title: 'Type', dataIndex: 'entity_type', key: 'entity_type', width: 90, fixed: 'left' },
+    { title: 'Entity ID', dataIndex: 'entity_id', key: 'entity_id', width: 180, fixed: 'left' },
     { title: 'Version', dataIndex: 'version', key: 'version', width: 100, fixed: 'left' },
     { title: 'Author', dataIndex: 'author', key: 'author', width: 150 },
     { title: 'Status', dataIndex: 'status', key: 'status', width: 160 },

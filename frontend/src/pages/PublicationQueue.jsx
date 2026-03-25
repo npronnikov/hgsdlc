@@ -26,9 +26,9 @@ export default function PublicationQueue() {
     load();
   }, [status]);
 
-  const retrySkill = async (row) => {
+  const retryPublication = async (row) => {
     try {
-      await apiRequest(`/publications/skills/${row.entity_id}/versions/${row.version}/retry`, { method: 'POST' });
+      await apiRequest(`/publications/${row.entity_type}s/${row.entity_id}/versions/${row.version}/retry`, { method: 'POST' });
       message.success('Retry started');
       await load();
     } catch (err) {
@@ -61,8 +61,8 @@ export default function PublicationQueue() {
       key: 'action',
       width: 100,
       render: (_, row) => (
-        row.status === 'failed' && row.entity_type === 'skill'
-          ? <Button size="small" onClick={() => retrySkill(row)}>Retry</Button>
+        row.status === 'failed'
+          ? <Button size="small" onClick={() => retryPublication(row)}>Retry</Button>
           : <Text type="secondary">—</Text>
       ),
     },

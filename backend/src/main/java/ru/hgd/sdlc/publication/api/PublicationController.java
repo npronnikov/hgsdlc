@@ -21,6 +21,11 @@ import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.publication.application.PublicationService;
 import ru.hgd.sdlc.publication.domain.PublicationJob;
 import ru.hgd.sdlc.publication.domain.PublicationRequest;
+import ru.hgd.sdlc.rule.api.RuleResponse;
+import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.flow.api.FlowResponse;
+import ru.hgd.sdlc.flow.application.FlowYamlParser;
+import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.skill.api.SkillResponse;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 
@@ -28,9 +33,11 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 @RequestMapping("/api/publications")
 public class PublicationController {
     private final PublicationService publicationService;
+    private final FlowYamlParser flowYamlParser;
 
-    public PublicationController(PublicationService publicationService) {
+    public PublicationController(PublicationService publicationService, FlowYamlParser flowYamlParser) {
         this.publicationService = publicationService;
+        this.flowYamlParser = flowYamlParser;
     }
 
     @GetMapping("/requests")
@@ -77,6 +84,68 @@ public class PublicationController {
     ) {
         SkillVersion updated = publicationService.retrySkillPublication(skillId, version, user);
         return SkillResponse.from(updated);
+    }
+
+    @PostMapping("/rules/{ruleId}/versions/{version}/approve")
+    public RuleResponse approveRule(
+            @PathVariable String ruleId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        RuleVersion updated = publicationService.approveRulePublication(ruleId, version, user);
+        return RuleResponse.from(updated);
+    }
+
+    @PostMapping("/rules/{ruleId}/versions/{version}/reject")
+    public RuleResponse rejectRule(
+            @PathVariable String ruleId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) RejectRequest request
+    ) {
+        RuleVersion updated = publicationService.rejectRulePublication(ruleId, version, user, request == null ? null : request.reason());
+        return RuleResponse.from(updated);
+    }
+
+    @PostMapping("/rules/{ruleId}/versions/{version}/retry")
+    public RuleResponse retryRule(
+            @PathVariable String ruleId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        RuleVersion updated = publicationService.retryRulePublication(ruleId, version, user);
+        return RuleResponse.from(updated);
+    }
+
+    @PostMapping("/flows/{flowId}/versions/{version}/approve")
+    public FlowResponse approveFlow(
+            @PathVariable String flowId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        FlowVersion updated = publicationService.approveFlowPublication(flowId, version, user);
+        return FlowResponse.from(updated, flowYamlParser.parse(updated.getFlowYaml()));
+    }
+
+    @PostMapping("/flows/{flowId}/versions/{version}/reject")
+    public FlowResponse rejectFlow(
+            @PathVariable String flowId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) RejectRequest request
+    ) {
+        FlowVersion updated = publicationService.rejectFlowPublication(flowId, version, user, request == null ? null : request.reason());
+        return FlowResponse.from(updated, flowYamlParser.parse(updated.getFlowYaml()));
+    }
+
+    @PostMapping("/flows/{flowId}/versions/{version}/retry")
+    public FlowResponse retryFlow(
+            @PathVariable String flowId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        FlowVersion updated = publicationService.retryFlowPublication(flowId, version, user);
+        return FlowResponse.from(updated, flowYamlParser.parse(updated.getFlowYaml()));
     }
 
     @ExceptionHandler(ValidationException.class)

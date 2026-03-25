@@ -58,8 +58,7 @@ const lifecycleOptions = [
   { value: 'retired', label: 'retired' },
 ];
 const publicationTargetOptions = [
-  { value: 'db_only', label: 'DB only' },
-  { value: 'git_only', label: 'Git only' },
+  { value: 'db_only', label: 'DB' },
   { value: 'db_and_git', label: 'DB + Git' },
 ];
 const publishModeOptions = [

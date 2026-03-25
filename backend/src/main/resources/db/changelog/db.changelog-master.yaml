@@ -51,3 +51,5 @@ databaseChangeLog:
       file: db/changelog/030-catalog-query-indexes.sql
   - include:
       file: db/changelog/031-publication-pipeline.sql
+  - include:
+      file: db/changelog/032-rules-flows-publication-pipeline.sql
