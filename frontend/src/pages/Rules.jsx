@@ -1,16 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import {
-  ApartmentOutlined,
-  BranchesOutlined,
-  ClusterOutlined,
-  EyeOutlined,
-  FilterOutlined,
-  PlusOutlined,
-  RobotOutlined,
-  SafetyCertificateOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -211,32 +201,33 @@ export default function Rules() {
                 hoverable
                 onClick={() => navigate(`/rules/${rule.ruleId}`)}
               >
-                <div className="resource-card-header">
-                  <div className="resource-card-title">
+                <div className="resource-card-header minimal-card-header">
+                  <div className="resource-card-title minimal-card-title">
                     <span className="resource-card-name" title={rule.name}>{truncateCardName(rule.name)}</span>
                     <span className="resource-card-subtitle mono">{rule.ruleId}@{rule.version}</span>
                   </div>
-                  <span className="resource-chip resource-chip-agent"><RobotOutlined />{rule.codingAgent || 'no agent'}</span>
+                  <span className="minimal-card-status">{formatStatusLabel(rule.status || 'unknown')}</span>
                 </div>
                 {rule.description && <Text type="secondary" className="resource-card-description">{rule.description}</Text>}
-                <div className="resource-meta-list">
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ApartmentOutlined />Type</span><span className="resource-meta-value">{rule.ruleKind || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><BranchesOutlined />Scope</span><span className="resource-meta-value">{rule.scope || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{rule.platformCode || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><EyeOutlined />Visibility</span><span className="resource-meta-value">{rule.visibility || '—'}</span></div>
+                <div className="minimal-card-meta-line">
+                  <span>{rule.ruleKind || 'type: —'}</span>
+                  <span>{rule.scope || 'scope: —'}</span>
+                  <span>{rule.platformCode || 'platform: —'}</span>
+                  <span>{rule.visibility || 'visibility: —'}</span>
                 </div>
                 {(rule.tags || []).length > 0 && (
-                  <div className="resource-tags-row">
+                  <div className="resource-tags-row minimal-card-tags-row">
                     {(rule.tags || []).slice(0, 5).map((tag) => (
-                      <span key={`${rule.key}-${tag}`} className="resource-tag">#{tag}</span>
+                      <span key={`${rule.key}-${tag}`} className="resource-tag minimal-card-tag">#{tag}</span>
                     ))}
                   </div>
                 )}
-                <div className="resource-card-footer">
-                  <div className="resource-card-chips">
-                    {rule.approvalStatus && <span className="resource-chip"><SafetyCertificateOutlined />{rule.approvalStatus}</span>}
-                    {rule.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{rule.teamCode}</span>}
-                  </div>
+                <div className="resource-card-footer minimal-card-footer">
+                  <span className="resource-chip minimal-card-chip">{rule.codingAgent || 'no agent'}</span>
+                  <span className="minimal-card-footer-item">TEAM: {rule.teamCode || 'no team'}</span>
+                  {rule.approvalStatus && rule.approvalStatus !== rule.status && (
+                    <span className="minimal-card-footer-item">Approval: {formatStatusLabel(rule.approvalStatus)}</span>
+                  )}
                 </div>
               </Card>
             ))}

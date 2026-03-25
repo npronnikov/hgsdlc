@@ -1,15 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import {
-  ApartmentOutlined,
-  ClusterOutlined,
-  EyeOutlined,
-  FilterOutlined,
-  PlusOutlined,
-  RobotOutlined,
-  SafetyCertificateOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -187,31 +178,32 @@ export default function Skills() {
                 hoverable
                 onClick={() => navigate(`/skills/${skill.skillId}`)}
               >
-                <div className="resource-card-header">
-                  <div className="resource-card-title">
+                <div className="resource-card-header skill-card-header">
+                  <div className="resource-card-title skill-card-title">
                     <span className="resource-card-name" title={skill.name}>{truncateCardName(skill.name)}</span>
                     <span className="resource-card-subtitle mono">{skill.skillId}@{skill.version}</span>
                   </div>
-                  <span className="resource-chip resource-chip-agent"><RobotOutlined />{skill.codingAgent || 'no agent'}</span>
+                  <span className="skill-card-status">{formatStatusLabel(skill.status || 'unknown')}</span>
                 </div>
                 {skill.description && <Text type="secondary" className="resource-card-description">{skill.description}</Text>}
-                <div className="resource-meta-list">
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ApartmentOutlined />Type</span><span className="resource-meta-value">{skill.skillKind || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{skill.platformCode || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><EyeOutlined />Visibility</span><span className="resource-meta-value">{skill.visibility || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><SafetyCertificateOutlined />Approval</span><span className="resource-meta-value">{skill.approvalStatus || '—'}</span></div>
+                <div className="skill-card-meta-line">
+                  <span>{skill.skillKind || 'type: —'}</span>
+                  <span>{skill.platformCode || 'platform: —'}</span>
+                  <span>{skill.visibility || 'visibility: —'}</span>
                 </div>
                 {(skill.tags || []).length > 0 && (
-                  <div className="resource-tags-row">
+                  <div className="resource-tags-row skill-card-tags-row">
                     {(skill.tags || []).slice(0, 5).map((tag) => (
-                      <span key={`${skill.key}-${tag}`} className="resource-tag">#{tag}</span>
+                      <span key={`${skill.key}-${tag}`} className="resource-tag skill-card-tag">#{tag}</span>
                     ))}
                   </div>
                 )}
-                <div className="resource-card-footer">
-                  <div className="resource-card-chips">
-                    {skill.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{skill.teamCode}</span>}
-                  </div>
+                <div className="resource-card-footer skill-card-footer">
+                  <span className="resource-chip skill-card-chip">{skill.codingAgent || 'no agent'}</span>
+                  <span className="skill-card-footer-item">TEAM: {skill.teamCode || 'no team'}</span>
+                  {skill.approvalStatus && skill.approvalStatus !== skill.status && (
+                    <span className="skill-card-footer-item">Approval: {formatStatusLabel(skill.approvalStatus)}</span>
+                  )}
                 </div>
               </Card>
             ))}

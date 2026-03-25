@@ -1,17 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import {
-  AlertOutlined,
-  ApartmentOutlined,
-  ClusterOutlined,
-  EyeOutlined,
-  FilterOutlined,
-  NodeIndexOutlined,
-  PlusOutlined,
-  RobotOutlined,
-  SafetyCertificateOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -213,33 +202,33 @@ export default function Flows() {
                 hoverable
                 onClick={() => navigate(`/flows/${flow.flowId}`)}
               >
-                <div className="resource-card-header">
-                  <div className="resource-card-title">
+                <div className="resource-card-header minimal-card-header">
+                  <div className="resource-card-title minimal-card-title">
                     <span className="resource-card-name" title={flow.name}>{truncateCardName(flow.name)}</span>
                     <span className="resource-card-subtitle mono">{flow.flowId}@{flow.version}</span>
                   </div>
-                  <span className="resource-chip resource-chip-agent"><RobotOutlined />{flow.codingAgent || 'no agent'}</span>
+                  <span className="minimal-card-status">{formatStatusLabel(flow.status || 'unknown')}</span>
                 </div>
                 {flow.description && <Text type="secondary" className="resource-card-description">{flow.description}</Text>}
-                <div className="resource-meta-list">
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ApartmentOutlined />Type</span><span className="resource-meta-value">{flow.flowKind || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><AlertOutlined />Risk</span><span className="resource-meta-value">{flow.riskLevel || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><ClusterOutlined />Platform</span><span className="resource-meta-value">{flow.platformCode || '—'}</span></div>
-                  <div className="resource-meta-row"><span className="resource-meta-key"><NodeIndexOutlined />Node Count</span><span className="resource-meta-value">{flow.nodeCount ?? '—'}</span></div>
+                <div className="minimal-card-meta-line">
+                  <span>{flow.flowKind || 'type: —'}</span>
+                  <span>{flow.riskLevel || 'risk: —'}</span>
+                  <span>{flow.platformCode || 'platform: —'}</span>
+                  <span>nodes: {flow.nodeCount ?? '—'}</span>
                 </div>
                 {(flow.tags || []).length > 0 && (
-                  <div className="resource-tags-row">
+                  <div className="resource-tags-row minimal-card-tags-row">
                     {(flow.tags || []).slice(0, 5).map((tag) => (
-                      <span key={`${flow.key}-${tag}`} className="resource-tag">#{tag}</span>
+                      <span key={`${flow.key}-${tag}`} className="resource-tag minimal-card-tag">#{tag}</span>
                     ))}
                   </div>
                 )}
-                <div className="resource-card-footer">
-                  <div className="resource-card-chips">
-                    {flow.visibility && <span className="resource-chip"><EyeOutlined />{flow.visibility}</span>}
-                    {flow.approvalStatus && <span className="resource-chip"><SafetyCertificateOutlined />{flow.approvalStatus}</span>}
-                    {flow.teamCode && <span className="resource-chip resource-chip-team"><TeamOutlined />{flow.teamCode}</span>}
-                  </div>
+                <div className="resource-card-footer minimal-card-footer">
+                  <span className="resource-chip minimal-card-chip">{flow.codingAgent || 'no agent'}</span>
+                  <span className="minimal-card-footer-item">TEAM: {flow.teamCode || 'no team'}</span>
+                  {flow.approvalStatus && flow.approvalStatus !== flow.status && (
+                    <span className="minimal-card-footer-item">Approval: {formatStatusLabel(flow.approvalStatus)}</span>
+                  )}
                 </div>
               </Card>
             ))}
