@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Form, Input, Row, Segmented, Select, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Form, Input, Radio, Row, Select, Tag, Typography, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/request.js';
@@ -454,15 +454,16 @@ export default function RunLaunch() {
           <Card className="run-launch-preview-card">
             <div className="flow-launch-dialog">
               <div className="flow-launch-toolbar">
-                <Segmented
+                <Radio.Group
                   value={layoutDirection}
-                  onChange={(value) => setLayoutDirection(value)}
-                  options={[
-                    { value: 'TB', label: 'Vertical' },
-                    { value: 'LR', label: 'Horizontal' },
-                  ]}
+                  onChange={(event) => setLayoutDirection(event.target.value)}
+                  optionType="button"
+                  buttonStyle="solid"
                   disabled={!selectedFlowId}
-                />
+                >
+                  <Radio.Button value="TB">Vertical</Radio.Button>
+                  <Radio.Button value="LR">Horizontal</Radio.Button>
+                </Radio.Group>
               </div>
               {launchConfig?.loading && <div className="card-muted">Loading configuration...</div>}
               {!launchConfig?.loading && !selectedFlowId && (

@@ -112,22 +112,22 @@ export default function Login() {
             <Button htmlType="submit" block>
               Sign in
             </Button>
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginTop: 12 }}
-              message="Тестовые пользователи"
-              description={(
-                <div>
-                  <div><b>admin</b> (ADMIN) / <code>admin</code></div>
-                  <div><b>flow_configurator</b> (FLOW_CONFIGURATOR) / <code>admin</code></div>
-                  <div><b>product_owner</b> (PRODUCT_OWNER) / <code>admin</code></div>
-                  <div><b>tech_approver</b> (TECH_APPROVER) / <code>admin</code></div>
-                </div>
-              )}
-            />
           </Form>
         </Card>
+        <Alert
+          type="info"
+          showIcon
+          className="login-test-users"
+          message="Тестовые пользователи"
+          description={(
+            <div className="login-test-users-list">
+              <div className="login-test-user-row"><b>admin</b> / <code>admin</code> <span className="login-test-user-role">(ADMIN)</span></div>
+              <div className="login-test-user-row"><b>flow_configurator</b> / <code>admin</code> <span className="login-test-user-role">(FLOW_CONFIGURATOR)</span></div>
+              <div className="login-test-user-row"><b>product_owner</b> / <code>admin</code> <span className="login-test-user-role">(PRODUCT_OWNER)</span></div>
+              <div className="login-test-user-row"><b>tech_approver</b> / <code>admin</code> <span className="login-test-user-role">(TECH_APPROVER)</span></div>
+            </div>
+          )}
+        />
       </div>
       <div className="login-bg">
         <div className="login-grid"></div>

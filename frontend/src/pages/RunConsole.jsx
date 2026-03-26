@@ -743,7 +743,8 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         <Title level={3} style={{ margin: 0 }}>Run Console</Title>
         <Space>
           <Button
-            danger
+            type="default"
+            className="btn-danger-common"
             onClick={cancelRun}
             icon={<MinusCircleOutlined />}
             disabled={['completed', 'failed', 'cancelled'].includes(run.status)}

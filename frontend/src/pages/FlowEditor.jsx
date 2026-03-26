@@ -1510,6 +1510,7 @@ export default function FlowEditor() {
                     <Button
                       key={option.key}
                       type="default"
+                      className="flow-context-add-btn"
                       onClick={() => {
                         if (flowInstance && flowWrapperRef.current) {
                           const bounds = flowWrapperRef.current.getBoundingClientRect();
@@ -2113,23 +2114,21 @@ export default function FlowEditor() {
                         dataSource={selectedNode.data.skillRefs || []}
                         locale={{ emptyText: 'No linked skills' }}
                         renderItem={(ref) => {
-                          const skillRefs = selectedNode.data.skillRefs || [];
+                          const skill = skillsCatalog.find((item) => item.canonical === ref);
+                          const description = skill?.description || '';
+                          const snippet = description.length > 80
+                            ? `${description.slice(0, 80)}...`
+                            : description;
                           return (
                             <List.Item className="linked-item">
                               <div className="linked-rule-row">
                                 <span className="mono linked-rule-name">{ref}</span>
-                                <div className="linked-rule-actions">
-                                  <Button
-                                    key="delete"
-                                    size="small"
-                                    type="default"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    disabled={isReadOnly}
-                                    onClick={() => updateSelectedNode({ skillRefs: skillRefs.filter((item) => item !== ref) })}
-                                  />
-                                </div>
                               </div>
+                              {snippet && (
+                                <Text type="secondary" className="linked-rule-description">
+                                  {snippet}
+                                </Text>
+                              )}
                             </List.Item>
                           );
                         }}

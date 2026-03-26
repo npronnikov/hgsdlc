@@ -6,6 +6,8 @@ import {
   AuditOutlined,
   DeploymentUnitOutlined,
   FileTextOutlined,
+  FileSearchOutlined,
+  FormOutlined,
   GithubOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -35,6 +37,8 @@ const navItems = [
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
   { key: '/versions', icon: <FileTextOutlined />, label: 'Versions / Snapshots' },
+  { key: '/human-approval-gate-mock', icon: <FileSearchOutlined />, label: 'Human Approval Gate' },
+  { key: '/human-input-gate-mock', icon: <FormOutlined />, label: 'Human Input Gate' },
 ];
 
 const routeMeta = {
@@ -53,6 +57,8 @@ const routeMeta = {
   '/gates-inbox': { title: 'Gates Inbox', menuKey: '/run-console' },
   '/gate-input': { title: 'Human Input Gate', menuKey: '/run-console' },
   '/gate-approval': { title: 'Human Approval Gate', menuKey: '/run-console' },
+  '/human-approval-gate-mock': { title: 'Human Approval Gate', menuKey: '/human-approval-gate-mock' },
+  '/human-input-gate-mock': { title: 'Human Input Gate', menuKey: '/human-input-gate-mock' },
   '/audit-runtime': { title: 'Runtime Audit', menuKey: '/run-console' },
   '/audit-agent': { title: 'Agent Audit', menuKey: '/run-console' },
   '/audit-review': { title: 'Review Audit', menuKey: '/run-console' },

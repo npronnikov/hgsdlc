@@ -25,6 +25,8 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-active: #991b1b;
   --info: #0891b2;
   --radius-lg: 6px;
   --radius-md: 4px;
@@ -56,6 +58,8 @@
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+  --danger-hover: #f87171;
+  --danger-active: #dc2626;
   --info: #38bdf8;
 }
 
@@ -80,20 +84,9 @@ body {
   transition: all 0.18s ease;
 }
 
-.ant-btn-default {
-  border-color: var(--btn-default-border);
-  color: var(--btn-default-text);
-  background: var(--btn-default-bg);
-}
-
-.ant-btn-default:hover,
-.ant-btn-default:focus {
-  border-color: var(--btn-default-hover-border);
-  color: var(--btn-default-hover-text);
-  background: var(--btn-default-hover-bg);
-}
-
-.ant-btn-primary {
+.ant-btn-primary,
+.ant-btn-default,
+.ant-btn-dashed {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--btn-primary-text);
@@ -101,30 +94,23 @@ body {
 }
 
 .ant-btn-primary:hover,
-.ant-btn-primary:focus {
+.ant-btn-primary:focus,
+.ant-btn-default:hover,
+.ant-btn-default:focus,
+.ant-btn-dashed:hover,
+.ant-btn-dashed:focus {
   border-color: var(--primary-hover);
   background: var(--primary-hover);
   color: var(--btn-primary-text);
 }
 
-.ant-btn-primary:active {
+.ant-btn-primary:active,
+.ant-btn-default:active,
+.ant-btn-dashed:active {
   border-color: var(--primary-active);
   background: var(--primary-active);
   color: var(--btn-primary-text);
   box-shadow: none;
-}
-
-.ant-btn-dashed {
-  border-color: var(--btn-default-border);
-  color: var(--btn-default-text);
-  background: var(--btn-default-bg);
-}
-
-.ant-btn-dashed:hover,
-.ant-btn-dashed:focus {
-  border-color: var(--btn-default-hover-border);
-  color: var(--btn-default-hover-text);
-  background: var(--btn-default-hover-bg);
 }
 
 .ant-btn-link {
@@ -134,6 +120,27 @@ body {
 .ant-btn-link:hover,
 .ant-btn-link:focus {
   color: var(--primary-hover);
+}
+
+.ant-btn.btn-danger-common {
+  border-color: var(--danger) !important;
+  background: var(--danger) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px -10px rgba(220, 38, 38, 0.45);
+}
+
+.ant-btn.btn-danger-common:hover,
+.ant-btn.btn-danger-common:focus {
+  border-color: var(--danger-hover) !important;
+  background: var(--danger-hover) !important;
+  color: #fff !important;
+}
+
+.ant-btn.btn-danger-common:active {
+  border-color: var(--danger-active) !important;
+  background: var(--danger-active) !important;
+  color: #fff !important;
+  box-shadow: none;
 }
 
 :root:not([data-theme="dark"]) .ant-btn-text:hover,
@@ -693,6 +700,32 @@ body {
 .linked-rule-description {
   width: 100%;
   margin-top: 4px;
+}
+
+.flow-editor-page .ant-select-multiple .ant-select-selection-item {
+  border-color: var(--border-strong);
+}
+
+.flow-editor-page .ant-select-multiple .ant-select-selection-item-remove {
+  color: #b42318 !important;
+  opacity: 1 !important;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.flow-editor-page .ant-select-multiple .ant-select-selection-item-remove:hover {
+  color: #d92d20 !important;
+}
+
+.flow-editor-page .ant-select-multiple .ant-select-selection-item-remove .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-editor-page .ant-select-multiple .ant-select-selection-item-remove .anticon svg {
+  width: 12px;
+  height: 12px;
 }
 
 .switch-row {
@@ -1637,8 +1670,20 @@ body {
   justify-content: flex-start;
   text-align: left;
   width: 100%;
-  border-color: transparent !important;
   box-shadow: none !important;
+}
+
+.flow-context-menu .flow-context-add-btn {
+  background: transparent !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text) !important;
+}
+
+.flow-context-menu .flow-context-add-btn:hover,
+.flow-context-menu .flow-context-add-btn:focus {
+  background: var(--surface-3) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
 }
 
 
@@ -1962,6 +2007,24 @@ body {
   background: rgba(255, 255, 255, 0.85);
 }
 
+.login-test-users {
+  margin-top: -12px;
+}
+
+.login-test-users-list {
+  display: grid;
+  gap: 4px;
+}
+
+.login-test-user-row {
+  white-space: nowrap;
+}
+
+.login-test-user-role {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .login-card .brand {
   display: grid;
   gap: 8px;
@@ -2245,6 +2308,21 @@ body {
   border-color: #334155;
 }
 
+:root[data-theme="dark"] .flow-editor-page .ant-select-multiple .ant-select-selection-item {
+  background: #1a2231;
+  border-color: #475467;
+  color: #f2f4f7;
+}
+
+:root[data-theme="dark"] .flow-editor-page .ant-select-multiple .ant-select-selection-item-remove {
+  color: #fda29b !important;
+  opacity: 1 !important;
+}
+
+:root[data-theme="dark"] .flow-editor-page .ant-select-multiple .ant-select-selection-item-remove:hover {
+  color: #f97066 !important;
+}
+
 :root[data-theme="dark"] .flow-preview-edge-label {
   background: rgba(15, 23, 42, 0.95);
   border-color: #334155;
@@ -2255,6 +2333,18 @@ body {
   background: #0f172a;
   border-color: #334155;
   box-shadow: 0 12px 32px rgba(2, 6, 23, 0.75);
+}
+
+:root[data-theme="dark"] .flow-context-menu .flow-context-add-btn {
+  border-color: #475467 !important;
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme="dark"] .flow-context-menu .flow-context-add-btn:hover,
+:root[data-theme="dark"] .flow-context-menu .flow-context-add-btn:focus {
+  background: #1e293b !important;
+  border-color: #94a3b8 !important;
+  color: #f8fafc !important;
 }
 
 
@@ -2348,4 +2438,60 @@ body {
 
 :root[data-theme="dark"] .ant-dropdown .ant-dropdown-menu-item-divider {
   background: #334155 !important;
+}
+
+.human-approval-gate-page {
+  display: grid;
+  gap: 12px;
+}
+
+.human-approval-summary {
+  border-radius: var(--radius-sm);
+}
+
+.human-approval-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.human-approval-file-list {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.human-approval-tree-leaf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.human-approval-file-list .ant-tree {
+  background: transparent;
+}
+
+.human-input-file-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.human-input-tab-content {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.human-input-question {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: var(--surface-3);
+}
+
+.human-input-payload .code-block {
+  margin-top: 8px;
+  max-height: 220px;
+  overflow: auto;
 }
