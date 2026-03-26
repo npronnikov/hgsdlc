@@ -17,4 +17,5 @@ public class PathRequirement {
     private String path;
     private String scope;
     private Boolean required;
+    private Boolean modifiable;
 }

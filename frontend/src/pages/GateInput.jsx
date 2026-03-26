@@ -8,10 +8,18 @@ const { Title, Text } = Typography;
 
 function extractGateContext(payload) {
   if (!payload) {
-    return { contextArtifacts: [], inputArtifactContent: null, inputArtifactKey: null, outputArtifactKey: null, userInstructions: null };
+    return {
+      contextArtifacts: [],
+      humanInputArtifacts: [],
+      inputArtifactContent: null,
+      inputArtifactKey: null,
+      outputArtifactKey: null,
+      userInstructions: null,
+    };
   }
   return {
     contextArtifacts: payload.execution_context_artifacts || [],
+    humanInputArtifacts: payload.human_input_artifacts || [],
     inputArtifactContent: payload.input_artifact_content || null,
     inputArtifactKey: payload.input_artifact_key || null,
     outputArtifactKey: payload.output_artifact_key || null,
@@ -31,9 +39,10 @@ export default function GateInput() {
   const [run, setRun] = useState(null);
   const [gate, setGate] = useState(null);
   const [answers, setAnswers] = useState('');
-  const [artifactKey, setArtifactKey] = useState('answers');
-  const [artifactPath, setArtifactPath] = useState('answers.md');
+  const [artifactKey, setArtifactKey] = useState('');
+  const [artifactPath, setArtifactPath] = useState('');
   const [artifactScope, setArtifactScope] = useState('run');
+  const [selectedArtifactPath, setSelectedArtifactPath] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
@@ -61,12 +70,19 @@ export default function GateInput() {
 
   const applyPayloadDefaults = (payload) => {
     const ctx = extractGateContext(payload);
+    const firstEditable = ctx.humanInputArtifacts?.[0] || null;
+    if (firstEditable) {
+      setArtifactKey(firstEditable.artifact_key || '');
+      setArtifactPath(firstEditable.path || '');
+      setArtifactScope(firstEditable.scope || 'run');
+      setSelectedArtifactPath(firstEditable.path || '');
+      setAnswers(firstEditable.content || '');
+      return;
+    }
     if (ctx.outputArtifactKey) {
       setArtifactKey(ctx.outputArtifactKey);
       setArtifactPath(ctx.outputArtifactKey + '.md');
-    }
-    if (isEditInPlace(ctx.inputArtifactKey, ctx.outputArtifactKey) && ctx.inputArtifactContent) {
-      setAnswers(ctx.inputArtifactContent);
+      setArtifactScope('run');
     }
   };
 
@@ -119,7 +135,19 @@ export default function GateInput() {
   };
 
   const ctx = extractGateContext(gate?.payload);
-  const editMode = isEditInPlace(ctx.inputArtifactKey, ctx.outputArtifactKey);
+  const editableArtifacts = ctx.humanInputArtifacts || [];
+  const selectedEditable = editableArtifacts.find((item) => item.path === selectedArtifactPath) || editableArtifacts[0] || null;
+  const editMode = true;
+
+  useEffect(() => {
+    if (!selectedEditable) {
+      return;
+    }
+    setArtifactKey(selectedEditable.artifact_key || '');
+    setArtifactPath(selectedEditable.path || '');
+    setArtifactScope(selectedEditable.scope || 'run');
+    setAnswers(selectedEditable.content || '');
+  }, [selectedEditable?.path, gate?.gate_id]);
 
   return (
     <div>
@@ -137,18 +165,19 @@ export default function GateInput() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
-          {ctx.contextArtifacts.length > 0 ? (
-            ctx.contextArtifacts.map((artifact, idx) => (
+          {editableArtifacts.length > 0 ? (
+            editableArtifacts.map((artifact, idx) => (
               <Card key={artifact.artifact_version_id || idx} style={{ marginBottom: 16 }}>
                 <Title level={5}>
                   Context: {artifact.artifact_key}
                 </Title>
+                <Text type="secondary">source: <span className="mono">{artifact.source_node_id || '—'}</span></Text>
                 {artifact.content ? (
                   <pre className="code-block" style={{ maxHeight: 500, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
                     {artifact.content}
                   </pre>
                 ) : (
-                  <Text type="secondary">Content not available (file too large or missing)</Text>
+                  <Text type="secondary">Content not available</Text>
                 )}
               </Card>
             ))
@@ -171,12 +200,11 @@ export default function GateInput() {
             </Card>
           )}
 
-          {editMode && ctx.inputArtifactContent && (
+          {ctx.contextArtifacts.length > 0 && (
             <Card style={{ marginTop: 16 }}>
-              <Title level={5}>Original: {ctx.inputArtifactKey}</Title>
-              <Text type="secondary">This is the original content you are editing</Text>
+              <Title level={5}>Additional context artifacts</Title>
               <pre className="code-block" style={{ marginTop: 8, maxHeight: 400, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-                {ctx.inputArtifactContent}
+                {JSON.stringify(ctx.contextArtifacts, null, 2)}
               </pre>
             </Card>
           )}
@@ -185,13 +213,24 @@ export default function GateInput() {
         <Col xs={24} lg={12}>
           <Card>
             <Title level={5}>
-              {editMode ? `Edit: ${ctx.outputArtifactKey}` : 'Answers'}
+              {editMode ? `Edit: ${artifactKey || 'artifact'}` : 'Answers'}
             </Title>
             <Text type="secondary">
               {editMode
                 ? 'Edit the content below and submit'
                 : 'Provide answers in markdown'}
             </Text>
+            {editableArtifacts.length > 1 && (
+              <Select
+                style={{ width: '100%', marginTop: 12 }}
+                value={selectedEditable?.path}
+                onChange={setSelectedArtifactPath}
+                options={editableArtifacts.map((artifact) => ({
+                  value: artifact.path,
+                  label: `${artifact.artifact_key} (${artifact.path})`,
+                }))}
+              />
+            )}
             <Input.TextArea
               rows={12}
               style={{ marginTop: 12, fontFamily: 'monospace' }}
@@ -199,19 +238,11 @@ export default function GateInput() {
               onChange={(e) => setAnswers(e.target.value)}
             />
             <Divider style={{ margin: '12px 0' }} />
-            <Space style={{ width: '100%' }} direction="vertical" size={8}>
-              <Input addonBefore="artifact_key" value={artifactKey} onChange={(e) => setArtifactKey(e.target.value)} />
-              <Input addonBefore="path" value={artifactPath} onChange={(e) => setArtifactPath(e.target.value)} />
-              <Select
-                value={artifactScope}
-                onChange={setArtifactScope}
-                style={{ width: '100%' }}
-                options={[
-                  { value: 'run', label: 'run' },
-                  { value: 'project', label: 'project' },
-                ]}
-              />
-            </Space>
+            <Text type="secondary">artifact_key: <span className="mono">{artifactKey || '—'}</span></Text>
+            <br />
+            <Text type="secondary">path: <span className="mono">{artifactPath || '—'}</span></Text>
+            <br />
+            <Text type="secondary">scope: <span className="mono">{artifactScope || '—'}</span></Text>
             <div className="card-muted" style={{ marginTop: 12 }}>
               Gate id: <span className="mono">{gate?.gate_id || '—'}</span>
             </div>

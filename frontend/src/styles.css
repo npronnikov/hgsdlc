@@ -1614,13 +1614,6 @@ body {
   word-break: break-word;
 }
 
-.artifact-row {
-  display: grid;
-  grid-template-columns: 140px 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
 .mutation-row {
   display: grid;
   grid-template-columns: 140px 1fr auto auto;
@@ -1628,11 +1621,37 @@ body {
   align-items: center;
 }
 
-.artifact-row-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
+.artifact-path-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.artifact-context-row .context-row-header {
+  justify-content: space-between;
+}
+
+.artifact-row-fields {
+  grid-template-columns: minmax(0, 1fr) 180px;
+}
+
+@media (max-width: 900px) {
+  .artifact-row-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.artifact-delete-btn.ant-btn {
+  color: #c24141 !important;
+  border-color: #e7b1b1 !important;
+  background: #fff6f6 !important;
+}
+
+.artifact-delete-btn.ant-btn:hover,
+.artifact-delete-btn.ant-btn:focus,
+.artifact-delete-btn.ant-btn:active {
+  color: #c24141 !important;
+  border-color: #e7b1b1 !important;
+  background: #fff6f6 !important;
 }
 
 .context-row .ant-btn {

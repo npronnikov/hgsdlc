@@ -9,6 +9,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -676,26 +677,48 @@ public class RuntimeService {
         if (!"human_input".equals(nodeKind)) {
             throw new ValidationException("Current gate node is not human_input");
         }
+        NodeExecutionEntity gateExecution = nodeExecutionRepository.findById(gate.getNodeExecutionId())
+                .orElseThrow(() -> new ValidationException("Gate execution not found: " + gate.getNodeExecutionId()));
+        List<HumanInputEditableArtifact> allowedArtifacts = resolveHumanInputEditableArtifacts(run, node, gateExecution);
+        Map<String, HumanInputEditableArtifact> allowedByComposite = new LinkedHashMap<>();
+        for (HumanInputEditableArtifact allowed : allowedArtifacts) {
+            allowedByComposite.put(artifactCompositeKey(allowed.artifactKey(), allowed.path(), allowed.scope()), allowed);
+        }
+        if (allowedByComposite.isEmpty()) {
+            throw new ValidationException("human_input has no modifiable artifacts in execution_context");
+        }
+        Map<String, String> checksumBeforeEdit = new LinkedHashMap<>();
+        for (HumanInputEditableArtifact allowed : allowedArtifacts) {
+            Path outputPath = resolveProducedArtifactPath(run, gateExecution, allowed.scope(), allowed.path());
+            checksumBeforeEdit.put(
+                    artifactCompositeKey(allowed.artifactKey(), allowed.path(), allowed.scope()),
+                    fileChecksumOrNull(outputPath)
+            );
+        }
 
         for (SubmittedArtifact artifact : command.artifacts()) {
             validateSubmittedArtifact(artifact);
+            HumanInputEditableArtifact expected = allowedByComposite.get(
+                    artifactCompositeKey(artifact.artifactKey(), artifact.path(), artifact.scope())
+            );
+            if (expected == null) {
+                throw new ValidationException("Submitted artifact is not allowed for this human_input gate: "
+                        + artifact.artifactKey() + " (" + artifact.path() + ")");
+            }
             byte[] content = decodeBase64(artifact.contentBase64());
-            Path path = resolvePath(run, artifact.scope(), artifact.path());
+            Path path = resolveProducedArtifactPath(run, gateExecution, expected.scope(), expected.path());
             writeFile(path, content);
             recordArtifactVersion(
                     run,
                     gate.getNodeId(),
-                    artifact.artifactKey(),
+                    expected.artifactKey(),
                     path,
-                    toArtifactScope(artifact.scope()),
+                    toArtifactScope(expected.scope()),
                     ArtifactKind.HUMAN_INPUT,
                     content.length
             );
         }
-
-        NodeExecutionEntity gateExecution = nodeExecutionRepository.findById(gate.getNodeExecutionId())
-                .orElseThrow(() -> new ValidationException("Gate execution not found: " + gate.getNodeExecutionId()));
-        List<String> validationErrors = validateHumanInputOutputs(run, node, gateExecution);
+        List<String> validationErrors = validateHumanInputOutputs(run, gateExecution, allowedArtifacts, checksumBeforeEdit);
         if (!validationErrors.isEmpty()) {
             runtimeStepTxService.markGateValidationFailed(
                     run.getId(),
@@ -1204,40 +1227,43 @@ public class RuntimeService {
             NodeExecutionEntity execution
     ) {
         List<Map<String, Object>> result = new ArrayList<>();
-        if (node.getProducedArtifacts() == null) {
-            return result;
-        }
-        for (PathRequirement requirement : node.getProducedArtifacts()) {
-            if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
-                continue;
-            }
-            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
+        for (HumanInputEditableArtifact artifact : resolveHumanInputEditableArtifacts(run, node, execution)) {
+            Path outputPath = resolveProducedArtifactPath(run, execution, "run", artifact.path());
+            String content = readFileContent(outputPath);
             result.add(mapOf(
-                    "artifact_key", artifactKeyForPath(requirement.getPath()),
-                    "path", relativizeRunScopePath(run, path),
-                    "scope", "run",
-                    "required", true
+                    "artifact_key", artifact.artifactKey(),
+                    "path", artifact.path(),
+                    "scope", artifact.scope(),
+                    "required", artifact.required(),
+                    "source_node_id", artifact.sourceNodeId(),
+                    "source_artifact_version_id", artifact.sourceArtifactVersionId(),
+                    "source_path", artifact.sourcePath(),
+                    "content", content
             ));
         }
         return result;
     }
 
     private void createHumanInputOutputFiles(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
-        List<PathRequirement> producedArtifacts = node.getProducedArtifacts() == null ? List.of() : node.getProducedArtifacts();
-        for (PathRequirement requirement : producedArtifacts) {
-            if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
-                continue;
-            }
-            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
-            createDirectories(path.getParent());
-            if (!Files.exists(path)) {
-                writeFile(path, new byte[0]);
+        List<HumanInputEditableArtifact> editableArtifacts = resolveHumanInputEditableArtifacts(run, node, execution);
+        for (HumanInputEditableArtifact artifact : editableArtifacts) {
+            Path sourcePath = Path.of(artifact.sourcePath());
+            Path outputPath = resolveProducedArtifactPath(run, execution, "run", artifact.path());
+            createDirectories(outputPath.getParent());
+            if (Files.exists(sourcePath) && !Files.isDirectory(sourcePath)) {
+                try {
+                    Files.copy(sourcePath, outputPath, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException ex) {
+                    throw new ValidationException("Failed to copy human_input artifact: " + artifact.path());
+                }
+            } else if (!Files.exists(outputPath)) {
+                writeFile(outputPath, new byte[0]);
             }
             recordArtifactVersion(
                     run,
                     execution.getNodeId(),
-                    artifactKeyForPath(requirement.getPath()),
-                    path,
+                    artifact.artifactKey(),
+                    outputPath,
                     ArtifactScope.RUN,
                     ArtifactKind.HUMAN_INPUT,
                     null
@@ -1468,29 +1494,113 @@ public class RuntimeService {
         return sb.toString();
     }
 
-    private List<String> validateHumanInputOutputs(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
+    private List<String> validateHumanInputOutputs(
+            RunEntity run,
+            NodeExecutionEntity execution,
+            List<HumanInputEditableArtifact> allowedArtifacts,
+            Map<String, String> checksumBeforeEdit
+    ) {
         List<String> errors = new ArrayList<>();
-        if (node.getProducedArtifacts() == null) {
-            return errors;
-        }
-        for (PathRequirement requirement : node.getProducedArtifacts()) {
-            if (requirement == null || !Boolean.TRUE.equals(requirement.getRequired())) {
+        for (HumanInputEditableArtifact artifact : allowedArtifacts) {
+            if (!artifact.required()) {
                 continue;
             }
-            if (requirement.getPath() == null || requirement.getPath().isBlank()) {
-                errors.add("produced_artifacts path is required");
-                continue;
-            }
-            Path path = resolveProducedArtifactPath(run, execution, requirement.getScope(), requirement.getPath());
+            Path path = resolveProducedArtifactPath(run, execution, artifact.scope(), artifact.path());
             if (!Files.exists(path) || Files.isDirectory(path)) {
-                errors.add("Required produced artifact missing: " + requirement.getPath());
+                errors.add("Required human_input artifact missing: " + artifact.path());
                 continue;
             }
             if (isFileEmptyOrBlank(path)) {
-                errors.add("Required produced artifact is empty: " + requirement.getPath());
+                errors.add("Required human_input artifact is empty: " + artifact.path());
+                continue;
+            }
+            String currentChecksum = fileChecksumOrNull(path);
+            String previousChecksum = checksumBeforeEdit.get(
+                    artifactCompositeKey(artifact.artifactKey(), artifact.path(), artifact.scope())
+            );
+            if (previousChecksum != null && previousChecksum.equals(currentChecksum)) {
+                errors.add("Required human_input artifact was not modified: " + artifact.path());
             }
         }
         return errors;
+    }
+
+    private List<HumanInputEditableArtifact> resolveHumanInputEditableArtifacts(
+            RunEntity run,
+            NodeModel humanInputNode,
+            NodeExecutionEntity execution
+    ) {
+        FlowModel flowModel = parseFlowSnapshot(run);
+        Map<String, NodeModel> nodesById = flowModel.getNodes() == null
+                ? Map.of()
+                : flowModel.getNodes().stream()
+                .filter((candidate) -> candidate != null && candidate.getId() != null && !candidate.getId().isBlank())
+                .collect(java.util.stream.Collectors.toMap(NodeModel::getId, Function.identity(), (a, b) -> a));
+        List<HumanInputEditableArtifact> result = new ArrayList<>();
+        List<ExecutionContextEntry> entries = humanInputNode.getExecutionContext() == null ? List.of() : humanInputNode.getExecutionContext();
+        for (ExecutionContextEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            String type = normalize(entry.getType());
+            if (!"artifact_ref".equals(type)) {
+                continue;
+            }
+            String scope = defaultScope(entry.getScope());
+            if (!"run".equals(scope)) {
+                continue;
+            }
+            String sourceNodeId = trimToNull(entry.getNodeId());
+            String artifactPath = trimToNull(entry.getPath());
+            if (sourceNodeId == null || artifactPath == null) {
+                continue;
+            }
+            NodeModel sourceNode = nodesById.get(sourceNodeId);
+            if (sourceNode == null) {
+                continue;
+            }
+            if (!isModifiableProducedArtifact(sourceNode, artifactPath, scope)) {
+                continue;
+            }
+            Path sourcePath = resolveArtifactRefPath(run, sourceNodeId, scope, artifactPath);
+            if (sourcePath == null || !Files.exists(sourcePath) || Files.isDirectory(sourcePath)) {
+                continue;
+            }
+            ArtifactVersionEntity sourceVersion = artifactVersionRepository
+                    .findByRunIdAndNodeIdAndArtifactKey(run.getId(), sourceNodeId, artifactKeyForPath(artifactPath))
+                    .orElse(null);
+            result.add(new HumanInputEditableArtifact(
+                    artifactKeyForPath(artifactPath),
+                    artifactPath,
+                    "run",
+                    Boolean.TRUE.equals(entry.getRequired()),
+                    sourceNodeId,
+                    sourcePath.toString(),
+                    sourceVersion == null ? null : sourceVersion.getId().toString()
+            ));
+        }
+        return result;
+    }
+
+    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String artifactPath, String scope) {
+        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || artifactPath == null || artifactPath.isBlank()) {
+            return false;
+        }
+        for (PathRequirement requirement : sourceNode.getProducedArtifacts()) {
+            if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
+                continue;
+            }
+            if (!artifactPath.equals(requirement.getPath())) {
+                continue;
+            }
+            if (!scope.equals(defaultScope(requirement.getScope()))) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(requirement.getModifiable())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isFileEmptyOrBlank(Path path) {
@@ -2370,6 +2480,14 @@ public class RuntimeService {
         return user == null ? "system" : user.getUsername();
     }
 
+    private String artifactCompositeKey(String artifactKey, String path, String scope) {
+        return String.join("::",
+                trimToNull(artifactKey) == null ? "" : trimToNull(artifactKey),
+                trimToNull(path) == null ? "" : trimToNull(path),
+                defaultScope(scope)
+        );
+    }
+
     private String normalizeBranch(String branch) {
         String normalized = trimToNull(branch);
         if (normalized == null) {
@@ -2454,6 +2572,16 @@ public class RuntimeService {
             String targetBranch,
             String flowCanonicalName,
             String featureRequest
+    ) {}
+
+    private record HumanInputEditableArtifact(
+            String artifactKey,
+            String path,
+            String scope,
+            boolean required,
+            String sourceNodeId,
+            String sourcePath,
+            String sourceArtifactVersionId
     ) {}
 
     public record SubmittedArtifact(

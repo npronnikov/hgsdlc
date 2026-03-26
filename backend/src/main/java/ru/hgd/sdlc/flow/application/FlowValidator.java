@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -50,6 +51,7 @@ public class FlowValidator {
         for (NodeModel node : nodesById.values()) {
             validateNode(node, nodesById, flow.getStartNodeId(), errors);
         }
+        validateHumanInputPredecessorContracts(nodesById, errors);
 
         if (flow.getStartNodeId() != null && nodesById.containsKey(flow.getStartNodeId())) {
             Set<String> reachable = computeReachable(flow.getStartNodeId(), nodesById);
@@ -80,7 +82,7 @@ public class FlowValidator {
             errors.add("checkpoint_before_run is only allowed for ai/command nodes: " + node.getId());
         }
 
-        validateExecutionContext(node, nodeKind, errors);
+        validateExecutionContext(node, nodeKind, nodesById, errors);
         validateDeclaredOutputs(node, errors);
 
         if (node.getSkillRefs() != null && !node.getSkillRefs().isEmpty() && !"ai".equals(nodeKind)) {
@@ -156,23 +158,10 @@ public class FlowValidator {
             if (node.getInstruction() == null || node.getInstruction().isBlank()) {
                 errors.add("human_input gate requires instruction: " + node.getId());
             }
-            if (node.getProducedArtifacts() == null || node.getProducedArtifacts().isEmpty()) {
-                errors.add("human_input gate requires produced_artifacts: " + node.getId());
-            } else {
-                for (var artifact : node.getProducedArtifacts()) {
-                    if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
-                        errors.add("human_input produced_artifacts path is required: " + node.getId());
-                        continue;
-                    }
-                    String scope = normalize(artifact.getScope());
-                    if (scope == null || !"run".equals(scope)) {
-                        errors.add("human_input produced_artifacts supports only scope=run: " + node.getId());
-                    }
-                    if (!Boolean.TRUE.equals(artifact.getRequired())) {
-                        errors.add("human_input produced_artifacts must be required=true: " + node.getId());
-                    }
-                }
+            if (node.getExecutionContext() == null || node.getExecutionContext().isEmpty()) {
+                errors.add("human_input gate requires execution_context artifact_ref entries: " + node.getId());
             }
+            validateHumanInputProducedArtifacts(node, nodesById, errors);
             return;
         }
         if ("human_approval".equals(nodeKind)) {
@@ -241,13 +230,46 @@ public class FlowValidator {
         return targets;
     }
 
-    private void validateExecutionContext(NodeModel node, String nodeKind, List<String> errors) {
+    private void validateExecutionContext(
+            NodeModel node,
+            String nodeKind,
+            Map<String, NodeModel> nodesById,
+            List<String> errors
+    ) {
         if ("command".equals(nodeKind)) {
             return;
         }
         if ("human_input".equals(nodeKind)) {
-            if (node.getExecutionContext() != null && !node.getExecutionContext().isEmpty()) {
-                errors.add("execution_context is not allowed for human_input: " + node.getId());
+            if (node.getExecutionContext() == null || node.getExecutionContext().isEmpty()) {
+                errors.add("execution_context is required for human_input: " + node.getId());
+                return;
+            }
+            for (var entry : node.getExecutionContext()) {
+                if (entry == null) {
+                    errors.add("execution_context entry is required: " + node.getId());
+                    continue;
+                }
+                String type = normalize(entry.getType());
+                if (!"artifact_ref".equals(type)) {
+                    errors.add("human_input supports only artifact_ref execution_context: " + node.getId());
+                }
+                String scope = normalize(entry.getScope());
+                if (!"run".equals(scope)) {
+                    errors.add("human_input execution_context supports only scope=run: " + node.getId());
+                }
+                if (entry.getNodeId() == null || entry.getNodeId().isBlank()) {
+                    errors.add("human_input run-scoped artifact_ref requires node_id: " + node.getId());
+                    continue;
+                }
+                NodeModel sourceNode = nodesById.get(entry.getNodeId());
+                if (sourceNode == null) {
+                    errors.add("human_input execution_context source node not found: " + node.getId() + " -> " + entry.getNodeId());
+                    continue;
+                }
+                if (!isModifiableProducedArtifact(sourceNode, entry.getPath(), "run")) {
+                    errors.add("human_input execution_context must reference modifiable produced_artifacts: "
+                            + node.getId() + " -> " + entry.getNodeId() + ":" + entry.getPath());
+                }
             }
             return;
         }
@@ -334,5 +356,113 @@ public class FlowValidator {
             return null;
         }
         return value.trim().toLowerCase().replace(' ', '_').replace('-', '_');
+    }
+
+    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String path, String scope) {
+        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || path == null || path.isBlank()) {
+            return false;
+        }
+        String normalizedScope = normalize(scope);
+        for (var artifact : sourceNode.getProducedArtifacts()) {
+            if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
+                continue;
+            }
+            String artifactScope = normalize(artifact.getScope());
+            if (path.equals(artifact.getPath())
+                    && normalizedScope != null
+                    && normalizedScope.equals(artifactScope)
+                    && Boolean.TRUE.equals(artifact.getModifiable())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void validateHumanInputPredecessorContracts(Map<String, NodeModel> nodesById, List<String> errors) {
+        for (NodeModel node : nodesById.values()) {
+            String nodeKind = normalize(node.getNodeKind());
+            if (nodeKind == null) {
+                nodeKind = normalize(node.getType());
+            }
+            if (!"human_input".equals(nodeKind)) {
+                continue;
+            }
+            List<NodeModel> predecessors = nodesById.values().stream()
+                    .filter((candidate) -> collectTargets(candidate).contains(node.getId()))
+                    .toList();
+            if (predecessors.isEmpty()) {
+                continue;
+            }
+            boolean hasModifiable = predecessors.stream()
+                    .anyMatch((candidate) -> candidate.getProducedArtifacts() != null
+                            && candidate.getProducedArtifacts().stream()
+                            .anyMatch((artifact) -> artifact != null && Boolean.TRUE.equals(artifact.getModifiable())));
+            if (!hasModifiable) {
+                String predecessorIds = predecessors.stream().map(NodeModel::getId).sorted().reduce((a, b) -> a + ", " + b).orElse("unknown");
+                errors.add("human_input requires at least one modifiable produced_artifact in predecessor nodes: "
+                        + node.getId() + " <- [" + predecessorIds + "]");
+            }
+        }
+    }
+
+    private void validateHumanInputProducedArtifacts(
+            NodeModel node,
+            Map<String, NodeModel> nodesById,
+            List<String> errors
+    ) {
+        Set<String> expectedArtifacts = new LinkedHashSet<>();
+        if (node.getExecutionContext() != null) {
+            for (var entry : node.getExecutionContext()) {
+                if (entry == null) {
+                    continue;
+                }
+                if (!"artifact_ref".equals(normalize(entry.getType()))) {
+                    continue;
+                }
+                if (!"run".equals(normalize(entry.getScope()))) {
+                    continue;
+                }
+                String sourceNodeId = entry.getNodeId();
+                String path = entry.getPath();
+                if (sourceNodeId == null || sourceNodeId.isBlank() || path == null || path.isBlank()) {
+                    continue;
+                }
+                NodeModel sourceNode = nodesById.get(sourceNodeId);
+                if (!isModifiableProducedArtifact(sourceNode, path, "run")) {
+                    continue;
+                }
+                expectedArtifacts.add("run::" + path);
+            }
+        }
+        if (expectedArtifacts.isEmpty()) {
+            return;
+        }
+
+        Set<String> declaredArtifacts = new LinkedHashSet<>();
+        if (node.getProducedArtifacts() != null) {
+            for (var artifact : node.getProducedArtifacts()) {
+                if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
+                    continue;
+                }
+                declaredArtifacts.add(normalize(artifact.getScope()) + "::" + artifact.getPath());
+            }
+        }
+
+        if (declaredArtifacts.isEmpty()) {
+            errors.add("human_input produced_artifacts must mirror modifiable execution_context artifacts: " + node.getId());
+            return;
+        }
+        for (String expected : expectedArtifacts) {
+            if (!declaredArtifacts.contains(expected)) {
+                errors.add("human_input produced_artifacts missing required artifact from execution_context: "
+                        + node.getId() + " -> " + expected);
+            }
+        }
+        for (String declared : declaredArtifacts) {
+            if (!expectedArtifacts.contains(declared)) {
+                errors.add("human_input produced_artifacts must match execution_context artifacts: "
+                        + node.getId() + " -> " + declared);
+            }
+        }
     }
 }

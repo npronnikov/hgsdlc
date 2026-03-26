@@ -665,10 +665,30 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   const artifactsTableRows = useMemo(() => {
     const expectedByPath = new Map(humanInputArtifactsFromGate.map((expected) => [expected.path, expected]));
     const seenExpectedPaths = new Set();
+    const isExpectedMatch = (expected, artifact, relativePath) => {
+      if (!expected || !artifact) {
+        return false;
+      }
+      if (expected.node_id && artifact.node_id && expected.node_id !== artifact.node_id) {
+        return false;
+      }
+      if (expected.artifact_key && artifact.artifact_key && expected.artifact_key !== artifact.artifact_key) {
+        return false;
+      }
+      const expectedPath = expected.path || '';
+      const artifactPath = relativePath || artifact.path || '';
+      if (!expectedPath) {
+        return true;
+      }
+      return artifactPath === expectedPath || artifactPath.endsWith(`/${expectedPath}`);
+    };
 
     const rows = filteredArtifacts.map((artifact) => {
       const relativePath = toRelativeRunScopePath(artifact.path);
-      const expected = expectedByPath.get(relativePath);
+      let expected = expectedByPath.get(relativePath);
+      if (!expected) {
+        expected = humanInputArtifactsFromGate.find((candidate) => isExpectedMatch(candidate, artifact, relativePath)) || null;
+      }
       if (expected) {
         seenExpectedPaths.add(expected.path);
       }
@@ -681,26 +701,6 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         humanInputExpectedGateVersion: expected ? run?.current_gate?.resource_version : null,
         humanInputComment: expected ? 'submitted from run console' : null,
       };
-    });
-
-    humanInputArtifactsFromGate.forEach((expected) => {
-      if (seenExpectedPaths.has(expected.path)) {
-        return;
-      }
-      rows.push({
-        artifact_version_id: null,
-        artifact_key: expected.artifact_key,
-        node_id: expected.node_id,
-        path: expected.path,
-        scope: 'run',
-        kind: 'human_input',
-        size_bytes: 0,
-        version_no: 0,
-        humanInputEditable: true,
-        humanInputGateId: run?.current_gate?.gate_id,
-        humanInputExpectedGateVersion: run?.current_gate?.resource_version,
-        humanInputComment: 'submitted from run console',
-      });
     });
 
     return rows;
@@ -797,27 +797,31 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
               </Button>
             )}
           >
-            <Timeline
-              items={nodes.map((item) => {
-                const isActive = item.node_execution_id === selectedNodeId;
-                return {
-                  color: nodeTimelineColor(item.status),
-                  dot: nodeTimelineIcon(item.status),
-                  children: (
-                    <div
-                      className={`node-timeline-item${isActive ? ' is-active' : ''}`}
-                      onClick={() => setSelectedNodeId(isActive ? null : item.node_execution_id)}
-                    >
-                      <div className="node-timeline-name">{item.node_id}</div>
-                      <div className="node-timeline-meta">
-                        <Tag color={nodeTimelineColor(item.status)} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>{formatStatusLabel(item.status)}</Tag>
-                        {item.attempt_no > 1 && <span className="mono" style={{ fontSize: 10 }}>#{item.attempt_no}</span>}
+            {nodes.length === 0 ? (
+              <Empty description="Wait for node to be started" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            ) : (
+              <Timeline
+                items={nodes.map((item) => {
+                  const isActive = item.node_execution_id === selectedNodeId;
+                  return {
+                    color: nodeTimelineColor(item.status),
+                    dot: nodeTimelineIcon(item.status),
+                    children: (
+                      <div
+                        className={`node-timeline-item${isActive ? ' is-active' : ''}`}
+                        onClick={() => setSelectedNodeId(isActive ? null : item.node_execution_id)}
+                      >
+                        <div className="node-timeline-name">{item.node_id}</div>
+                        <div className="node-timeline-meta">
+                          <Tag color={nodeTimelineColor(item.status)} style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>{formatStatusLabel(item.status)}</Tag>
+                          {item.attempt_no > 1 && <span className="mono" style={{ fontSize: 10 }}>#{item.attempt_no}</span>}
+                        </div>
                       </div>
-                    </div>
-                  ),
-                };
-              })}
-            />
+                    ),
+                  };
+                })}
+              />
+            )}
             <div ref={timelineEndRef} />
           </Card>
         </Col>

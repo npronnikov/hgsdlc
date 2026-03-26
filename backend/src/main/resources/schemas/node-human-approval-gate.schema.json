@@ -48,7 +48,8 @@
         "type": { "type": "string" },
         "path": { "type": "string" },
         "scope": { "type": "string", "enum": ["project", "run"] },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "node_id": { "type": "string" }
       }
     },
     "path_requirement": {
@@ -57,7 +58,8 @@
       "properties": {
         "path": { "type": "string" },
         "scope": { "type": "string", "enum": ["project", "run"] },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "modifiable": { "type": "boolean" }
       }
     }
   },

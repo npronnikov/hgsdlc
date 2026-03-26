@@ -313,6 +313,7 @@ nodes:
       - scope: run
         path: questions.md
         required: true
+        modifiable: true
     expected_mutations: []
     on_success: answer-questions
     on_failure: complete-requirements-flow
@@ -320,13 +321,19 @@ nodes:
   - id: answer-questions
     title: User answers to questions
     type: human_input
+    execution_context:
+      - type: artifact_ref
+        node_id: analyze-request-and-generate-questions
+        path: questions.md
+        scope: run
+        required: true
     instruction: |
-      Open the `answers.md` artifact in the current run working directory.
-      Fill in your answers to the questions listed in the `questions.md` artifact.
+      Open the `questions.md` artifact copy in the current human_input node working directory.
+      Fill in your answers directly in this file.
       After you complete your answers and save the file, click "Reply" to continue flow execution.
     produced_artifacts:
       - scope: run
-        path: answers.md
+        path: questions.md
         required: true
     expected_mutations: []
     on_submit: execute-request
@@ -337,11 +344,11 @@ nodes:
     execution_context:
       - type: artifact_ref
         node_id: answer-questions
-        path: answers.md
+        path: questions.md
         scope: run
         required: true
     instruction: |
-      You have the original user request and the `answers.md` file with clarifying questions and user answers.
+      You have the original user request and the updated `questions.md` file with user answers.
       Based on them, produce new detailed requirements for the user-specified topic.
       Requirements must be:
       - specific and verifiable;

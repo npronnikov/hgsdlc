@@ -138,6 +138,10 @@ const SCOPE_OPTIONS = [
   { value: 'project', label: 'Scope:project' },
   { value: 'run', label: 'Scope:run' },
 ];
+const MODIFIABLE_OPTIONS = [
+  { value: 'no', label: 'Modifiable: NO' },
+  { value: 'yes', label: 'Modifiable: YES' },
+];
 
 const NODE_TYPE_OPTIONS = [
   { key: 'ai', label: 'AI Executor' },
@@ -281,13 +285,10 @@ function buildEdges(nodes) {
 function toNodeData(node, isStart) {
   const kind = node.node_kind || node.nodeKind || node.type || '';
   const rawProducedArtifacts = node.produced_artifacts || node.producedArtifacts || [];
-  const producedArtifacts = kind === 'human_input'
-    ? rawProducedArtifacts.map((artifact) => ({
-      ...artifact,
-      scope: 'run',
-      required: true,
-    }))
-    : rawProducedArtifacts;
+  const producedArtifacts = rawProducedArtifacts.map((artifact) => ({
+    ...artifact,
+    modifiable: artifact?.modifiable === true,
+  }));
   const rawRework = node.on_rework || node.onRework || null;
   let onRework = null;
   if (rawRework) {
@@ -405,7 +406,7 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       });
     }
 
-    if (kind !== 'command' && kind !== 'human_input') {
+    if (kind !== 'command') {
       if (!Array.isArray(data.executionContext)) {
         errors.push(`execution_context is not set: ${node.id}`);
       } else {
@@ -457,21 +458,21 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     checkPathList(data.expectedMutations, 'expected_mutations');
 
     if (kind === 'human_input') {
-      if (Array.isArray(data.executionContext) && data.executionContext.length > 0) {
-        errors.push(`human_input does not support execution_context: ${node.id}`);
-      }
       if (!String(data.instruction || '').trim()) {
         errors.push(`human_input requires instruction: ${node.id}`);
       }
-      if (!Array.isArray(data.producedArtifacts) || data.producedArtifacts.length === 0) {
-        errors.push(`human_input requires produced_artifacts: ${node.id}`);
+      if (!Array.isArray(data.executionContext) || data.executionContext.length === 0) {
+        errors.push(`human_input requires execution_context artifact_ref entries: ${node.id}`);
       } else {
-        data.producedArtifacts.forEach((artifact) => {
-          if ((artifact.scope || 'run') !== 'run') {
-            errors.push(`human_input produced_artifacts supports only scope=run: ${node.id}`);
+        data.executionContext.forEach((entry) => {
+          if ((entry.type || '') !== 'artifact_ref') {
+            errors.push(`human_input supports only artifact_ref execution_context: ${node.id}`);
           }
-          if (artifact.required !== true) {
-            errors.push(`human_input produced_artifacts always required=true: ${node.id}`);
+          if ((entry.scope || 'run') !== 'run') {
+            errors.push(`human_input execution_context supports only scope=run: ${node.id}`);
+          }
+          if (!entry.node_id) {
+            errors.push(`human_input execution_context requires source node_id: ${node.id}`);
           }
         });
       }
@@ -554,6 +555,72 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     });
   }
 
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const predecessorMap = new Map();
+  nodes.forEach((node) => {
+    const data = node.data || {};
+    const targets = [data.onSuccess, data.onFailure, data.onSubmit, data.onApprove, data.onRework?.nextNode]
+      .filter(Boolean);
+    targets.forEach((target) => {
+      if (!predecessorMap.has(target)) predecessorMap.set(target, []);
+      predecessorMap.get(target).push(node);
+    });
+  });
+
+  nodes.forEach((node) => {
+    const data = node.data || {};
+    const kind = data.nodeKind || data.type;
+    if (kind !== 'human_input') return;
+    const predecessors = predecessorMap.get(node.id) || [];
+    const hasModifiable = predecessors.some((candidate) =>
+      Array.isArray(candidate.data?.producedArtifacts)
+      && candidate.data.producedArtifacts.some((artifact) => artifact?.modifiable === true));
+    if (predecessors.length > 0 && !hasModifiable) {
+      errors.push(`human_input requires at least one modifiable produced_artifact in predecessor nodes: ${node.id}`);
+    }
+    (data.executionContext || []).forEach((entry) => {
+      const source = nodesById.get(entry.node_id);
+      if (!source) return;
+      const sourceHasMatch = (source.data?.producedArtifacts || []).some((artifact) =>
+        artifact?.path === entry.path
+        && (artifact.scope || 'run') === (entry.scope || 'run')
+        && artifact.modifiable === true);
+      if (!sourceHasMatch) {
+        errors.push(`human_input execution_context must reference modifiable produced_artifacts: ${node.id} -> ${entry.node_id}:${entry.path || ''}`);
+      }
+    });
+    const expectedOutputs = new Set(
+      (data.executionContext || [])
+        .filter((entry) => entry?.type === 'artifact_ref' && (entry.scope || 'run') === 'run' && entry?.path && entry?.node_id)
+        .filter((entry) => {
+          const source = nodesById.get(entry.node_id);
+          return (source?.data?.producedArtifacts || []).some((artifact) =>
+            artifact?.path === entry.path
+            && (artifact.scope || 'run') === 'run'
+            && artifact.modifiable === true);
+        })
+        .map((entry) => `run::${entry.path}`)
+    );
+    const declaredOutputs = new Set(
+      (data.producedArtifacts || [])
+        .filter((artifact) => artifact?.path)
+        .map((artifact) => `${artifact.scope || 'run'}::${artifact.path}`)
+    );
+    if (expectedOutputs.size > 0 && declaredOutputs.size === 0) {
+      errors.push(`human_input produced_artifacts must mirror modifiable execution_context artifacts: ${node.id}`);
+    }
+    expectedOutputs.forEach((expected) => {
+      if (!declaredOutputs.has(expected)) {
+        errors.push(`human_input produced_artifacts missing required artifact from execution_context: ${node.id} -> ${expected}`);
+      }
+    });
+    declaredOutputs.forEach((declared) => {
+      if (!expectedOutputs.has(declared)) {
+        errors.push(`human_input produced_artifacts must match execution_context artifacts: ${node.id} -> ${declared}`);
+      }
+    });
+  });
+
   return errors;
 }
 
@@ -612,7 +679,7 @@ export default function FlowEditor() {
   );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedNodeKind = selectedNode?.data?.nodeKind || selectedNode?.data?.type || '';
-  const showExecutionContextEditor = ['ai', 'human_approval'].includes(selectedNodeKind);
+  const showExecutionContextEditor = ['ai', 'human_approval', 'human_input'].includes(selectedNodeKind);
   const validationErrors = validateFlow(nodes, flowMeta, rulesCatalog, skillsCatalog);
   const isReadOnly = !isEditing;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
@@ -1085,7 +1152,7 @@ export default function FlowEditor() {
         lines.push(`    description: ${data.description}`);
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
-      if ((data.nodeKind || data.type) !== 'command' && (data.nodeKind || data.type) !== 'human_input') {
+      if ((data.nodeKind || data.type) !== 'command') {
         if (data.executionContext && data.executionContext.length > 0) {
           lines.push('    execution_context:');
           data.executionContext.forEach((entry) => {
@@ -1124,12 +1191,15 @@ export default function FlowEditor() {
         lines.push('    produced_artifacts:');
         data.producedArtifacts.forEach((artifact) => {
           lines.push('      -');
-          const artifactScope = (data.nodeKind || data.type) === 'human_input' ? 'run' : artifact.scope;
+          const artifactScope = artifact.scope;
           if (artifactScope) {
             lines.push(`        scope: ${artifactScope}`);
           }
           lines.push(`        path: ${artifact.path}`);
-          lines.push(`        required: ${(data.nodeKind || data.type) === 'human_input' ? 'true' : !!artifact.required}`);
+          lines.push(`        required: ${!!artifact.required}`);
+          if (artifact.modifiable) {
+            lines.push('        modifiable: true');
+          }
         });
       } else {
         lines.push('    produced_artifacts: []');
@@ -1943,6 +2013,7 @@ export default function FlowEditor() {
                                 size="small"
                                 type="default"
                                 danger
+                                className="artifact-delete-btn"
                                 icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
                                 onClick={() => removeSelectedNodeListItem('executionContext', index)}
@@ -2146,31 +2217,43 @@ export default function FlowEditor() {
                       <Text className="muted">Generated artifacts</Text>
                       <div className="context-list">
                         {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
-                          <div key={`artifact-${index}`} className="artifact-row">
-                            <Select
-                              value={selectedNodeKind === 'human_input' ? 'run' : (entry.scope || 'run')}
-                              options={SCOPE_OPTIONS}
-                              disabled={isReadOnly || selectedNodeKind === 'human_input'}
-                              title="Область, где будет создан артефакт."
-                              onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
-                            />
-                            <Input
-                              value={entry.path || ''}
-                              placeholder="path"
-                              disabled={isReadOnly}
-                              title="Путь создаваемого артефакта."
-                              onChange={(event) =>
-                                updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
-                              }
-                            />
-                            <div className="artifact-row-controls">
+                          <div key={`artifact-${index}`} className="context-row artifact-context-row">
+                            <div className="context-row-header">
+                              <Text className="muted">Artifact #{index + 1}</Text>
                               <Button
                                 size="small"
                                 type="default"
                                 danger
+                                className="artifact-delete-btn"
                                 icon={<DeleteOutlined />}
                                 disabled={isReadOnly}
                                 onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
+                              />
+                            </div>
+                            <div className="context-row-fields artifact-row-fields">
+                              <Select
+                                value={entry.scope || 'run'}
+                                options={SCOPE_OPTIONS}
+                                disabled={isReadOnly}
+                                title="Область, где будет создан артефакт."
+                                onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
+                              />
+                              <Select
+                                value={entry.modifiable === true ? 'yes' : 'no'}
+                                options={MODIFIABLE_OPTIONS}
+                                disabled={isReadOnly}
+                                title="Можно ли редактировать артефакт на human_input шаге."
+                                onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { modifiable: value === 'yes' })}
+                              />
+                              <Input
+                                className="context-field-full artifact-path-input"
+                                value={entry.path || ''}
+                                placeholder="path"
+                                disabled={isReadOnly}
+                                title="Путь создаваемого артефакта."
+                                onChange={(event) =>
+                                  updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
+                                }
                               />
                             </div>
                           </div>
@@ -2183,6 +2266,7 @@ export default function FlowEditor() {
                             path: '',
                             required: true,
                             scope: 'run',
+                            modifiable: false,
                           })}
                         >
                           Add artifact
