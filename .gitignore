@@ -123,3 +123,11 @@ docker-compose.override.yml
 
 # Catalog repository
 /catalog-repo/*
+
+
+# ============================================
+# BMAD
+# ============================================
+_bmad/
+.claude/skills/bmad-*
+.cursor/skills/bmad-*
