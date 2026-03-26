@@ -38,7 +38,7 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.domain.SkillVisibility;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
-//@Component
+@Component
 public class SeedCatalogInitializer implements ApplicationRunner {
     private final RuleVersionRepository ruleRepository;
     private final SkillVersionRepository skillRepository;
@@ -60,9 +60,9 @@ public class SeedCatalogInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         seedProjects();
-        seedRules();
-        seedSkills();
-        seedFlows();
+//        seedRules();
+//        seedSkills();
+//        seedFlows();
     }
 
     private void seedProjects() {
@@ -347,6 +347,7 @@ nodes:
         path: questions.md
         scope: run
         required: true
+        transfer_mode: by_value
     instruction: |
       You have the original user request and the updated `questions.md` file with user answers.
       Based on them, produce new detailed requirements for the user-specified topic.

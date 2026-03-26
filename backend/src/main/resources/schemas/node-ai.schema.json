@@ -46,7 +46,8 @@
         "path": { "type": "string" },
         "scope": { "type": "string", "enum": ["project", "run"] },
         "required": { "type": "boolean" },
-        "node_id": { "type": "string" }
+        "node_id": { "type": "string" },
+        "transfer_mode": { "type": "string", "enum": ["by_ref", "by_value"] }
       }
     },
     "path_requirement": {

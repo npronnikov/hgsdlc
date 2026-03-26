@@ -205,4 +205,53 @@ class FlowValidatorTest {
         List<String> errors = validator.validate(flow);
         Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("must match execution_context artifacts")));
     }
+
+    @Test
+    void transferModeByValueIsAllowedOnlyForAiNodes() {
+        NodeModel approval = NodeModel.builder()
+                .id("approval")
+                .type("human_approval")
+                .executionContext(List.of(
+                        ExecutionContextEntry.builder()
+                                .type("artifact_ref")
+                                .scope("run")
+                                .path("input.md")
+                                .required(true)
+                                .nodeId("src")
+                                .transferMode("by_value")
+                                .build()
+                ))
+                .onApprove("end")
+                .onRework(NodeModel.OnRework.builder().keepChanges(true).nextNode("src").build())
+                .producedArtifacts(List.of())
+                .expectedMutations(List.of())
+                .build();
+        NodeModel src = NodeModel.builder()
+                .id("src")
+                .type("ai")
+                .executionContext(List.of())
+                .instruction("generate")
+                .onSuccess("approval")
+                .onFailure("end")
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("input.md").scope("run").required(true).modifiable(true).build()
+                ))
+                .build();
+        NodeModel end = NodeModel.builder()
+                .id("end")
+                .type("terminal")
+                .executionContext(List.of())
+                .build();
+        FlowModel flow = FlowModel.builder()
+                .id("f")
+                .version("1.0")
+                .canonicalName("f@1.0")
+                .title("flow")
+                .startNodeId("src")
+                .nodes(List.of(src, approval, end))
+                .build();
+
+        List<String> errors = validator.validate(flow);
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("supported only for ai nodes")));
+    }
 }

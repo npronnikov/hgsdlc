@@ -138,6 +138,10 @@ const SCOPE_OPTIONS = [
   { value: 'project', label: 'Scope:project' },
   { value: 'run', label: 'Scope:run' },
 ];
+const TRANSFER_MODE_OPTIONS = [
+  { value: 'by_ref', label: 'Transfer: by ref' },
+  { value: 'by_value', label: 'Transfer: by value' },
+];
 const MODIFIABLE_OPTIONS = [
   { value: 'no', label: 'Modifiable: NO' },
   { value: 'yes', label: 'Modifiable: YES' },
@@ -303,7 +307,15 @@ function toNodeData(node, isStart) {
     description: node.description || '',
     nodeKind: kind,
     type: kind,
-    executionContext: node.execution_context || node.executionContext || [],
+    executionContext: (node.execution_context || node.executionContext || []).map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return { type: 'artifact_ref', required: true, scope: 'run', path: '', transfer_mode: 'by_ref' };
+      }
+      return {
+        ...entry,
+        transfer_mode: entry.transfer_mode || 'by_ref',
+      };
+    }),
     instruction: node.instruction || '',
     checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? false,
     skillRefs: node.skill_refs || node.skillRefs || [],
@@ -428,6 +440,12 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
             if (!entry.scope) {
               errors.push(`execution_context scope is not set: ${node.id}`);
             }
+            if (entry.transfer_mode && !['by_ref', 'by_value'].includes(entry.transfer_mode)) {
+              errors.push(`execution_context transfer_mode is not supported: ${node.id}`);
+            }
+            if ((entry.transfer_mode || 'by_ref') === 'by_value' && kind !== 'ai') {
+              errors.push(`execution_context transfer_mode=by_value is supported only for ai nodes: ${node.id}`);
+            }
             if (entry.scope === 'run' && !entry.node_id) {
               errors.push(`execution_context node_id is not set for run-scope artifact: ${node.id}`);
             }
@@ -467,6 +485,9 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
         data.executionContext.forEach((entry) => {
           if ((entry.type || '') !== 'artifact_ref') {
             errors.push(`human_input supports only artifact_ref execution_context: ${node.id}`);
+          }
+          if ((entry.transfer_mode || 'by_ref') !== 'by_ref') {
+            errors.push(`human_input execution_context supports only transfer_mode=by_ref: ${node.id}`);
           }
           if ((entry.scope || 'run') !== 'run') {
             errors.push(`human_input execution_context supports only scope=run: ${node.id}`);
@@ -1160,6 +1181,9 @@ export default function FlowEditor() {
             lines.push(`        required: ${!!entry.required}`);
             if (entry.scope) {
               lines.push(`        scope: ${entry.scope}`);
+            }
+            if (entry.transfer_mode) {
+              lines.push(`        transfer_mode: ${entry.transfer_mode}`);
             }
             if (entry.node_id) {
               lines.push(`        node_id: ${entry.node_id}`);
@@ -2006,7 +2030,7 @@ export default function FlowEditor() {
                                 onChange={(value) => updateSelectedNodeList(
                                   'executionContext',
                                   index,
-                                  { type: value, scope: entry.scope || 'run' }
+                                  { type: value, scope: entry.scope || 'run', transfer_mode: entry.transfer_mode || 'by_ref' }
                                 )}
                               />
                               <Button
@@ -2031,6 +2055,17 @@ export default function FlowEditor() {
                                     node_id: value === 'project' ? undefined : entry.node_id,
                                   })}
                                 />
+                                {selectedNodeKind === 'ai' && (
+                                  <Select
+                                    value={entry.transfer_mode || 'by_ref'}
+                                    options={TRANSFER_MODE_OPTIONS}
+                                    disabled={isReadOnly}
+                                    title="Режим передачи артефакта в AI-контекст."
+                                    onChange={(value) => updateSelectedNodeList('executionContext', index, {
+                                      transfer_mode: value,
+                                    })}
+                                  />
+                                )}
                                 {(entry.scope || 'run') === 'run' && (
                                   <Select
                                     value={entry.node_id || undefined}
@@ -2062,7 +2097,13 @@ export default function FlowEditor() {
                           icon={<PlusOutlined />}
                           disabled={isReadOnly}
                           onClick={() =>
-                            addSelectedNodeListItem('executionContext', { type: 'artifact_ref', required: true, scope: 'run', path: '' })
+                            addSelectedNodeListItem('executionContext', {
+                              type: 'artifact_ref',
+                              required: true,
+                              scope: 'run',
+                              path: '',
+                              transfer_mode: 'by_ref',
+                            })
                           }
                         >
                           Add context

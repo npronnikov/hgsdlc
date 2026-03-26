@@ -20,6 +20,8 @@ inputs:
   use_upstream_artifact_by_path: "Use the input artifact by path '{path}'."
   # Added for artifact_ref when artifact_key is known. Placeholders: {artifact_key}, {path}
   use_upstream_artifact_by_key_and_path: "Use the input artifact '{artifact_key}' by full path '{path}'."
+  # Added for artifact_ref with transfer_mode=by_value. Placeholders: {artifact_key}, {path}, {size_bytes}, {content}
+  use_upstream_artifact_by_value: "Use inline artifact content '{artifact_key}' (path '{path}', size {size_bytes} bytes):\n```text\n{content}\n```"
 
 expected_results:
   # Added when required output artifacts exist. Placeholder: {artifacts}

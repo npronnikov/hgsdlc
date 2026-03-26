@@ -27,10 +27,6 @@ function extractGateContext(payload) {
   };
 }
 
-function isEditInPlace(inputArtifactKey, outputArtifactKey) {
-  return inputArtifactKey && outputArtifactKey && inputArtifactKey === outputArtifactKey;
-}
-
 export default function GateInput() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

@@ -83,6 +83,7 @@ public class RuntimeService {
     );
     private static final int DEFAULT_MAX_TICK_ITERATIONS = 128;
     private static final int NODE_LOG_CHUNK_SIZE = 256 * 1024;
+    private static final long MAX_INLINE_ARTIFACT_BYTES = 64 * 1024;
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -1723,12 +1724,39 @@ public class RuntimeService {
                         }
                         continue;
                     }
-                    resolved.add(Map.of(
-                            "type", "artifact_ref",
-                            "artifact_key", artifactKeyForPath(entry.getPath()),
-                            "path", path.toString(),
-                            "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId()
-                    ));
+                    String transferMode = normalizeTransferMode(entry.getTransferMode());
+                    if ("by_value".equals(transferMode)) {
+                        long sizeBytes = fileSize(path);
+                        if (sizeBytes > MAX_INLINE_ARTIFACT_BYTES) {
+                            throw new NodeFailureException(
+                                    "EXECUTION_CONTEXT_TOO_LARGE",
+                                    "artifact_ref by_value exceeds max size (" + MAX_INLINE_ARTIFACT_BYTES + " bytes): " + entry.getPath(),
+                                    false
+                            );
+                        }
+                        String content = readFileContent(path);
+                        if (content == null) {
+                            content = "";
+                        }
+                        resolved.add(Map.of(
+                                "type", "artifact_ref",
+                                "artifact_key", artifactKeyForPath(entry.getPath()),
+                                "path", path.toString(),
+                                "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
+                                "transfer_mode", "by_value",
+                                "content", content,
+                                "content_checksum", ChecksumUtil.sha256(content),
+                                "size_bytes", sizeBytes
+                        ));
+                    } else {
+                        resolved.add(Map.of(
+                                "type", "artifact_ref",
+                                "artifact_key", artifactKeyForPath(entry.getPath()),
+                                "path", path.toString(),
+                                "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
+                                "transfer_mode", "by_ref"
+                        ));
+                    }
                 }
                 default -> {
                 }
@@ -2542,6 +2570,14 @@ public class RuntimeService {
             return "";
         }
         return value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+    }
+
+    private String normalizeTransferMode(String value) {
+        String normalized = normalize(trimToNull(value));
+        if ("by_value".equals(normalized)) {
+            return "by_value";
+        }
+        return "by_ref";
     }
 
     private String capitalize(String value) {

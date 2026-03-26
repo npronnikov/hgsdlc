@@ -45,7 +45,8 @@
         "path": { "type": "string", "minLength": 1 },
         "scope": { "type": "string", "const": "run" },
         "required": { "type": "boolean" },
-        "node_id": { "type": "string", "minLength": 1 }
+        "node_id": { "type": "string", "minLength": 1 },
+        "transfer_mode": { "type": "string", "enum": ["by_ref"] }
       }
     },
     "path_requirement": {

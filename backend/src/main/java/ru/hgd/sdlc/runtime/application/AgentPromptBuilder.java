@@ -148,6 +148,7 @@ public class AgentPromptBuilder {
                     text(root, "/sections/footer"),
                     text(root, "/inputs/use_upstream_artifact_by_path"),
                     text(root, "/inputs/use_upstream_artifact_by_key_and_path"),
+                    text(root, "/inputs/use_upstream_artifact_by_value"),
                     text(root, "/expected_results/required_artifacts"),
                     text(root, "/expected_results/required_run_paths"),
                     text(root, "/expected_results/required_mutations"),
@@ -178,12 +179,23 @@ public class AgentPromptBuilder {
                 case "artifact_ref" -> {
                     String artifactKey = trimToNull(asString(contextEntry.get("artifact_key")));
                     String path = trimToNull(asString(contextEntry.get("path")));
-                    inputs.add(artifactKey == null
-                            ? promptTexts.useUpstreamArtifactByPath()
-                                    .replace("{path}", path == null ? "path is not provided" : path)
-                            : promptTexts.useUpstreamArtifactByKeyAndPath()
-                                    .replace("{artifact_key}", artifactKey)
-                                    .replace("{path}", path == null ? "path is not provided" : path));
+                    String transferMode = normalize(asString(contextEntry.get("transfer_mode")));
+                    if ("by_value".equals(transferMode)) {
+                        String content = trimToNull(asString(contextEntry.get("content")));
+                        String sizeBytes = String.valueOf(asLong(contextEntry.get("size_bytes")));
+                        inputs.add(promptTexts.useUpstreamArtifactByValue()
+                                .replace("{artifact_key}", artifactKey == null ? "artifact" : artifactKey)
+                                .replace("{path}", path == null ? "path is not provided" : path)
+                                .replace("{size_bytes}", sizeBytes)
+                                .replace("{content}", content == null ? "" : content));
+                    } else {
+                        inputs.add(artifactKey == null
+                                ? promptTexts.useUpstreamArtifactByPath()
+                                        .replace("{path}", path == null ? "path is not provided" : path)
+                                : promptTexts.useUpstreamArtifactByKeyAndPath()
+                                        .replace("{artifact_key}", artifactKey)
+                                        .replace("{path}", path == null ? "path is not provided" : path));
+                    }
                 }
                 default -> {
                 }
@@ -283,6 +295,13 @@ public class AgentPromptBuilder {
         return value instanceof String stringValue ? stringValue : null;
     }
 
+    private long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return 0L;
+    }
+
     public record AgentPromptPackage(
             AgentInput agentInput,
             String prompt,
@@ -307,6 +326,7 @@ public class AgentPromptBuilder {
             String footer,
             String useUpstreamArtifactByPath,
             String useUpstreamArtifactByKeyAndPath,
+            String useUpstreamArtifactByValue,
             String requiredArtifacts,
             String requiredRunPaths,
             String requiredMutations,

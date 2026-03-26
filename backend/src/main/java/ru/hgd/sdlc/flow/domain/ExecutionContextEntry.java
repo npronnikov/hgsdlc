@@ -22,4 +22,7 @@ public class ExecutionContextEntry {
 
     @JsonProperty("node_id")
     private String nodeId;
+
+    @JsonProperty("transfer_mode")
+    private String transferMode;
 }

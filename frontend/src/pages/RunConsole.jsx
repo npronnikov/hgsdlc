@@ -148,6 +148,46 @@ function renderAgentInputSection(agentInput) {
   );
 }
 
+function renderResolvedContextSection(resolvedContext) {
+  if (!Array.isArray(resolvedContext) || resolvedContext.length === 0) {
+    return <Text type="secondary">—</Text>;
+  }
+  return (
+    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+      {resolvedContext.map((entry, index) => {
+        if (!isPlainObject(entry)) {
+          return (
+            <Card key={`context-${index}`} size="small">
+              {renderAuditData(entry, `resolved-context-${index}`)}
+            </Card>
+          );
+        }
+        const transferMode = entry.transfer_mode || 'by_ref';
+        return (
+          <Card key={`context-${index}`} size="small">
+            <Space direction="vertical" size={6} style={{ width: '100%' }}>
+              <Space size={8} wrap>
+                <Text className="mono">{entry.type || 'unknown'}</Text>
+                {'artifact_ref' === entry.type && (
+                  <Tag color={transferMode === 'by_value' ? 'gold' : 'blue'}>
+                    transfer: {transferMode}
+                  </Tag>
+                )}
+                {entry.artifact_key && <Text className="mono">{entry.artifact_key}</Text>}
+              </Space>
+              {entry.path && <Text type="secondary">Path: <span className="mono">{entry.path}</span></Text>}
+              {entry.source_node_id && <Text type="secondary">Source node: <span className="mono">{entry.source_node_id}</span></Text>}
+              {transferMode === 'by_value' && typeof entry.size_bytes === 'number' && (
+                <Text type="secondary">Inline size: {entry.size_bytes} B</Text>
+              )}
+            </Space>
+          </Card>
+        );
+      })}
+    </Space>
+  );
+}
+
 function renderAuditSections(item) {
   const payload = item.payload || {};
   const sections = [];
@@ -180,7 +220,7 @@ function renderAuditSections(item) {
   if (payload.resolved_context) {
     sections.push(
       <Card key="context" size="small" title="Resolved Context">
-        {renderAuditData(payload.resolved_context, 'resolved-context')}
+        {renderResolvedContextSection(payload.resolved_context)}
       </Card>,
     );
   }
@@ -664,7 +704,6 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
 
   const artifactsTableRows = useMemo(() => {
     const expectedByPath = new Map(humanInputArtifactsFromGate.map((expected) => [expected.path, expected]));
-    const seenExpectedPaths = new Set();
     const isExpectedMatch = (expected, artifact, relativePath) => {
       if (!expected || !artifact) {
         return false;
@@ -688,9 +727,6 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
       let expected = expectedByPath.get(relativePath);
       if (!expected) {
         expected = humanInputArtifactsFromGate.find((candidate) => isExpectedMatch(candidate, artifact, relativePath)) || null;
-      }
-      if (expected) {
-        seenExpectedPaths.add(expected.path);
       }
       return {
         ...artifact,

@@ -253,6 +253,10 @@ public class FlowValidator {
                 if (!"artifact_ref".equals(type)) {
                     errors.add("human_input supports only artifact_ref execution_context: " + node.getId());
                 }
+                String transferMode = normalizeTransferMode(entry.getTransferMode());
+                if (transferMode != null && !"by_ref".equals(transferMode)) {
+                    errors.add("human_input execution_context supports only transfer_mode=by_ref: " + node.getId());
+                }
                 String scope = normalize(entry.getScope());
                 if (!"run".equals(scope)) {
                     errors.add("human_input execution_context supports only scope=run: " + node.getId());
@@ -303,6 +307,15 @@ public class FlowValidator {
                     errors.add("execution_context scope is required: " + node.getId());
                 } else if (!Set.of("project", "run").contains(scope)) {
                     errors.add("Unsupported execution_context scope: " + node.getId());
+                }
+                if ("artifact_ref".equals(type)) {
+                    String transferMode = normalizeTransferMode(entry.getTransferMode());
+                    if (transferMode != null && !Set.of("by_ref", "by_value").contains(transferMode)) {
+                        errors.add("Unsupported execution_context transfer_mode: " + node.getId());
+                    }
+                    if ("by_value".equals(transferMode) && !"ai".equals(nodeKind)) {
+                        errors.add("execution_context transfer_mode=by_value is supported only for ai nodes: " + node.getId());
+                    }
                 }
             }
         }
@@ -376,6 +389,17 @@ public class FlowValidator {
             }
         }
         return false;
+    }
+
+    private String normalizeTransferMode(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) {
+            return null;
+        }
+        if ("by_ref".equals(normalized) || "by_value".equals(normalized)) {
+            return normalized;
+        }
+        return normalized;
     }
 
     private void validateHumanInputPredecessorContracts(Map<String, NodeModel> nodesById, List<String> errors) {
