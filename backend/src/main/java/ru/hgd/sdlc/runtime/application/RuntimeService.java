@@ -573,6 +573,45 @@ public class RuntimeService {
     }
 
     @Transactional(readOnly = true)
+    public GateChangesResult getGateChanges(UUID gateId, User user) {
+        GateInstanceEntity gate = getGateEntity(gateId);
+        RunEntity run = getRunEntity(gate.getRunId());
+        FlowModel flowModel = parseFlowSnapshot(run);
+        NodeModel node = requireNode(flowModel, gate.getNodeId());
+        enforceGateRole(node, user);
+        List<GitChangeEntry> changes = listGitChanges(run);
+        String statusLabel = gate.getGateKind() == GateKind.HUMAN_INPUT ? "Awaiting input" : "Ready for review";
+        int added = changes.stream().mapToInt(GitChangeEntry::added).sum();
+        int removed = changes.stream().mapToInt(GitChangeEntry::removed).sum();
+        return new GateChangesResult(
+                gate.getId(),
+                run.getId(),
+                gate.getGateKind().name().toLowerCase(Locale.ROOT),
+                gate.getStatus().name().toLowerCase(Locale.ROOT),
+                statusLabel,
+                changes,
+                changes.size(),
+                added,
+                removed
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public GateDiffResult getGateDiff(UUID gateId, String path, User user) {
+        GateInstanceEntity gate = getGateEntity(gateId);
+        RunEntity run = getRunEntity(gate.getRunId());
+        FlowModel flowModel = parseFlowSnapshot(run);
+        NodeModel node = requireNode(flowModel, gate.getNodeId());
+        enforceGateRole(node, user);
+        String sanitizedPath = sanitizeGitPath(path);
+        CommandResult diffResult = runGitQuery(run, List.of("git", "diff", "--no-color", "--", sanitizedPath));
+        if (diffResult.exitCode() != 0) {
+            throw new ValidationException("Failed to read git diff for path: " + sanitizedPath);
+        }
+        return new GateDiffResult(gate.getId(), run.getId(), sanitizedPath, diffResult.stdout());
+    }
+
+    @Transactional(readOnly = true)
     public List<AuditEventEntity> listAuditEvents(UUID runId) {
         getRunEntity(runId);
         return auditEventRepository.findByRunIdOrderBySequenceNoAsc(runId);
@@ -1123,6 +1162,7 @@ public class RuntimeService {
         if ("human_approval".equals(nodeKind)) {
             payload.put("rework_discard_available", isReworkDiscardAvailable(run, node));
         }
+        appendGitSummaryPayload(run, payload, nodeKind);
         if ("human_input".equals(nodeKind)) {
             List<Map<String, Object>> humanInputArtifacts = resolveHumanInputOutputArtifacts(run, node, execution);
             if (!humanInputArtifacts.isEmpty()) {
@@ -1161,6 +1201,25 @@ public class RuntimeService {
             return null;
         }
         return toJson(payload);
+    }
+
+    private void appendGitSummaryPayload(RunEntity run, Map<String, Object> payload, String nodeKind) {
+        List<GitChangeEntry> changes = listGitChanges(run);
+        int addedLines = changes.stream().mapToInt(GitChangeEntry::added).sum();
+        int removedLines = changes.stream().mapToInt(GitChangeEntry::removed).sum();
+        payload.put("git_changes", changes.stream().map((entry) -> mapOf(
+                "path", entry.path(),
+                "status", entry.status(),
+                "added", entry.added(),
+                "removed", entry.removed(),
+                "is_binary", entry.binary()
+        )).toList());
+        payload.put("git_summary", mapOf(
+                "files_changed", changes.size(),
+                "added_lines", addedLines,
+                "removed_lines", removedLines,
+                "status_label", "human_input".equals(nodeKind) ? "Awaiting input" : "Ready for review"
+        ));
     }
 
     private boolean isReworkDiscardAvailable(RunEntity run, NodeModel approvalNode) {
@@ -2516,6 +2575,176 @@ public class RuntimeService {
         );
     }
 
+    private List<GitChangeEntry> listGitChanges(RunEntity run) {
+        CommandResult statusResult = runGitQuery(run, List.of("git", "status", "--porcelain", "--untracked-files=all"));
+        if (statusResult.exitCode() != 0) {
+            throw new ValidationException("Failed to read git status for run: " + run.getId());
+        }
+        List<String> changedPaths = expandGitPaths(run, parseGitStatusPaths(statusResult.stdout()));
+        CommandResult numstatResult = runGitQuery(run, List.of("git", "diff", "--numstat"));
+        if (numstatResult.exitCode() != 0) {
+            throw new ValidationException("Failed to read git numstat for run: " + run.getId());
+        }
+        Map<String, GitNumstat> numstatByPath = parseGitNumstat(numstatResult.stdout());
+        List<GitChangeEntry> result = new ArrayList<>();
+        for (String path : changedPaths) {
+            GitNumstat stat = numstatByPath.get(path);
+            int added = stat == null ? 0 : stat.added();
+            int removed = stat == null ? 0 : stat.removed();
+            boolean binary = stat != null && stat.binary();
+            result.add(new GitChangeEntry(path, inferGitStatus(path, statusResult.stdout()), added, removed, binary));
+        }
+        return result;
+    }
+
+    private List<String> expandGitPaths(RunEntity run, List<String> rawPaths) {
+        if (rawPaths == null || rawPaths.isEmpty()) {
+            return List.of();
+        }
+        Path projectRoot = resolveProjectRoot(run);
+        List<String> expanded = new ArrayList<>();
+        for (String raw : rawPaths) {
+            String path = trimToNull(raw);
+            if (path == null) {
+                continue;
+            }
+            Path resolved = projectRoot.resolve(path).normalize();
+            if (!resolved.startsWith(projectRoot)) {
+                continue;
+            }
+            if (Files.isDirectory(resolved)) {
+                try (var stream = Files.walk(resolved)) {
+                    stream.filter(Files::isRegularFile)
+                            .forEach((file) -> expanded.add(
+                                    projectRoot.relativize(file).toString().replace('\\', '/')
+                            ));
+                } catch (IOException ex) {
+                    // ignore directory expansion failure and fall back to original path
+                    expanded.add(path.replace('\\', '/'));
+                }
+            } else {
+                expanded.add(path.replace('\\', '/'));
+            }
+        }
+        return expanded.stream().distinct().toList();
+    }
+
+    private CommandResult runGitQuery(RunEntity run, List<String> command) {
+        Path operationRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve(".runtime").resolve("gate-review");
+        String suffix = String.valueOf(System.nanoTime());
+        Path stdoutPath = operationRoot.resolve("git-" + suffix + ".stdout.log");
+        Path stderrPath = operationRoot.resolve("git-" + suffix + ".stderr.log");
+        try {
+            return runProcess(
+                    run.getId(),
+                    command,
+                    resolveProjectRoot(run),
+                    Math.max(10, settingsService.getAiTimeoutSeconds()),
+                    stdoutPath,
+                    stderrPath
+            );
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to execute git command for run: " + run.getId());
+        }
+    }
+
+    private List<String> parseGitStatusPaths(String rawStatus) {
+        List<String> paths = new ArrayList<>();
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return paths;
+        }
+        for (String line : rawStatus.split("\n")) {
+            if (line == null || line.isBlank() || line.length() < 4) {
+                continue;
+            }
+            String pathPart = line.substring(3).trim();
+            if (pathPart.contains(" -> ")) {
+                String[] parts = pathPart.split(" -> ");
+                pathPart = parts[parts.length - 1].trim();
+            }
+            if (!pathPart.isBlank()) {
+                paths.add(pathPart);
+            }
+        }
+        return paths.stream().distinct().toList();
+    }
+
+    private Map<String, GitNumstat> parseGitNumstat(String rawNumstat) {
+        Map<String, GitNumstat> stats = new LinkedHashMap<>();
+        if (rawNumstat == null || rawNumstat.isBlank()) {
+            return stats;
+        }
+        for (String line : rawNumstat.split("\n")) {
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            String[] parts = line.split("\t");
+            if (parts.length < 3) {
+                continue;
+            }
+            String addedRaw = parts[0].trim();
+            String removedRaw = parts[1].trim();
+            String path = parts[2].trim();
+            boolean binary = "-".equals(addedRaw) || "-".equals(removedRaw);
+            int added = binary ? 0 : parseIntSafe(addedRaw);
+            int removed = binary ? 0 : parseIntSafe(removedRaw);
+            stats.put(path, new GitNumstat(added, removed, binary));
+        }
+        return stats;
+    }
+
+    private int parseIntSafe(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    private String inferGitStatus(String path, String rawStatus) {
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return "modified";
+        }
+        for (String line : rawStatus.split("\n")) {
+            if (line == null || line.isBlank() || line.length() < 4) {
+                continue;
+            }
+            String candidatePath = line.substring(3).trim();
+            if (candidatePath.contains(" -> ")) {
+                String[] parts = candidatePath.split(" -> ");
+                candidatePath = parts[parts.length - 1].trim();
+            }
+            if (!path.equals(candidatePath)) {
+                continue;
+            }
+            String code = line.substring(0, 2).trim();
+            if (code.isBlank()) {
+                return "modified";
+            }
+            if (code.contains("A")) return "added";
+            if (code.contains("D")) return "deleted";
+            if (code.contains("R")) return "renamed";
+            if (code.contains("M")) return "modified";
+            return code.toLowerCase(Locale.ROOT);
+        }
+        return "modified";
+    }
+
+    private String sanitizeGitPath(String path) {
+        String value = trimToNull(path);
+        if (value == null) {
+            throw new ValidationException("path is required");
+        }
+        if (Path.of(value).isAbsolute()) {
+            throw new ValidationException("absolute path is forbidden");
+        }
+        Path normalized = Path.of(value).normalize();
+        if (normalized.startsWith("..")) {
+            throw new ValidationException("path escapes repository root");
+        }
+        return normalized.toString().replace('\\', '/');
+    }
+
     private String normalizeBranch(String branch) {
         String normalized = trimToNull(branch);
         if (normalized == null) {
@@ -2608,6 +2837,39 @@ public class RuntimeService {
             String targetBranch,
             String flowCanonicalName,
             String featureRequest
+    ) {}
+
+    public record GateChangesResult(
+            UUID gateId,
+            UUID runId,
+            String gateKind,
+            String gateStatus,
+            String statusLabel,
+            List<GitChangeEntry> gitChanges,
+            int filesChanged,
+            int addedLines,
+            int removedLines
+    ) {}
+
+    public record GateDiffResult(
+            UUID gateId,
+            UUID runId,
+            String path,
+            String patch
+    ) {}
+
+    public record GitChangeEntry(
+            String path,
+            String status,
+            int added,
+            int removed,
+            boolean binary
+    ) {}
+
+    private record GitNumstat(
+            int added,
+            int removed,
+            boolean binary
     ) {}
 
     private record HumanInputEditableArtifact(

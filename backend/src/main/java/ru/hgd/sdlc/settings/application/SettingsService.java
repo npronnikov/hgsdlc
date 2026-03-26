@@ -69,6 +69,8 @@ public class SettingsService {
     public static final String CATALOG_GIT_CERTIFICATE_KEY = "catalog.git.certificate_key";
     public static final String CATALOG_GIT_USERNAME_KEY = "catalog.git.username";
     public static final String CATALOG_GIT_PASSWORD_KEY = "catalog.git.password_or_pat";
+    public static final String CATALOG_LOCAL_GIT_USERNAME_KEY = "catalog.local_git.username";
+    public static final String CATALOG_LOCAL_GIT_EMAIL_KEY = "catalog.local_git.email";
     private static final String DEFAULT_WORKSPACE_ROOT = "/tmp/workspace";
     private static final String DEFAULT_CODING_AGENT = "qwen";
     private static final int DEFAULT_AI_TIMEOUT_SECONDS = 900;
@@ -186,6 +188,8 @@ public class SettingsService {
         Optional<SystemSetting> certKey = repository.findById(CATALOG_GIT_CERTIFICATE_KEY);
         Optional<SystemSetting> gitUser = repository.findById(CATALOG_GIT_USERNAME_KEY);
         Optional<SystemSetting> gitPassword = repository.findById(CATALOG_GIT_PASSWORD_KEY);
+        Optional<SystemSetting> localGitUser = repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY);
+        Optional<SystemSetting> localGitEmail = repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY);
         SystemSetting latestSetting = latestOf(
                 workspaceSetting.orElse(null),
                 codingAgentSetting.orElse(null),
@@ -199,7 +203,9 @@ public class SettingsService {
                 cert.orElse(null),
                 certKey.orElse(null),
                 gitUser.orElse(null),
-                gitPassword.orElse(null)
+                gitPassword.orElse(null),
+                localGitUser.orElse(null),
+                localGitEmail.orElse(null)
         );
         return new RuntimeSettings(
                 workspaceSetting.map(SystemSetting::getSettingValue).orElse(getWorkspaceRoot()),
@@ -215,6 +221,8 @@ public class SettingsService {
                 certKey.map(SystemSetting::getSettingValue).orElse(""),
                 gitUser.map(SystemSetting::getSettingValue).orElse(""),
                 gitPassword.map(SystemSetting::getSettingValue).orElse(""),
+                localGitUser.map(SystemSetting::getSettingValue).orElse(""),
+                localGitEmail.map(SystemSetting::getSettingValue).orElse(""),
                 latestSetting == null ? null : latestSetting.getUpdatedAt(),
                 latestSetting == null ? null : latestSetting.getUpdatedBy()
         );
@@ -240,6 +248,8 @@ public class SettingsService {
                 repository.findById(CATALOG_GIT_CERTIFICATE_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 repository.findById(CATALOG_GIT_USERNAME_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 repository.findById(CATALOG_GIT_PASSWORD_KEY).map(SystemSetting::getSettingValue).orElse(""),
+                repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY).map(SystemSetting::getSettingValue).orElse(""),
+                repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 latestSetting.getUpdatedAt(),
                 latestSetting.getUpdatedBy()
         );
@@ -257,6 +267,8 @@ public class SettingsService {
             String gitCertificateKey,
             String gitUsername,
             String gitPasswordOrPat,
+            String localGitUsername,
+            String localGitEmail,
             String actorId
     ) {
         SystemSetting repo = upsert(CATALOG_REPO_URL_KEY, catalogRepoUrl == null ? "" : catalogRepoUrl.trim(), actorId);
@@ -269,7 +281,9 @@ public class SettingsService {
         SystemSetting certKey = upsert(CATALOG_GIT_CERTIFICATE_KEY, gitCertificateKey == null ? "" : gitCertificateKey, actorId);
         SystemSetting user = upsert(CATALOG_GIT_USERNAME_KEY, gitUsername == null ? "" : gitUsername.trim(), actorId);
         SystemSetting pass = upsert(CATALOG_GIT_PASSWORD_KEY, gitPasswordOrPat == null ? "" : gitPasswordOrPat, actorId);
-        SystemSetting latest = latestOf(repo, branch, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass);
+        SystemSetting localUser = upsert(CATALOG_LOCAL_GIT_USERNAME_KEY, localGitUsername == null ? "" : localGitUsername.trim(), actorId);
+        SystemSetting localEmail = upsert(CATALOG_LOCAL_GIT_EMAIL_KEY, localGitEmail == null ? "" : localGitEmail.trim(), actorId);
+        SystemSetting latest = latestOf(repo, branch, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass, localUser, localEmail);
         return new RuntimeSettings(
                 getWorkspaceRoot(),
                 getRuntimeCodingAgent(),
@@ -284,6 +298,8 @@ public class SettingsService {
                 certKey.getSettingValue(),
                 user.getSettingValue(),
                 pass.getSettingValue(),
+                localUser.getSettingValue(),
+                localEmail.getSettingValue(),
                 latest.getUpdatedAt(),
                 latest.getUpdatedBy()
         );
@@ -1028,6 +1044,8 @@ public class SettingsService {
             String gitCertificateKey,
             String gitUsername,
             String gitPasswordOrPat,
+            String localGitUsername,
+            String localGitEmail,
             Instant updatedAt,
             String updatedBy
     ) {}

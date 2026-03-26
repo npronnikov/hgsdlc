@@ -36,7 +36,6 @@ const splitFrontmatter = (markdown = '') => {
 const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
   { value: 'claude', label: 'claude' },
-  { value: 'cursor', label: 'cursor' },
 ];
 const platformOptions = [
   { value: 'FRONT', label: 'FRONT' },

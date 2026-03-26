@@ -143,6 +143,15 @@ body {
   box-shadow: none;
 }
 
+.ant-btn.btn-danger-common:disabled,
+.ant-btn.btn-danger-common[disabled] {
+  border-color: #fca5a5 !important;
+  background: #fecaca !important;
+  color: #b91c1c !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
 :root:not([data-theme="dark"]) .ant-btn-text:hover,
 :root:not([data-theme="dark"]) .ant-btn-text:focus {
   color: var(--primary);

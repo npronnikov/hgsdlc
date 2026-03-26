@@ -40,6 +40,8 @@ public class SettingsController {
                 settings.gitCertificateKey(),
                 settings.gitUsername(),
                 settings.gitPasswordOrPat(),
+                settings.localGitUsername(),
+                settings.localGitEmail(),
                 settings.updatedAt(),
                 settings.updatedBy()
         );
@@ -79,6 +81,8 @@ public class SettingsController {
                 updated.gitCertificateKey(),
                 updated.gitUsername(),
                 updated.gitPasswordOrPat(),
+                updated.localGitUsername(),
+                updated.localGitEmail(),
                 updated.updatedAt(),
                 updated.updatedBy()
         );
@@ -101,6 +105,8 @@ public class SettingsController {
                 request.gitCertificateKey(),
                 request.gitUsername(),
                 request.gitPasswordOrPat(),
+                request.localGitUsername(),
+                request.localGitEmail(),
                 user == null ? "system" : user.getUsername()
         );
         RuntimeSettingsResponse response = new RuntimeSettingsResponse(
@@ -117,6 +123,8 @@ public class SettingsController {
                 updated.gitCertificateKey(),
                 updated.gitUsername(),
                 updated.gitPasswordOrPat(),
+                updated.localGitUsername(),
+                updated.localGitEmail(),
                 updated.updatedAt(),
                 updated.updatedBy()
         );
@@ -172,6 +180,8 @@ public class SettingsController {
             @JsonProperty("git_certificate_key") String gitCertificateKey,
             @JsonProperty("git_username") String gitUsername,
             @JsonProperty("git_password_or_pat") String gitPasswordOrPat,
+            @JsonProperty("local_git_username") String localGitUsername,
+            @JsonProperty("local_git_email") String localGitEmail,
             @JsonProperty("updated_at") Instant updatedAt,
             @JsonProperty("updated_by") String updatedBy
     ) {}
@@ -186,7 +196,9 @@ public class SettingsController {
             @JsonProperty("git_certificate") String gitCertificate,
             @JsonProperty("git_certificate_key") String gitCertificateKey,
             @JsonProperty("git_username") String gitUsername,
-            @JsonProperty("git_password_or_pat") String gitPasswordOrPat
+            @JsonProperty("git_password_or_pat") String gitPasswordOrPat,
+            @JsonProperty("local_git_username") String localGitUsername,
+            @JsonProperty("local_git_email") String localGitEmail
     ) {}
 
     public record RepairResponse(

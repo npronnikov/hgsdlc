@@ -15,8 +15,7 @@ import Requests from './pages/Requests.jsx';
 import RunLaunch from './pages/RunLaunch.jsx';
 import RunConsole from './pages/RunConsole.jsx';
 import GatesInbox from './pages/GatesInbox.jsx';
-import GateInput from './pages/GateInput.jsx';
-import GateApproval from './pages/GateApproval.jsx';
+import HumanGate from './pages/HumanGate.jsx';
 import Settings from './pages/Settings.jsx';
 import AuditRuntime from './pages/AuditRuntime.jsx';
 import AuditAgent from './pages/AuditAgent.jsx';
@@ -78,8 +77,9 @@ export default function App() {
             <Route path="run-console" element={<RunConsole />} />
             <Route path="settings" element={<Settings />} />
             <Route path="gates-inbox" element={<GatesInbox />} />
-            <Route path="gate-input" element={<GateInput />} />
-            <Route path="gate-approval" element={<GateApproval />} />
+            <Route path="gate-input" element={<HumanGate />} />
+            <Route path="gate-approval" element={<HumanGate />} />
+            <Route path="human-gate" element={<HumanGate />} />
             <Route path="human-approval-gate-mock" element={<HumanApprovalGateMock />} />
             <Route path="human-input-gate-mock" element={<HumanInputGateMock />} />
             <Route path="audit-runtime" element={<AuditRuntime />} />

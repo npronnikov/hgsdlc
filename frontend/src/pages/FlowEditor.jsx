@@ -1669,7 +1669,6 @@ export default function FlowEditor() {
                     options={[
                       { value: 'qwen', label: 'qwen' },
                       { value: 'claude', label: 'claude' },
-                      { value: 'cursor', label: 'cursor' },
                     ]}
                     placeholder="Select coding agent"
                     title="Для какого coding-agent выполняется flow."
@@ -2157,15 +2156,15 @@ export default function FlowEditor() {
                   </>
                 )}
 
-                {selectedNodeKind === 'human_input' && (
+                {(selectedNodeKind === 'human_input' || selectedNodeKind === 'human_approval') && (
                   <div>
-                    <Text className="muted">Instruction for user</Text>
+                    <Text className="muted">Instruction for gate</Text>
                     <div className="field-control">
                       <Input.TextArea
                         rows={3}
                         value={selectedNode.data.instruction}
                         disabled={isReadOnly}
-                        title="Текст инструкции, которую увидит пользователь на шаге ввода."
+                        title="Текст инструкции, которую увидит пользователь на human gate шаге."
                         onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                       />
                     </div>

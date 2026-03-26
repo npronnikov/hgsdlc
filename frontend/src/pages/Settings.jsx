@@ -24,6 +24,8 @@ export default function Settings() {
         catalog_default_branch: data?.catalog_default_branch || 'main',
         git_username: data?.git_username || '',
         git_password_or_pat: data?.git_password_or_pat || '',
+        local_git_username: data?.local_git_username || '',
+        local_git_email: data?.local_git_email || '',
       };
       setInitialValues(values);
       form.setFieldsValue(values);
@@ -37,6 +39,8 @@ export default function Settings() {
         catalog_default_branch: 'main',
         git_username: '',
         git_password_or_pat: '',
+        local_git_username: '',
+        local_git_email: '',
       });
     } finally {
       setLoading(false);
@@ -72,6 +76,8 @@ export default function Settings() {
           catalog_default_branch: values.catalog_default_branch,
           git_username: values.git_username,
           git_password_or_pat: values.git_password_or_pat,
+          local_git_username: values.local_git_username,
+          local_git_email: values.local_git_email,
         }),
       });
       message.success('Runtime Settings saved');
@@ -166,7 +172,6 @@ export default function Settings() {
               options={[
                 { value: 'qwen', label: 'qwen' },
                 { value: 'claude', label: 'claude' },
-                { value: 'cursor', label: 'cursor' },
               ]}
             />
           </Form.Item>
@@ -218,13 +223,22 @@ export default function Settings() {
                 <Input placeholder="main" />
               </Form.Item>
             </div>
-            <Title level={5} style={{ marginTop: 8 }}>Authentication Settings</Title>
+            <Title level={5} style={{ marginTop: 8 }}>Remote Authentication Settings</Title>
             <div className="catalog-settings-grid">
               <Form.Item label="Git username" name="git_username">
                 <Input placeholder="git-bot" />
               </Form.Item>
               <Form.Item label="Git password / PAT" name="git_password_or_pat">
                 <Input.Password placeholder="Personal access token" />
+              </Form.Item>
+            </div>
+            <Title level={5} style={{ marginTop: 8 }}>Local Authentication Settings</Title>
+            <div className="catalog-settings-grid">
+              <Form.Item label="Username" name="local_git_username">
+                <Input placeholder="hgsdlc" />
+              </Form.Item>
+              <Form.Item label="User email" name="local_git_email">
+                <Input placeholder="hgsdlc@email.com" />
               </Form.Item>
             </div>
           </Form>

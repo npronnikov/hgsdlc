@@ -2,8 +2,7 @@ package ru.hgd.sdlc.skill.domain;
 
 public enum SkillProvider {
     QWEN,
-    CLAUDE,
-    CURSOR;
+    CLAUDE;
 
     public static SkillProvider from(String value) {
         if (value == null) {

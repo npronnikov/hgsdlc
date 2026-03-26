@@ -2,8 +2,7 @@ package ru.hgd.sdlc.rule.domain;
 
 public enum RuleProvider {
     QWEN,
-    CLAUDE,
-    CURSOR;
+    CLAUDE;
 
     public static RuleProvider from(String value) {
         if (value == null) {

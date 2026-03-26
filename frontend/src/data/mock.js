@@ -90,7 +90,7 @@ export const skills = [
     key: 's2',
     name: 'java-spring-coding',
     description: 'Implement in Spring Boot',
-    codingAgent: 'cursor',
+    codingAgent: 'claude',
     status: 'draft',
     version: '0.9.1',
     canonical: 'java-spring-coding@0.9.1',

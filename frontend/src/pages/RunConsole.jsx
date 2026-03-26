@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -20,12 +20,27 @@ import {
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
-import ActionCenter from '../components/ActionCenter.jsx';
-import ArtifactViewer from '../components/ArtifactViewer.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 const ACTIVE_RUN_STATUSES = ['created', 'running', 'waiting_gate'];
+const MAX_NOTIFIED_GATES = 100;
+const notifiedGateKeys = new Map();
+
+function hasGateBeenNotified(key) {
+  return notifiedGateKeys.has(key);
+}
+
+function markGateNotified(key) {
+  notifiedGateKeys.set(key, Date.now());
+  if (notifiedGateKeys.size <= MAX_NOTIFIED_GATES) {
+    return;
+  }
+  const oldestKey = notifiedGateKeys.keys().next().value;
+  if (oldestKey) {
+    notifiedGateKeys.delete(oldestKey);
+  }
+}
 
 function formatDate(value) {
   if (!value) {
@@ -564,13 +579,11 @@ function NodeLogTab({ runId, nodeExecutionId }) {
 function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   const [run, setRun] = useState(null);
   const [nodes, setNodes] = useState([]);
-  const [artifacts, setArtifacts] = useState([]);
   const [runtimeSettings, setRuntimeSettings] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [selectedArtifact, setSelectedArtifact] = useState(null);
-  const [artifactSubmitHandler, setArtifactSubmitHandler] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const timelineEndRef = useRef(null);
+  const notificationPermissionRequestedRef = useRef(false);
   const activeTab = searchParams.get('tab') || 'overview';
   const setActiveTab = (tab) => {
     const next = new URLSearchParams(searchParams);
@@ -584,10 +597,9 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
     setLoading(true);
     try {
-      const [runResult, nodeResult, artifactResult, settingsResult] = await Promise.allSettled([
+      const [runResult, nodeResult, settingsResult] = await Promise.allSettled([
         apiRequest(`/runs/${runId}`),
         apiRequest(`/runs/${runId}/nodes`),
-        apiRequest(`/runs/${runId}/artifacts`),
         apiRequest('/settings/runtime'),
       ]);
 
@@ -604,19 +616,13 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         errors.push(nodeResult.reason);
       }
 
-      if (artifactResult.status === 'fulfilled') {
-        setArtifacts(artifactResult.value || []);
-      } else {
-        errors.push(artifactResult.reason);
-      }
-
       if (settingsResult.status === 'fulfilled') {
         setRuntimeSettings(settingsResult.value || null);
       } else {
         errors.push(settingsResult.reason);
       }
 
-      if (!silent && errors.length === 4) {
+      if (!silent && errors.length === 3) {
         message.error(errors[0]?.message || 'Failed to load run');
       }
     } finally {
@@ -628,8 +634,55 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     if (runId) {
       localStorage.setItem('lastRunId', runId);
     }
+    notificationPermissionRequestedRef.current = false;
     load();
   }, [runId]);
+
+  useEffect(() => {
+    const gate = run?.current_gate;
+    const gateId = gate?.gate_id;
+    if (!runId || !gateId) {
+      return;
+    }
+    const gateNotificationKey = `${runId}:${gateId}`;
+    if (hasGateBeenNotified(gateNotificationKey)) {
+      return;
+    }
+    markGateNotified(gateNotificationKey);
+    const title = gate.gate_kind === 'human_input' ? 'Human Input Gate opened' : 'Human Approval Gate opened';
+    const body = gate.payload?.user_instructions
+      ? String(gate.payload.user_instructions).slice(0, 160)
+      : `Node: ${gate.node_id || 'unknown'}`;
+    message.info({
+      key: `run-${runId}-gate-${gateId}`,
+      content: `${title}. ${body}`,
+      duration: 6,
+    });
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return;
+    }
+    const notify = () => {
+      try {
+        new Notification(title, { body, tag: `run-${runId}-gate-${gateId}` });
+      } catch (_) {
+        // ignore browser notification errors
+      }
+    };
+    if (window.Notification.permission === 'granted') {
+      notify();
+      return;
+    }
+    if (window.Notification.permission === 'default' && !notificationPermissionRequestedRef.current) {
+      notificationPermissionRequestedRef.current = true;
+      window.Notification.requestPermission()
+        .then((permission) => {
+          if (permission === 'granted') {
+            notify();
+          }
+        })
+        .catch(() => {});
+    }
+  }, [run?.current_gate, runId]);
 
   useEffect(() => {
     if (!runId) {
@@ -650,115 +703,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
   }, [nodes.length]);
 
-  const latestArtifacts = useMemo(() => artifacts.slice(0, 8), [artifacts]);
-
-  const selectedNodeIdRef = nodes.find((n) => n.node_execution_id === selectedNodeId);
-  const selectedNodeIdStr = selectedNodeIdRef?.node_id || null;
-
   const logNodeExecutionId = useMemo(() => {
     if (selectedNodeId) return selectedNodeId;
     const active = nodes.find((n) => n.status === 'running');
     return active?.node_execution_id || null;
   }, [selectedNodeId, nodes]);
-
-  const filteredArtifacts = useMemo(() => {
-    if (!selectedNodeIdStr) return artifacts;
-    return artifacts.filter((a) => a.node_id === selectedNodeIdStr);
-  }, [artifacts, selectedNodeIdStr]);
-
-  const toRelativeRunScopePath = (rawPath) => {
-    if (!rawPath) {
-      return null;
-    }
-    if (!rawPath.startsWith('/')) {
-      return rawPath;
-    }
-    const workspaceRoot = run?.workspace_root || '';
-    if (workspaceRoot && rawPath.startsWith(workspaceRoot + '/.hgsdlc/')) {
-      return rawPath.slice((workspaceRoot + '/.hgsdlc/').length);
-    }
-    const runScopeMarker = '/.hgsdlc/';
-    const runScopeIndex = rawPath.indexOf(runScopeMarker);
-    if (runScopeIndex >= 0) {
-      return rawPath.slice(runScopeIndex + runScopeMarker.length);
-    }
-    return rawPath;
-  };
-
-  const humanInputArtifactsFromGate = useMemo(() => {
-    const gate = run?.current_gate;
-    if (!gate || gate.gate_kind !== 'human_input') {
-      return [];
-    }
-    const entries = Array.isArray(gate.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
-    return entries
-      .filter((entry) => entry && entry.path)
-      .map((entry) => ({
-        artifact_key: entry.artifact_key || 'artifact',
-        path: toRelativeRunScopePath(entry.path),
-        scope: 'run',
-        node_id: gate.node_id,
-        required: entry.required !== false,
-      }));
-  }, [run]);
-
-  const artifactsTableRows = useMemo(() => {
-    const expectedByPath = new Map(humanInputArtifactsFromGate.map((expected) => [expected.path, expected]));
-    const isExpectedMatch = (expected, artifact, relativePath) => {
-      if (!expected || !artifact) {
-        return false;
-      }
-      if (expected.node_id && artifact.node_id && expected.node_id !== artifact.node_id) {
-        return false;
-      }
-      if (expected.artifact_key && artifact.artifact_key && expected.artifact_key !== artifact.artifact_key) {
-        return false;
-      }
-      const expectedPath = expected.path || '';
-      const artifactPath = relativePath || artifact.path || '';
-      if (!expectedPath) {
-        return true;
-      }
-      return artifactPath === expectedPath || artifactPath.endsWith(`/${expectedPath}`);
-    };
-
-    const rows = filteredArtifacts.map((artifact) => {
-      const relativePath = toRelativeRunScopePath(artifact.path);
-      let expected = expectedByPath.get(relativePath);
-      if (!expected) {
-        expected = humanInputArtifactsFromGate.find((candidate) => isExpectedMatch(candidate, artifact, relativePath)) || null;
-      }
-      return {
-        ...artifact,
-        path: expected ? expected.path : artifact.path,
-        scope: expected ? 'run' : artifact.scope,
-        humanInputEditable: Boolean(expected),
-        humanInputGateId: expected ? run?.current_gate?.gate_id : null,
-        humanInputExpectedGateVersion: expected ? run?.current_gate?.resource_version : null,
-        humanInputComment: expected ? 'submitted from run console' : null,
-      };
-    });
-
-    return rows;
-  }, [humanInputArtifactsFromGate, filteredArtifacts, run]);
-
-  const handleArtifactSubmitReady = useCallback((handler) => {
-    setArtifactSubmitHandler(() => handler);
-  }, []);
-
-  const openHumanInputArtifactEditor = async () => {
-    if (selectedArtifact?.humanInputEditable && typeof artifactSubmitHandler === 'function') {
-      await artifactSubmitHandler();
-      return;
-    }
-    const editableRows = artifactsTableRows.filter((row) => row.humanInputEditable);
-    if (editableRows.length === 0) {
-      message.warning('No editable artifacts found for human input');
-      return;
-    }
-    setSelectedArtifact(editableRows[0]);
-    setActiveTab('artifacts');
-  };
+  const currentGate = run?.current_gate || null;
+  const gateGitSummary = currentGate?.payload?.git_summary || null;
+  const gateGitChanges = Array.isArray(currentGate?.payload?.git_changes)
+    ? currentGate.payload.git_changes
+    : [];
 
   const cancelRun = async () => {
     try {
@@ -828,7 +782,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
             size="small"
             style={{ maxHeight: 600, overflow: 'auto' }}
             extra={selectedNodeId && (
-              <Button type="default" size="small" onClick={() => setSelectedNodeId(null)} style={{ padding: 0, fontSize: 11 }}>
+              <Button type="default" size="small" onClick={() => setSelectedNodeId(null)} style={{ paddingInline: 8, fontSize: 11 }}>
                 Clear
               </Button>
             )}
@@ -876,7 +830,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                       <Col span={8}>
                         <Card className="metric-card">
                           <Text className="card-label" type="secondary">Changed files</Text>
-                          <div className="metric-value">{filteredArtifacts.length}</div>
+                          <div className="metric-value">{run.current_gate?.payload?.git_summary?.files_changed ?? '—'}</div>
                         </Card>
                       </Col>
                       <Col span={8}>
@@ -893,16 +847,42 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                       </Col>
                       <Col span={24}>
                         <Card>
-                          <Title level={5}>{selectedNodeId ? 'Node artifacts' : 'Latest artifacts'}</Title>
-                          <List
-                            dataSource={selectedNodeId ? filteredArtifacts : latestArtifacts}
-                            renderItem={(item) => (
-                              <List.Item>
-                                <Text className="mono">{item.artifact_key}</Text>
-                                <StatusTag value={item.kind} />
-                              </List.Item>
-                            )}
-                          />
+                          <Title level={5}>Git summary for active gate</Title>
+                          {run.current_gate ? (
+                            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                              <Space size={16} wrap>
+                                <Text><Text strong>Files:</Text> {gateGitSummary?.files_changed ?? 0}</Text>
+                                <Text style={{ color: '#16a34a' }}><Text strong style={{ color: '#16a34a' }}>+</Text>{gateGitSummary?.added_lines ?? 0}</Text>
+                                <Text style={{ color: '#dc2626' }}><Text strong style={{ color: '#dc2626' }}>-</Text>{gateGitSummary?.removed_lines ?? 0}</Text>
+                                <Tag>{gateGitSummary?.status_label || '—'}</Tag>
+                              </Space>
+                              <Collapse
+                                size="small"
+                                items={[
+                                  {
+                                    key: 'files',
+                                    label: `Changed files (${gateGitChanges.length})`,
+                                    children: (
+                                      <Table
+                                        size="small"
+                                        pagination={false}
+                                        rowKey={(record) => record.path}
+                                        dataSource={gateGitChanges}
+                                        columns={[
+                                          { title: 'Path', dataIndex: 'path', key: 'path', render: (v) => <span className="mono">{v}</span> },
+                                          { title: 'Status', dataIndex: 'status', key: 'status', width: 110 },
+                                          { title: '+', dataIndex: 'added', key: 'added', width: 70, render: (v) => <span style={{ color: '#16a34a' }}>{v || 0}</span> },
+                                          { title: '-', dataIndex: 'removed', key: 'removed', width: 70, render: (v) => <span style={{ color: '#dc2626' }}>{v || 0}</span> },
+                                        ]}
+                                      />
+                                    ),
+                                  },
+                                ]}
+                              />
+                            </Space>
+                          ) : (
+                            <Text type="secondary">No active gate</Text>
+                          )}
                         </Card>
                       </Col>
                     </Row>
@@ -913,50 +893,6 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                   label: 'Audit',
                   children: (
                     <AuditTab runId={runId} nodes={nodes} preFilterNodeId={selectedNodeId} />
-                  ),
-                },
-                {
-                  key: 'artifacts',
-                  label: 'Artifacts',
-                  children: selectedArtifact ? (
-                    <ArtifactViewer
-                      runId={runId}
-                      artifact={selectedArtifact}
-                      onClose={() => {
-                        setSelectedArtifact(null);
-                        setArtifactSubmitHandler(null);
-                      }}
-                      onSubmitted={async () => {
-                        setSelectedArtifact(null);
-                        setArtifactSubmitHandler(null);
-                        await load();
-                      }}
-                      onSubmitReady={handleArtifactSubmitReady}
-                    />
-                  ) : (
-                    <Table
-                      rowKey={(record) => record.artifact_version_id || `${record.node_id}:${record.path}`}
-                      dataSource={artifactsTableRows}
-                      pagination={false}
-                      size="small"
-                      onRow={(record) => ({
-                        onClick: () => setSelectedArtifact({
-                          ...record,
-                          humanInputEditable: record.humanInputEditable === true,
-                          humanInputGateId: record.humanInputGateId || run?.current_gate?.gate_id,
-                          humanInputExpectedGateVersion: record.humanInputExpectedGateVersion || run?.current_gate?.resource_version,
-                          humanInputComment: 'submitted from run console',
-                        }),
-                        style: { cursor: 'pointer' },
-                      })}
-                      columns={[
-                        { title: 'Key', dataIndex: 'artifact_key', key: 'artifact_key', render: (v) => <span className="mono">{v}</span> },
-                        { title: 'Node', dataIndex: 'node_id', key: 'node_id', render: (v) => <span className="mono">{v}</span> },
-                        { title: 'Kind', dataIndex: 'kind', key: 'kind', render: (v) => <StatusTag value={v} /> },
-                        { title: 'Ver', dataIndex: 'version_no', key: 'version_no', width: 50, render: (v) => <span className="mono">v{v || 0}</span> },
-                        { title: 'Size', dataIndex: 'size_bytes', key: 'size_bytes', width: 80, render: (v) => v ? `${v} B` : '—' },
-                      ]}
-                    />
                   ),
                 },
                 {
@@ -972,7 +908,27 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         </Col>
 
         <Col xs={24} lg={6}>
-          <ActionCenter run={run} onActionComplete={load} onOpenArtifactEditor={openHumanInputArtifactEditor} />
+          <Card size="small" title="Human Gate">
+            {run.current_gate ? (
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                <Text>
+                  You are in <Text strong>{run.current_gate.gate_kind}</Text>
+                </Text>
+                <Text className="muted">Instruction</Text>
+                <pre className="code-block" style={{ maxHeight: 200, overflow: 'auto' }}>
+                  {run.current_gate.payload?.user_instructions || '—'}
+                </pre>
+                <Button
+                  type="default"
+                  onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}`)}
+                >
+                  Go to Gate
+                </Button>
+              </Space>
+            ) : (
+              <Text type="secondary">No active gate</Text>
+            )}
+          </Card>
         </Col>
       </Row>
     </div>

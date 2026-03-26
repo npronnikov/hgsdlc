@@ -55,6 +55,7 @@ const routeMeta = {
   '/run-console': { title: 'Run Console', menuKey: '/run-console' },
   '/settings': { title: 'Runtime Settings', menuKey: '/settings' },
   '/gates-inbox': { title: 'Gates Inbox', menuKey: '/run-console' },
+  '/human-gate': { title: 'Human Gate', menuKey: '/run-console' },
   '/gate-input': { title: 'Human Input Gate', menuKey: '/run-console' },
   '/gate-approval': { title: 'Human Approval Gate', menuKey: '/run-console' },
   '/human-approval-gate-mock': { title: 'Human Approval Gate', menuKey: '/human-approval-gate-mock' },

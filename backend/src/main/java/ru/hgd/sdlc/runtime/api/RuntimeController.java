@@ -266,6 +266,46 @@ public class RuntimeController {
         return GateActionResponse.from(result.gate(), result.run(), "on_rework");
     }
 
+    @GetMapping("/gates/{gateId}/changes")
+    public GateChangesResponse gateChanges(
+            @PathVariable UUID gateId,
+            @AuthenticationPrincipal User user
+    ) {
+        RuntimeService.GateChangesResult result = runtimeService.getGateChanges(gateId, user);
+        return new GateChangesResponse(
+                result.gateId(),
+                result.runId(),
+                result.gateKind(),
+                result.gateStatus(),
+                result.statusLabel(),
+                result.gitChanges().stream()
+                        .map((item) -> new GitChangeResponse(
+                                item.path(),
+                                item.status(),
+                                item.added(),
+                                item.removed(),
+                                item.binary()
+                        ))
+                        .toList(),
+                new GitSummaryResponse(
+                        result.filesChanged(),
+                        result.addedLines(),
+                        result.removedLines(),
+                        result.statusLabel()
+                )
+        );
+    }
+
+    @GetMapping("/gates/{gateId}/diff")
+    public GateDiffResponse gateDiff(
+            @PathVariable UUID gateId,
+            @RequestParam("path") String path,
+            @AuthenticationPrincipal User user
+    ) {
+        RuntimeService.GateDiffResult result = runtimeService.getGateDiff(gateId, path, user);
+        return new GateDiffResponse(result.gateId(), result.runId(), result.path(), result.patch());
+    }
+
     @GetMapping("/runs/{runId}/audit")
     public List<AuditEventResponse> listAudit(@PathVariable UUID runId) {
         return runtimeService.listAuditEvents(runId).stream().map(this::toAuditResponse).toList();
@@ -581,4 +621,36 @@ public class RuntimeController {
             );
         }
     }
+
+    public record GitChangeResponse(
+            @JsonProperty("path") String path,
+            @JsonProperty("status") String status,
+            @JsonProperty("added") int added,
+            @JsonProperty("removed") int removed,
+            @JsonProperty("is_binary") boolean binary
+    ) {}
+
+    public record GitSummaryResponse(
+            @JsonProperty("files_changed") int filesChanged,
+            @JsonProperty("added_lines") int addedLines,
+            @JsonProperty("removed_lines") int removedLines,
+            @JsonProperty("status_label") String statusLabel
+    ) {}
+
+    public record GateChangesResponse(
+            @JsonProperty("gate_id") UUID gateId,
+            @JsonProperty("run_id") UUID runId,
+            @JsonProperty("gate_kind") String gateKind,
+            @JsonProperty("gate_status") String gateStatus,
+            @JsonProperty("status_label") String statusLabel,
+            @JsonProperty("git_changes") List<GitChangeResponse> gitChanges,
+            @JsonProperty("git_summary") GitSummaryResponse gitSummary
+    ) {}
+
+    public record GateDiffResponse(
+            @JsonProperty("gate_id") UUID gateId,
+            @JsonProperty("run_id") UUID runId,
+            @JsonProperty("path") String path,
+            @JsonProperty("patch") String patch
+    ) {}
 }

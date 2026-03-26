@@ -57,12 +57,6 @@ public class SkillTemplateService {
                 new FrontmatterField("agent", "Subagent type"),
                 new FrontmatterField("hooks", "Lifecycle hooks")
         ));
-        summary.put(SkillProvider.CURSOR, List.of(
-                new FrontmatterField("name", "Skill name"),
-                new FrontmatterField("description", "What the skill does and when to use it"),
-                new FrontmatterField("license", "License (optional)"),
-                new FrontmatterField("compatibility", "Environment requirements (optional)")
-        ));
         return summary;
     }
 
@@ -70,7 +64,6 @@ public class SkillTemplateService {
         Map<SkillProvider, List<String>> required = new EnumMap<>(SkillProvider.class);
         required.put(SkillProvider.QWEN, List.of("name", "description"));
         required.put(SkillProvider.CLAUDE, List.of());
-        required.put(SkillProvider.CURSOR, List.of("name", "description"));
         return required;
     }
 

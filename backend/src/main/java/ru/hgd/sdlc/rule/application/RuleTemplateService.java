@@ -44,11 +44,6 @@ public class RuleTemplateService {
         summary.put(RuleProvider.CLAUDE, List.of(
                 new FrontmatterField("paths", "Paths where this rule applies")
         ));
-        summary.put(RuleProvider.CURSOR, List.of(
-                new FrontmatterField("description", "Short rule purpose"),
-                new FrontmatterField("globs", "File patterns where the rule applies"),
-                new FrontmatterField("alwaysApply", "Whether to always apply the rule")
-        ));
         return summary;
     }
 
@@ -56,7 +51,6 @@ public class RuleTemplateService {
         Map<RuleProvider, List<String>> required = new EnumMap<>(RuleProvider.class);
         required.put(RuleProvider.QWEN, List.of());
         required.put(RuleProvider.CLAUDE, List.of());
-        required.put(RuleProvider.CURSOR, List.of("description", "globs", "alwaysApply"));
         return required;
     }
 
