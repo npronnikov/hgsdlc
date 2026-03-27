@@ -2437,17 +2437,49 @@ public class RuntimeService {
         }
         try {
             String content = Files.readString(excludePath, StandardCharsets.UTF_8);
-            boolean alreadyIgnored = content.lines()
-                    .map(String::trim)
-                    .anyMatch((line) -> line.equals(".hgsdlc") || line.equals(".hgsdlc/"));
-            if (alreadyIgnored) {
-                return;
+            List<String> managedPatterns = new ArrayList<>(List.of(
+                    ".hgsdlc",
+                    ".hgsdlc/",
+                    ".hgsdlc/*",
+                    "!.hgsdlc/nodes/",
+                    "!.hgsdlc/nodes/**",
+                    ".hgsdlc/nodes/**/agent.stderr.log",
+                    ".hgsdlc/nodes/**/agent.stdout.log",
+                    ".hgsdlc/nodes/**/prompt.md",
+                    ".qwen/",
+                    ".claude/",
+                    ".cursor/"
+            ));
+            String runtimeAgent = normalize(trimToNull(settingsService.getRuntimeCodingAgent()));
+            if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
+                managedPatterns.add("." + runtimeAgent + "/");
             }
-            StringBuilder updated = new StringBuilder(content);
-            if (updated.length() > 0 && updated.charAt(updated.length() - 1) != '\n') {
+
+            List<String> preservedLines = content.lines()
+                    .filter((line) -> !managedPatterns.contains(line.trim()))
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+            List<String> desiredManagedPatterns = new ArrayList<>();
+            desiredManagedPatterns.add(".hgsdlc/*");
+            desiredManagedPatterns.add("!.hgsdlc/nodes/");
+            desiredManagedPatterns.add("!.hgsdlc/nodes/**");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/agent.stderr.log");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/agent.stdout.log");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/prompt.md");
+            if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
+                desiredManagedPatterns.add("." + runtimeAgent + "/");
+            }
+
+            StringBuilder updated = new StringBuilder();
+            for (String line : preservedLines) {
+                updated.append(line).append('\n');
+            }
+            if (updated.length() > 0) {
                 updated.append('\n');
             }
-            updated.append(".hgsdlc/\n");
+            for (String pattern : desiredManagedPatterns) {
+                updated.append(pattern).append('\n');
+            }
             Files.writeString(
                     excludePath,
                     updated,
