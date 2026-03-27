@@ -1,0 +1,80 @@
+{
+  "repository_type": "multi-part",
+  "generated": "2026-03-26",
+  "parts": [
+    {
+      "part_id": "backend",
+      "display_name": "Backend",
+      "project_type_id": "backend",
+      "root_path": "backend/",
+      "primary_language": "Java",
+      "primary_framework": "Spring Boot 3.3.0",
+      "entry_point": "backend/src/main/java/ru/hgd/sdlc (Spring Boot main)",
+      "build_tool": "Gradle Kotlin DSL",
+      "tech_stack": "Java 21, Spring Boot 3.3, Spring Security, Spring Data JPA, Liquibase, PostgreSQL/H2",
+      "architecture_pattern": "Modular DDD (api → application → domain → infrastructure)"
+    },
+    {
+      "part_id": "frontend",
+      "display_name": "Frontend",
+      "project_type_id": "web",
+      "root_path": "frontend/",
+      "primary_language": "JavaScript (JSX)",
+      "primary_framework": "React 18.2 + Vite 5.2",
+      "entry_point": "frontend/src/main.jsx",
+      "build_tool": "Vite",
+      "tech_stack": "React 18.2, Ant Design 5.15, ReactFlow 11, Monaco Editor 4.6",
+      "architecture_pattern": "SPA, HashRouter, local state per page, Context for global state"
+    },
+    {
+      "part_id": "infra",
+      "display_name": "Infrastructure",
+      "project_type_id": "infra",
+      "root_path": "infra/",
+      "primary_language": "YAML",
+      "primary_framework": "Docker Compose",
+      "entry_point": "infra/docker/compose.yml",
+      "build_tool": "Docker Compose",
+      "tech_stack": "PostgreSQL 16, Docker Compose",
+      "architecture_pattern": "Single-service compose (PostgreSQL only)"
+    },
+    {
+      "part_id": "catalog-repo",
+      "display_name": "Catalog Repository",
+      "project_type_id": "data",
+      "root_path": "catalog-repo/",
+      "primary_language": "YAML",
+      "primary_framework": null,
+      "entry_point": "catalog-repo/flows/",
+      "build_tool": null,
+      "tech_stack": "YAML artifacts (flows, skills, rules)",
+      "architecture_pattern": "Git-based versioned artifact store"
+    }
+  ],
+  "integration_points": [
+    {
+      "from": "frontend",
+      "to": "backend",
+      "type": "REST HTTP",
+      "details": "All /api/* endpoints, Bearer auth, Idempotency-Key header, JSON snake_case"
+    },
+    {
+      "from": "backend",
+      "to": "coding-agent",
+      "type": "OS subprocess",
+      "details": "QwenCodingAgentStrategy: materializes workspace (rules/skills/prompt), runs 'qwen' CLI"
+    },
+    {
+      "from": "backend",
+      "to": "catalog-repo",
+      "type": "Git (SSH/HTTPS)",
+      "details": "PublicationService: clone, write artifacts, commit, push, create PR"
+    },
+    {
+      "from": "backend",
+      "to": "infra",
+      "type": "JDBC",
+      "details": "PostgreSQL via DB_URL/DB_USERNAME/DB_PASSWORD env vars"
+    }
+  ]
+}
