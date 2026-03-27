@@ -608,7 +608,19 @@ public class RuntimeService {
         if (diffResult.exitCode() != 0) {
             throw new ValidationException("Failed to read git diff for path: " + sanitizedPath);
         }
-        return new GateDiffResult(gate.getId(), run.getId(), sanitizedPath, diffResult.stdout());
+        String patch = diffResult.stdout();
+        if ((patch == null || patch.isBlank())) {
+            CommandResult untrackedDiff = runGitQuery(
+                    run,
+                    List.of("git", "diff", "--no-color", "--no-index", "--", "/dev/null", sanitizedPath)
+            );
+            if (untrackedDiff.exitCode() == 0 || untrackedDiff.exitCode() == 1) {
+                patch = untrackedDiff.stdout();
+            } else {
+                throw new ValidationException("Failed to read git diff for path: " + sanitizedPath);
+            }
+        }
+        return new GateDiffResult(gate.getId(), run.getId(), sanitizedPath, patch == null ? "" : patch);
     }
 
     @Transactional(readOnly = true)
