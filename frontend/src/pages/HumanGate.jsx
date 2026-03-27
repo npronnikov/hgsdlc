@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Col, Input, Radio, Row, Space, Tag, Tree, Typography, message } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Editor from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
@@ -62,6 +62,24 @@ function matchesEditablePath(gitPath, editablePath) {
   return g === e || g.endsWith(`/${e}`);
 }
 
+function detectLanguage(path) {
+  const normalized = String(path || '').toLowerCase();
+  if (normalized.endsWith('.md') || normalized.endsWith('.markdown')) return 'markdown';
+  if (normalized.endsWith('.yml') || normalized.endsWith('.yaml')) return 'yaml';
+  if (normalized.endsWith('.json')) return 'json';
+  if (normalized.endsWith('.js') || normalized.endsWith('.jsx')) return 'javascript';
+  if (normalized.endsWith('.ts') || normalized.endsWith('.tsx')) return 'typescript';
+  if (normalized.endsWith('.java')) return 'java';
+  if (normalized.endsWith('.kt') || normalized.endsWith('.kts')) return 'kotlin';
+  if (normalized.endsWith('.py')) return 'python';
+  if (normalized.endsWith('.sh')) return 'shell';
+  if (normalized.endsWith('.xml')) return 'xml';
+  if (normalized.endsWith('.html') || normalized.endsWith('.htm')) return 'html';
+  if (normalized.endsWith('.css') || normalized.endsWith('.scss')) return 'css';
+  if (normalized.endsWith('.sql')) return 'sql';
+  return 'plaintext';
+}
+
 export default function HumanGate() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -75,7 +93,8 @@ export default function HumanGate() {
   const [changes, setChanges] = useState([]);
   const [summary, setSummary] = useState({ files_changed: 0, added_lines: 0, removed_lines: 0, status_label: '—' });
   const [selectedPath, setSelectedPath] = useState('');
-  const [patch, setPatch] = useState('');
+  const [originalContent, setOriginalContent] = useState('');
+  const [modifiedContent, setModifiedContent] = useState('');
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -101,6 +120,7 @@ export default function HumanGate() {
   );
   const selectedGitChange = useMemo(() => changes.find((item) => item.path === selectedPath) || null, [changes, selectedPath]);
   const selectedIsEditable = isInput && !!selectedEditable;
+  const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const currentEditableContent = selectedEditable
     ? (editedByPath[selectedEditable.path] ?? selectedEditable.content ?? '')
     : '';
@@ -142,20 +162,24 @@ export default function HumanGate() {
   useEffect(() => {
     const loadDiff = async () => {
       if (!selectedPath || !gateId) {
-        setPatch('');
+        setOriginalContent('');
+        setModifiedContent('');
         return;
       }
       if (!selectedGitChange) {
-        setPatch('');
+        setOriginalContent('');
+        setModifiedContent('');
         return;
       }
       setLoadingDiff(true);
       try {
         const data = await apiRequest(`/gates/${gateId}/diff?path=${encodeURIComponent(selectedPath)}`);
-        setPatch(data.patch || '');
+        setOriginalContent(data.original_content || '');
+        setModifiedContent(data.modified_content || '');
       } catch (err) {
         message.error(err.message || 'Failed to load diff');
-        setPatch('');
+        setOriginalContent('');
+        setModifiedContent('');
       } finally {
         setLoadingDiff(false);
       }
@@ -316,14 +340,16 @@ export default function HumanGate() {
                 }}
               />
             ) : (
-              <Editor
+              <DiffEditor
                 height="520px"
-                defaultLanguage="diff"
                 beforeMount={configureMonacoThemes}
                 theme={monacoTheme}
-                value={patch || 'No diff available for selected file.'}
+                original={originalContent}
+                modified={modifiedContent}
+                language={selectedLanguage}
                 options={{
                   readOnly: true,
+                  renderSideBySide: false,
                   minimap: { enabled: false },
                   wordWrap: 'on',
                   automaticLayout: true,

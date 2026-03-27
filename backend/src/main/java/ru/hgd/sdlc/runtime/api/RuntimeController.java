@@ -303,7 +303,14 @@ public class RuntimeController {
             @AuthenticationPrincipal User user
     ) {
         RuntimeService.GateDiffResult result = runtimeService.getGateDiff(gateId, path, user);
-        return new GateDiffResponse(result.gateId(), result.runId(), result.path(), result.patch());
+        return new GateDiffResponse(
+                result.gateId(),
+                result.runId(),
+                result.path(),
+                result.patch(),
+                result.originalContent(),
+                result.modifiedContent()
+        );
     }
 
     @GetMapping("/runs/{runId}/audit")
@@ -651,6 +658,8 @@ public class RuntimeController {
             @JsonProperty("gate_id") UUID gateId,
             @JsonProperty("run_id") UUID runId,
             @JsonProperty("path") String path,
-            @JsonProperty("patch") String patch
+            @JsonProperty("patch") String patch,
+            @JsonProperty("original_content") String originalContent,
+            @JsonProperty("modified_content") String modifiedContent
     ) {}
 }

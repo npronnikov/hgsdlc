@@ -63,7 +63,7 @@ public class SeedCatalogInitializer implements ApplicationRunner {
 //        seedRules();
 //        seedSkills();
 //        seedFlows();
-    }
+    }   
 
     private void seedProjects() {
         String repoUrl = "https://github.com/npronnikov/Logos";

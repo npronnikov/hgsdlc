@@ -620,7 +620,16 @@ public class RuntimeService {
                 throw new ValidationException("Failed to read git diff for path: " + sanitizedPath);
             }
         }
-        return new GateDiffResult(gate.getId(), run.getId(), sanitizedPath, patch == null ? "" : patch);
+        String originalContent = readHeadFileContent(run, sanitizedPath);
+        String modifiedContent = readCurrentFileContent(run, sanitizedPath);
+        return new GateDiffResult(
+                gate.getId(),
+                run.getId(),
+                sanitizedPath,
+                patch == null ? "" : patch,
+                originalContent,
+                modifiedContent
+        );
     }
 
     @Transactional(readOnly = true)
@@ -2632,13 +2641,34 @@ public class RuntimeService {
         Map<String, GitNumstat> numstatByPath = parseGitNumstat(numstatResult.stdout());
         List<GitChangeEntry> result = new ArrayList<>();
         for (String path : changedPaths) {
+            String status = inferGitStatus(path, statusResult.stdout());
             GitNumstat stat = numstatByPath.get(path);
+            if (stat == null && "untracked".equals(status)) {
+                stat = readUntrackedNumstat(run, path);
+            }
             int added = stat == null ? 0 : stat.added();
             int removed = stat == null ? 0 : stat.removed();
             boolean binary = stat != null && stat.binary();
-            result.add(new GitChangeEntry(path, inferGitStatus(path, statusResult.stdout()), added, removed, binary));
+            result.add(new GitChangeEntry(path, status, added, removed, binary));
         }
         return result;
+    }
+
+    private GitNumstat readUntrackedNumstat(RunEntity run, String path) {
+        CommandResult result = runGitQuery(run, List.of(
+                "git", "diff", "--numstat", "--no-index", "--", "/dev/null", path
+        ));
+        if (result.exitCode() != 0 && result.exitCode() != 1) {
+            return null;
+        }
+        Map<String, GitNumstat> parsed = parseGitNumstat(result.stdout());
+        if (parsed.containsKey(path)) {
+            return parsed.get(path);
+        }
+        if (!parsed.isEmpty()) {
+            return parsed.values().iterator().next();
+        }
+        return null;
     }
 
     private List<String> expandGitPaths(RunEntity run, List<String> rawPaths) {
@@ -2692,6 +2722,31 @@ public class RuntimeService {
         }
     }
 
+    private String readHeadFileContent(RunEntity run, String path) {
+        CommandResult existsResult = runGitQuery(run, List.of("git", "cat-file", "-e", "HEAD:" + path));
+        if (existsResult.exitCode() != 0) {
+            return "";
+        }
+        CommandResult showResult = runGitQuery(run, List.of("git", "show", "HEAD:" + path));
+        if (showResult.exitCode() != 0) {
+            throw new ValidationException("Failed to read base file content for path: " + path);
+        }
+        return showResult.stdout() == null ? "" : showResult.stdout();
+    }
+
+    private String readCurrentFileContent(RunEntity run, String path) {
+        Path projectRoot = resolveProjectRoot(run);
+        Path resolved = projectRoot.resolve(path).normalize();
+        if (!resolved.startsWith(projectRoot) || !Files.exists(resolved) || Files.isDirectory(resolved)) {
+            return "";
+        }
+        try {
+            return Files.readString(resolved, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to read current file content for path: " + path);
+        }
+    }
+
     private List<String> parseGitStatusPaths(String rawStatus) {
         List<String> paths = new ArrayList<>();
         if (rawStatus == null || rawStatus.isBlank()) {
@@ -2728,13 +2783,25 @@ public class RuntimeService {
             }
             String addedRaw = parts[0].trim();
             String removedRaw = parts[1].trim();
-            String path = parts[2].trim();
+            String path = normalizeNumstatPath(parts[2].trim());
             boolean binary = "-".equals(addedRaw) || "-".equals(removedRaw);
             int added = binary ? 0 : parseIntSafe(addedRaw);
             int removed = binary ? 0 : parseIntSafe(removedRaw);
             stats.put(path, new GitNumstat(added, removed, binary));
         }
         return stats;
+    }
+
+    private String normalizeNumstatPath(String rawPath) {
+        String path = rawPath == null ? "" : rawPath.trim();
+        if (path.contains(" => ")) {
+            String[] parts = path.split(" => ");
+            path = parts[parts.length - 1].trim();
+        }
+        if (path.startsWith("b/")) {
+            path = path.substring(2);
+        }
+        return path;
     }
 
     private int parseIntSafe(String value) {
@@ -2765,6 +2832,7 @@ public class RuntimeService {
             if (code.isBlank()) {
                 return "modified";
             }
+            if ("??".equals(code)) return "untracked";
             if (code.contains("A")) return "added";
             if (code.contains("D")) return "deleted";
             if (code.contains("R")) return "renamed";
@@ -2899,7 +2967,9 @@ public class RuntimeService {
             UUID gateId,
             UUID runId,
             String path,
-            String patch
+            String patch,
+            String originalContent,
+            String modifiedContent
     ) {}
 
     public record GitChangeEntry(
