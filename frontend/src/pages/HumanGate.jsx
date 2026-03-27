@@ -1,5 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Input, Radio, Row, Space, Tag, Tree, Typography, message } from 'antd';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Button,
+  Card,
+  Col,
+  Collapse,
+  Drawer,
+  Input,
+  Modal,
+  Radio,
+  Row,
+  Space,
+  Tag,
+  Tree,
+  Typography,
+  message,
+} from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
@@ -80,6 +96,42 @@ function detectLanguage(path) {
   return 'plaintext';
 }
 
+function formatRange(range) {
+  if (!range) {
+    return '';
+  }
+  return `L${range.startLineNumber}:C${range.startColumn} - L${range.endLineNumber}:C${range.endColumn}`;
+}
+
+function buildReworkInstruction(requests) {
+  return requests.map((request, index) => {
+    const lines = [
+      `${index + 1}.`,
+      `Path: ${request.path}`,
+      `Scope: ${request.scope}`,
+      `Instruction: ${request.instruction}`,
+    ];
+    if (request.range) {
+      lines.push(`Range: ${formatRange(request.range)}`);
+    }
+    if (request.selectedText) {
+      lines.push('Selected fragment:');
+      lines.push('```');
+      lines.push(request.selectedText);
+      lines.push('```');
+    }
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+const EMPTY_REQUEST_DRAFT = {
+  scope: 'file',
+  path: '',
+  selectedText: '',
+  range: null,
+  instruction: '',
+};
+
 export default function HumanGate() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -98,11 +150,20 @@ export default function HumanGate() {
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [comment, setComment] = useState('');
-  const [instruction, setInstruction] = useState('');
+  const [approveComment, setApproveComment] = useState('');
+  const [reworkComment, setReworkComment] = useState('');
   const [reworkMode, setReworkMode] = useState('discard');
   const [submitting, setSubmitting] = useState(null);
   const [editedByPath, setEditedByPath] = useState({});
+
+  const [activeActionPanel, setActiveActionPanel] = useState(null); // approve | rework | null
+  const [reworkRequests, setReworkRequests] = useState([]);
+  const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
+  const [requestDraft, setRequestDraft] = useState(EMPTY_REQUEST_DRAFT);
+  const [contextMenuState, setContextMenuState] = useState({ open: false, x: 0, y: 0 });
+
+  const diffEditorRef = useRef(null);
+  const modifiedEditorRef = useRef(null);
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
@@ -111,7 +172,6 @@ export default function HumanGate() {
   const editableArtifacts = Array.isArray(gate?.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
 
   const viewFiles = useMemo(() => (changes || []).map((item) => item.path).filter(Boolean), [changes]);
-
   const treeData = useMemo(() => buildTree(viewFiles), [viewFiles]);
 
   const selectedEditable = useMemo(
@@ -187,32 +247,118 @@ export default function HumanGate() {
     loadDiff();
   }, [selectedPath, selectedGitChange, gateId]);
 
+  useEffect(() => {
+    if (!contextMenuState.open) {
+      return undefined;
+    }
+    const close = () => setContextMenuState({ open: false, x: 0, y: 0 });
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenuState.open]);
+
   const goBack = () => navigate(`/run-console?runId=${runId}`);
 
+  const openAddRequestModalFromSelection = () => {
+    if (!selectedPath) {
+      message.warning('Select a file first');
+      return;
+    }
+    const editor = modifiedEditorRef.current;
+    if (!editor) {
+      setRequestDraft({ ...EMPTY_REQUEST_DRAFT, scope: 'file', path: selectedPath });
+      setAddRequestModalOpen(true);
+      return;
+    }
+
+    const selection = editor.getSelection();
+    const model = editor.getModel();
+    const hasSelection = selection && !selection.isEmpty();
+    if (!hasSelection || !model) {
+      setRequestDraft({ ...EMPTY_REQUEST_DRAFT, scope: 'file', path: selectedPath });
+      setAddRequestModalOpen(true);
+      return;
+    }
+
+    const selectedText = model.getValueInRange(selection) || '';
+    setRequestDraft({
+      scope: 'selection',
+      path: selectedPath,
+      selectedText,
+      range: {
+        startLineNumber: selection.startLineNumber,
+        startColumn: selection.startColumn,
+        endLineNumber: selection.endLineNumber,
+        endColumn: selection.endColumn,
+      },
+      instruction: '',
+    });
+    setAddRequestModalOpen(true);
+  };
+
+  const addReworkRequest = () => {
+    const instruction = (requestDraft.instruction || '').trim();
+    if (!instruction) {
+      message.warning('Instruction is required');
+      return;
+    }
+    const request = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      path: requestDraft.path || selectedPath,
+      scope: requestDraft.scope || 'file',
+      instruction,
+      selectedText: requestDraft.selectedText || '',
+      range: requestDraft.range || null,
+      createdAt: Date.now(),
+    };
+    setReworkRequests((prev) => [...prev, request]);
+    setAddRequestModalOpen(false);
+    setRequestDraft(EMPTY_REQUEST_DRAFT);
+    message.success('Rework request added');
+  };
+
+  const removeReworkRequest = (id) => {
+    setReworkRequests((prev) => prev.filter((item) => item.id !== id));
+  };
+
   const approve = async () => {
-    if (!gate) return;
+    if (!gate) return false;
     setSubmitting('approve');
     try {
       await apiRequest(`/gates/${gate.gate_id}/approve`, {
         method: 'POST',
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
-          comment,
+          comment: approveComment,
           reviewed_artifact_version_ids: [],
         }),
       });
       message.success('Gate approved');
       goBack();
+      return true;
     } catch (err) {
       message.error(err.message || 'Failed to approve gate');
       await refresh();
+      return false;
     } finally {
       setSubmitting(null);
     }
   };
 
   const requestRework = async () => {
-    if (!gate) return;
+    if (!gate) return false;
+    if (reworkRequests.length === 0) {
+      message.warning('Add at least one rework request');
+      return false;
+    }
+    const mergedInstruction = buildReworkInstruction(reworkRequests);
+    if (!mergedInstruction.trim()) {
+      message.warning('Rework instruction is required');
+      return false;
+    }
     setSubmitting('rework');
     try {
       await apiRequest(`/gates/${gate.gate_id}/request-rework`, {
@@ -220,16 +366,18 @@ export default function HumanGate() {
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
           mode: reworkDiscardAvailable ? reworkMode : 'keep',
-          comment,
-          instruction,
+          comment: reworkComment,
+          instruction: mergedInstruction,
           reviewed_artifact_version_ids: [],
         }),
       });
       message.success('Rework requested');
       goBack();
+      return true;
     } catch (err) {
       message.error(err.message || 'Failed to request rework');
       await refresh();
+      return false;
     } finally {
       setSubmitting(null);
     }
@@ -272,14 +420,41 @@ export default function HumanGate() {
     }
   };
 
+  const reworkItems = reworkRequests.map((request, idx) => ({
+    key: request.id,
+    label: `#${idx + 1} • ${request.path} • ${request.scope}`,
+    extra: (
+      <Button
+        type="text"
+        danger
+        size="small"
+        icon={<DeleteOutlined />}
+        onClick={(event) => {
+          event.stopPropagation();
+          removeReworkRequest(request.id);
+        }}
+      />
+    ),
+    children: (
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        {request.range && <Text type="secondary">Range: {formatRange(request.range)}</Text>}
+        <Text><Text strong>Instruction:</Text> {request.instruction}</Text>
+        {request.selectedText && (
+          <pre className="code-block" style={{ margin: 0, maxHeight: 220, overflow: 'auto' }}>{request.selectedText}</pre>
+        )}
+      </Space>
+    ),
+  }));
+
   return (
     <div className="human-approval-gate-page">
       <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Human Gate</Title>
+        <div>
+          <Title level={3} style={{ margin: 0 }}>Human Gate</Title>
+        </div>
         <Space>
           <StatusTag value={gate?.status || 'awaiting'} />
           {selectedIsEditable && <Tag color="green">Editable</Tag>}
-          <Button onClick={goBack}>Back to Run Console</Button>
         </Space>
       </div>
 
@@ -292,8 +467,21 @@ export default function HumanGate() {
             <Tag>{summary.status_label || (isInput ? 'Awaiting input' : 'Ready for review')}</Tag>
           </Space>
           <Space>
-            <Text type="secondary" className="mono">{gate?.gate_kind || '—'}</Text>
-            <Text type="secondary" className="mono">{gate?.node_id || '—'}</Text>
+            {isApproval && (
+              <>
+                <Button onClick={() => setActiveActionPanel('approve')}>Approve</Button>
+                <Button className="btn-warning-common" onClick={() => setActiveActionPanel('rework')}>Rework</Button>
+              </>
+            )}
+            {isInput && (
+              <Button
+                onClick={submitInput}
+                loading={submitting === 'submit'}
+                type="default"
+              >
+                Submit input
+              </Button>
+            )}
           </Space>
         </div>
       </Card>
@@ -318,8 +506,16 @@ export default function HumanGate() {
           </Card>
         </Col>
 
-        <Col xs={24} lg={12}>
-          <Card title={selectedPath || 'Diff viewer'} loading={loadingDiff}>
+        <Col xs={24} lg={18}>
+          <Card
+            title={selectedPath ? (
+              <div className="human-gate-editor-title">
+                <span className="human-gate-editor-path">{selectedPath}</span>
+                <span className="human-gate-editor-status">{String(selectedGitChange?.status || 'modified').toLowerCase()}</span>
+              </div>
+            ) : 'Diff viewer'}
+            loading={loadingDiff}
+          >
             {selectedIsEditable ? (
               <Editor
                 height="520px"
@@ -336,92 +532,207 @@ export default function HumanGate() {
                   readOnly: false,
                   minimap: { enabled: false },
                   wordWrap: 'on',
+                  mouseWheelScrollSensitivity: 0.6,
+                  fastScrollSensitivity: 1,
                   automaticLayout: true,
                 }}
               />
             ) : (
-              <DiffEditor
-                height="520px"
-                beforeMount={configureMonacoThemes}
-                theme={monacoTheme}
-                original={originalContent}
-                modified={modifiedContent}
-                language={selectedLanguage}
-                options={{
-                  readOnly: true,
-                  renderSideBySide: false,
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  automaticLayout: true,
+              <div
+                onContextMenu={(event) => {
+                  if (!isApproval) {
+                    return;
+                  }
+                  event.preventDefault();
+                  setContextMenuState({ open: true, x: event.clientX, y: event.clientY });
                 }}
-              />
+                style={{ position: 'relative' }}
+              >
+                <DiffEditor
+                  height="520px"
+                  beforeMount={configureMonacoThemes}
+                  theme={monacoTheme}
+                  original={originalContent}
+                  modified={modifiedContent}
+                  language={selectedLanguage}
+                  onMount={(editorInstance) => {
+                    diffEditorRef.current = editorInstance;
+                    modifiedEditorRef.current = editorInstance.getModifiedEditor();
+                  }}
+                  options={{
+                    readOnly: true,
+                    renderSideBySide: isApproval,
+                    contextmenu: false,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    mouseWheelScrollSensitivity: 0.6,
+                    fastScrollSensitivity: 1,
+                    automaticLayout: true,
+                  }}
+                />
+                {contextMenuState.open && isApproval && (
+                  <div
+                    style={{
+                      position: 'fixed',
+                      left: contextMenuState.x,
+                      top: contextMenuState.y,
+                      zIndex: 1500,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      padding: 6,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+                    }}
+                  >
+                    <Button
+                      type="text"
+                      onClick={() => {
+                        setContextMenuState({ open: false, x: 0, y: 0 });
+                        openAddRequestModalFromSelection();
+                      }}
+                    >
+                      Request Rework
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </Card>
         </Col>
+      </Row>
 
-        <Col xs={24} lg={6}>
-          <Card title="Gate" loading={loading}>
-            <Text className="muted">Instruction</Text>
-            <pre className="code-block" style={{ marginTop: 8, maxHeight: 220, overflow: 'auto' }}>
-              {userInstructions || '—'}
-            </pre>
-            <div style={{ marginTop: 12, marginLeft: 0 }}>
-              <Text className="muted">Comment</Text>
-              <Input.TextArea
-                rows={3}
-                style={{ marginTop: 8, marginLeft: 0 }}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-            </div>
-            {isApproval && (
-              <>
-                <div style={{ marginTop: 12 }}>
-                  <Text className="muted">Rework instruction</Text>
-                  <Input.TextArea
-                    rows={4}
-                    style={{ marginTop: 8, marginLeft: 0 }}
-                    value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
-                  />
-                </div>
+      <Modal
+        title="Request Rework"
+        open={addRequestModalOpen}
+        onCancel={() => {
+          setAddRequestModalOpen(false);
+          setRequestDraft(EMPTY_REQUEST_DRAFT);
+        }}
+        onOk={addReworkRequest}
+        okText="Add request"
+      >
+        {requestDraft.scope === 'selection' ? (
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            <Text>Rework will be requested only for the selected code fragment.</Text>
+            <pre className="code-block" style={{ margin: 0, maxHeight: 220, overflow: 'auto' }}>{requestDraft.selectedText || '—'}</pre>
+            <Input.TextArea
+              rows={4}
+              value={requestDraft.instruction}
+              onChange={(event) => setRequestDraft((prev) => ({ ...prev, instruction: event.target.value }))}
+              placeholder="Describe what should be reworked in this fragment"
+            />
+          </Space>
+        ) : (
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            <Text>Rework will be requested for the whole file.</Text>
+            <Input.TextArea
+              rows={4}
+              value={requestDraft.instruction}
+              onChange={(event) => setRequestDraft((prev) => ({ ...prev, instruction: event.target.value }))}
+              placeholder="Describe what should be reworked in the file"
+            />
+          </Space>
+        )}
+      </Modal>
+
+      <Drawer
+        title={activeActionPanel === 'approve' ? 'Approve Project Changes' : 'Request Project Rework'}
+        placement="right"
+        width={460}
+        open={activeActionPanel !== null}
+        onClose={() => setActiveActionPanel(null)}
+      >
+        <div className="human-gate-drawer-content">
+          <div className="human-gate-drawer-body">
+            <Card size="small" className="human-gate-drawer-info">
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Text className="muted">Current action</Text>
+                <Text>
+                  {activeActionPanel === 'approve'
+                    ? 'You are approving this human gate.'
+                    : 'You are requesting rework for this human gate.'}
+                </Text>
+                <Text className="muted">Node instruction</Text>
+                <pre className="code-block human-gate-instruction" style={{ margin: 0, maxHeight: 180, overflow: 'auto' }}>
+                  {userInstructions || '—'}
+                </pre>
+              </Space>
+            </Card>
+
+            {activeActionPanel === 'approve' && (
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Text className="muted">Comment</Text>
+                <Input.TextArea
+                  rows={4}
+                  value={approveComment}
+                  onChange={(event) => setApproveComment(event.target.value)}
+                />
+              </Space>
+            )}
+
+            {activeActionPanel === 'rework' && (
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Text className="muted">Rework requests</Text>
+                {reworkRequests.length === 0 ? (
+                  <Text type="secondary">No rework requests added yet.</Text>
+                ) : (
+                  <Collapse items={reworkItems} />
+                )}
+
+                <Text className="muted">Comment</Text>
+                <Input.TextArea
+                  rows={3}
+                  value={reworkComment}
+                  onChange={(event) => setReworkComment(event.target.value)}
+                />
+
                 {reworkDiscardAvailable ? (
                   <Radio.Group
                     value={reworkMode}
                     onChange={(event) => setReworkMode(event.target.value)}
                     optionType="button"
                     buttonStyle="solid"
-                    style={{ marginTop: 12, width: '100%' }}
+                    style={{ width: '100%' }}
                   >
-                    <Radio.Button value="keep">Keep</Radio.Button>
-                    <Radio.Button value="discard">Discard</Radio.Button>
+                    <Radio.Button value="keep">Keep changes</Radio.Button>
+                    <Radio.Button value="discard">Discard changes</Radio.Button>
                   </Radio.Group>
                 ) : (
-                  <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
-                    Current changes will be preserved
-                  </Text>
+                  <Text type="secondary">Current changes will be preserved.</Text>
                 )}
-                <Space style={{ marginTop: 12 }}>
-                  <Button onClick={approve} loading={submitting === 'approve'}>Approve</Button>
-                  <Button onClick={requestRework} loading={submitting === 'rework'} danger>
-                    Request rework
-                  </Button>
-                </Space>
-              </>
+              </Space>
             )}
-            {isInput && (
+          </div>
+
+          <div className="human-gate-drawer-footer">
+            {activeActionPanel === 'approve' && (
               <Button
-                style={{ marginTop: 12 }}
-                onClick={submitInput}
-                loading={submitting === 'submit'}
-                type="default"
+                onClick={async () => {
+                  const ok = await approve();
+                  if (!ok) return;
+                  setActiveActionPanel(null);
+                }}
+                loading={submitting === 'approve'}
               >
-                Submit input
+                Approve
               </Button>
             )}
-          </Card>
-        </Col>
-      </Row>
+            {activeActionPanel === 'rework' && (
+              <Button
+                className="btn-warning-common"
+                onClick={async () => {
+                  const ok = await requestRework();
+                  if (!ok) return;
+                  setActiveActionPanel(null);
+                }}
+                loading={submitting === 'rework'}
+              >
+                Request rework
+              </Button>
+            )}
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }

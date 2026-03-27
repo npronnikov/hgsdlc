@@ -2464,8 +2464,7 @@ public class RuntimeService {
                     ".hgsdlc/*",
                     "!.hgsdlc/nodes/",
                     "!.hgsdlc/nodes/**",
-                    ".hgsdlc/nodes/**/agent.stderr.log",
-                    ".hgsdlc/nodes/**/agent.stdout.log",
+                    ".hgsdlc/nodes/**/*.log",
                     ".hgsdlc/nodes/**/prompt.md",
                     ".qwen/",
                     ".claude/",
@@ -2484,8 +2483,7 @@ public class RuntimeService {
             desiredManagedPatterns.add(".hgsdlc/*");
             desiredManagedPatterns.add("!.hgsdlc/nodes/");
             desiredManagedPatterns.add("!.hgsdlc/nodes/**");
-            desiredManagedPatterns.add(".hgsdlc/nodes/**/agent.stderr.log");
-            desiredManagedPatterns.add(".hgsdlc/nodes/**/agent.stdout.log");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/*.log");
             desiredManagedPatterns.add(".hgsdlc/nodes/**/prompt.md");
             if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
                 desiredManagedPatterns.add("." + runtimeAgent + "/");

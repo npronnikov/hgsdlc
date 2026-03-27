@@ -1279,15 +1279,34 @@ export default function FlowEditor() {
       message.error('coding_agent is required');
       return false;
     }
+    const normalizedFlowId = flowMeta.flowId.trim();
+    const normalizedRouteFlowId = (flowId || '').trim();
+    let effectiveVersion = normalizedFlowId === normalizedRouteFlowId ? (resourceVersion ?? 0) : 0;
+    if (effectiveVersion === 0 && normalizedFlowId) {
+      try {
+        const versions = await apiRequest(`/flows/${normalizedFlowId}/versions`);
+        const baseMajor = parseMajorMinor(baseVersion || flowVersion || DEFAULT_VERSION).major;
+        const matchingDraft = versions.find((item) => {
+          if (item.status !== 'draft') return false;
+          const parsed = parseMajorMinor(item.version);
+          return parsed.valid && parsed.major === baseMajor;
+        });
+        if (matchingDraft) {
+          effectiveVersion = matchingDraft.resource_version ?? 0;
+        }
+      } catch (err) {
+        // If flow does not exist yet, keep resource_version = 0 for first save.
+      }
+    }
     const flowYaml = buildFlowYaml();
     try {
-      const response = await apiRequest(`/flows/${flowMeta.flowId}/save`, {
+      const response = await apiRequest(`/flows/${normalizedFlowId}/save`, {
         method: 'POST',
         headers: {
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify({
-          flow_id: flowMeta.flowId,
+          flow_id: normalizedFlowId,
           coding_agent: flowMeta.codingAgent,
           team_code: flowMeta.teamCode?.trim(),
           platform_code: flowMeta.platformCode,
@@ -1303,12 +1322,12 @@ export default function FlowEditor() {
           publish_mode: publishModeOverride || flowMeta.publishMode,
           release,
           base_version: baseVersion || undefined,
-          resource_version: resourceVersion,
+          resource_version: effectiveVersion,
         }),
       });
       setFlowMeta((prev) => ({
         ...prev,
-        flowId: response.flow_id || prev.flowId,
+        flowId: response.flow_id || normalizedFlowId || prev.flowId,
         title: response.title || prev.title,
         description: response.description || prev.description,
         status: response.status || prev.status,
@@ -1337,14 +1356,14 @@ export default function FlowEditor() {
       setFlowVersion(response.version || flowVersion);
       setCurrentStatus(response.status || currentStatus);
       setBaseVersion(response.version || baseVersion);
-      setResourceVersion(response.resource_version ?? resourceVersion);
+      setResourceVersion(response.resource_version ?? effectiveVersion);
       message.success(publish ? 'Publication requested' : 'Draft saved');
-      if (response.flow_id || flowMeta.flowId) {
-        loadFlowVersions(response.flow_id || flowMeta.flowId);
+      if (response.flow_id || normalizedFlowId) {
+        loadFlowVersions(response.flow_id || normalizedFlowId);
       }
       return true;
     } catch (err) {
-      message.error(toRussianError(err?.message, 'Failed to save Flow'));
+      message.error(toRussianError(err?.message, err?.message || 'Failed to save Flow'));
       return false;
     }
   };
@@ -1691,7 +1710,7 @@ export default function FlowEditor() {
                 <div className="field-control">
                   <Input
                     value={flowMeta.flowId}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || !isCreateMode || versionOptions.length > 0}
                     onChange={(event) => updateFlowMeta({ flowId: event.target.value })}
                     title="Стабильный идентификатор flow для canonical_name и ссылок."
                   />
@@ -2421,24 +2440,7 @@ export default function FlowEditor() {
                             </div>
                           </div>
                           <div className="transition-block">
-                            <Space size="middle" align="center">
-                              <Text className="muted mono">on_rework</Text>
-                              <Checkbox
-                                checked={!!(selectedNode.data.onRework || DEFAULT_REWORK).keepChanges}
-                                disabled={isReadOnly}
-                                onChange={(event) => {
-                                  const current = selectedNode.data.onRework || DEFAULT_REWORK;
-                                  updateSelectedNode({
-                                    onRework: {
-                                      ...current,
-                                      keepChanges: event.target.checked,
-                                    },
-                                  });
-                                }}
-                              >
-                                keep_changes
-                              </Checkbox>
-                            </Space>
+                            <Text className="muted mono">on_rework</Text>
                             <div className="field-control">
                               <Select
                                 value={(selectedNode.data.onRework || DEFAULT_REWORK).nextNode || undefined}

@@ -10,6 +10,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -18,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.Role;
@@ -684,6 +686,7 @@ public class PublicationService {
             PrResult prResult = createPullRequest(settings, branchName, skill.getCanonicalName());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
+        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
         return new PublishResult(commitSha, null, null, commitSha, false);
     }
 
@@ -728,6 +731,7 @@ public class PublicationService {
             PrResult prResult = createPullRequest(settings, branchName, rule.getCanonicalName());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
+        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
         return new PublishResult(commitSha, null, null, commitSha, false);
     }
 
@@ -772,6 +776,7 @@ public class PublicationService {
             PrResult prResult = createPullRequest(settings, branchName, flow.getCanonicalName());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
+        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
         return new PublishResult(commitSha, null, null, commitSha, false);
     }
 
@@ -1014,6 +1019,11 @@ public class PublicationService {
         return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-publish").resolve(suffix);
     }
 
+    private Path resolveRuntimeMirrorPath(String workspaceRoot, String repoUrl) {
+        String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
+        return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-mirror").resolve(suffix);
+    }
+
     private void syncMirror(String repoUrl, String branch, Path mirrorPath) throws IOException, InterruptedException {
         Files.createDirectories(mirrorPath.getParent());
         if (!Files.isDirectory(mirrorPath.resolve(".git"))) {
@@ -1022,6 +1032,42 @@ public class PublicationService {
         }
         runGit(List.of("git", "-C", mirrorPath.toString(), "remote", "set-url", "origin", repoUrl));
         runGit(List.of("git", "-C", mirrorPath.toString(), "fetch", "--prune", "--tags", "origin"));
+    }
+
+    private void syncRuntimeMirrorContent(String workspaceRoot, String repoUrl, Path publishRepoPath, String sourceDir) throws IOException {
+        Path mirrorRoot = resolveRuntimeMirrorPath(workspaceRoot, repoUrl);
+        Path sourcePath = publishRepoPath.resolve(sourceDir).normalize();
+        Path targetPath = mirrorRoot.resolve(sourceDir).normalize();
+        if (!Files.exists(sourcePath)) {
+            throw new ValidationException("Published source directory not found: " + sourcePath);
+        }
+        copyDirectory(sourcePath, targetPath);
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        Files.createDirectories(target);
+        try (Stream<Path> stream = Files.walk(source)) {
+            stream.sorted()
+                    .forEach(path -> {
+                        try {
+                            Path relative = source.relativize(path);
+                            Path destination = target.resolve(relative);
+                            if (Files.isDirectory(path)) {
+                                Files.createDirectories(destination);
+                            } else {
+                                Files.createDirectories(destination.getParent());
+                                Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                            }
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    });
+        } catch (RuntimeException ex) {
+            if (ex.getCause() instanceof IOException ioEx) {
+                throw ioEx;
+            }
+            throw ex;
+        }
     }
 
     private String authenticatedRepoUrl(String repoUrl, String username, String passwordOrPat) {

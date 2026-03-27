@@ -348,9 +348,27 @@ export default function RuleEditor() {
       message.error('Coding agent is required');
       return;
     }
-    const effectiveVersion = ruleId === selectedRuleId ? (resourceVersion ?? 0) : 0;
+    const normalizedRuleId = ruleId.trim();
+    const normalizedSelectedRuleId = (selectedRuleId || '').trim();
+    let effectiveVersion = normalizedRuleId === normalizedSelectedRuleId ? (resourceVersion ?? 0) : 0;
+    if (effectiveVersion === 0 && normalizedRuleId) {
+      try {
+        const versions = await apiRequest(`/rules/${normalizedRuleId}/versions`);
+        const baseMajor = parseMajorMinor(baseVersion || ruleVersion || DEFAULT_VERSION).major;
+        const matchingDraft = versions.find((item) => {
+          if (item.status !== 'draft') return false;
+          const parsed = parseMajorMinor(item.version);
+          return parsed.valid && parsed.major === baseMajor;
+        });
+        if (matchingDraft) {
+          effectiveVersion = matchingDraft.resource_version ?? 0;
+        }
+      } catch (err) {
+        // If rule does not exist yet, we keep resource_version = 0 for first save.
+      }
+    }
     try {
-      const response = await apiRequest(`/rules/${ruleId}/save`, {
+      const response = await apiRequest(`/rules/${normalizedRuleId}/save`, {
         method: 'POST',
         headers: {
           'Idempotency-Key': crypto.randomUUID(),
@@ -358,7 +376,7 @@ export default function RuleEditor() {
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim(),
-          rule_id: ruleId.trim(),
+          rule_id: normalizedRuleId,
           coding_agent: codingAgent,
           team_code: teamCode.trim(),
           platform_code: platformCode,
@@ -382,14 +400,14 @@ export default function RuleEditor() {
       setRuleVersion(response.version || ruleVersion);
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
-      setSelectedRuleId(response.rule_id || ruleId);
+      setSelectedRuleId(response.rule_id || normalizedRuleId);
       setApprovalStatus(response.approval_status || approvalStatus);
       setContentSource(response.content_source || contentSource);
       setPublicationStatus(response.publication_status || publicationStatus);
       setPublicationTarget(response.publication_target || publicationTarget);
       setIsNewRule(false);
       setIsEditing(false);
-      await loadVersions(response.rule_id || ruleId, response.version || ruleVersion);
+      await loadVersions(response.rule_id || normalizedRuleId, response.version || ruleVersion);
       message.success(publish ? 'Publication requested' : 'Draft saved');
       return true;
     } catch (err) {

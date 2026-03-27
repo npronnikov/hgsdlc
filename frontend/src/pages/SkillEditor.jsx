@@ -360,9 +360,27 @@ export default function SkillEditor() {
       message.error('Platform is required');
       return;
     }
-    const effectiveVersion = skillId === selectedSkillId ? (resourceVersion ?? 0) : 0;
+    const normalizedSkillId = skillId.trim();
+    const normalizedSelectedSkillId = (selectedSkillId || '').trim();
+    let effectiveVersion = normalizedSkillId === normalizedSelectedSkillId ? (resourceVersion ?? 0) : 0;
+    if (effectiveVersion === 0 && normalizedSkillId) {
+      try {
+        const versions = await apiRequest(`/skills/${normalizedSkillId}/versions`);
+        const baseMajor = parseMajorMinor(baseVersion || skillVersion || DEFAULT_VERSION).major;
+        const matchingDraft = versions.find((item) => {
+          if (item.status !== 'draft') return false;
+          const parsed = parseMajorMinor(item.version);
+          return parsed.valid && parsed.major === baseMajor;
+        });
+        if (matchingDraft) {
+          effectiveVersion = matchingDraft.resource_version ?? 0;
+        }
+      } catch (err) {
+        // If skill does not exist yet, we keep resource_version = 0 for first save.
+      }
+    }
     try {
-      const response = await apiRequest(`/skills/${skillId}/save`, {
+      const response = await apiRequest(`/skills/${normalizedSkillId}/save`, {
         method: 'POST',
         headers: {
           'Idempotency-Key': crypto.randomUUID(),
@@ -370,7 +388,7 @@ export default function SkillEditor() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim(),
-          skill_id: skillId.trim(),
+          skill_id: normalizedSkillId,
           coding_agent: codingAgent,
           team_code: teamCode.trim(),
           platform_code: platformCode,
@@ -397,10 +415,10 @@ export default function SkillEditor() {
       setContentSource(response.content_source || contentSource);
       setPublicationStatus(response.publication_status || publicationStatus);
       setPublicationTarget(response.publication_target || publicationTarget);
-      setSelectedSkillId(response.skill_id || skillId);
+      setSelectedSkillId(response.skill_id || normalizedSkillId);
       setIsNewSkill(false);
       setIsEditing(false);
-      await loadVersions(response.skill_id || skillId, response.version || skillVersion);
+      await loadVersions(response.skill_id || normalizedSkillId, response.version || skillVersion);
       if (publish) {
         message.success('Publication requested');
       } else {

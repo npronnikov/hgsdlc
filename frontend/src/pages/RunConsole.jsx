@@ -24,22 +24,48 @@ import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 const ACTIVE_RUN_STATUSES = ['created', 'running', 'waiting_gate'];
-const MAX_NOTIFIED_GATES = 100;
-const notifiedGateKeys = new Map();
+const MAX_NOTIFIED_GATES = 20;
+const NOTIFIED_GATES_STORAGE_KEY = 'runConsole.notifiedGates';
+
+function readNotifiedGatesFromSession() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return [];
+  }
+  try {
+    const raw = window.sessionStorage.getItem(NOTIFIED_GATES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((value) => typeof value === 'string' && value.length > 0);
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeNotifiedGatesToSession(keys) {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(NOTIFIED_GATES_STORAGE_KEY, JSON.stringify(keys));
+  } catch (_) {
+    // ignore session storage errors
+  }
+}
 
 function hasGateBeenNotified(key) {
-  return notifiedGateKeys.has(key);
+  return readNotifiedGatesFromSession().includes(key);
 }
 
 function markGateNotified(key) {
-  notifiedGateKeys.set(key, Date.now());
-  if (notifiedGateKeys.size <= MAX_NOTIFIED_GATES) {
-    return;
-  }
-  const oldestKey = notifiedGateKeys.keys().next().value;
-  if (oldestKey) {
-    notifiedGateKeys.delete(oldestKey);
-  }
+  const current = readNotifiedGatesFromSession().filter((item) => item !== key);
+  current.push(key);
+  const trimmed = current.slice(-MAX_NOTIFIED_GATES);
+  writeNotifiedGatesToSession(trimmed);
 }
 
 function formatDate(value) {
@@ -580,6 +606,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   const [run, setRun] = useState(null);
   const [nodes, setNodes] = useState([]);
   const [runtimeSettings, setRuntimeSettings] = useState(null);
+  const [auditEventsCount, setAuditEventsCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const timelineEndRef = useRef(null);
@@ -597,10 +624,11 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
     setLoading(true);
     try {
-      const [runResult, nodeResult, settingsResult] = await Promise.allSettled([
+      const [runResult, nodeResult, settingsResult, auditResult] = await Promise.allSettled([
         apiRequest(`/runs/${runId}`),
         apiRequest(`/runs/${runId}/nodes`),
         apiRequest('/settings/runtime'),
+        apiRequest(`/runs/${runId}/audit`),
       ]);
 
       const errors = [];
@@ -622,7 +650,13 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         errors.push(settingsResult.reason);
       }
 
-      if (!silent && errors.length === 3) {
+      if (auditResult.status === 'fulfilled') {
+        setAuditEventsCount(Array.isArray(auditResult.value) ? auditResult.value.length : 0);
+      } else {
+        errors.push(auditResult.reason);
+      }
+
+      if (!silent && errors.length === 4) {
         message.error(errors[0]?.message || 'Failed to load run');
       }
     } finally {
@@ -842,7 +876,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                       <Col span={8}>
                         <Card className="metric-card">
                           <Text className="card-label" type="secondary">Audit events</Text>
-                          <div className="metric-value">—</div>
+                          <div className="metric-value">{auditEventsCount}</div>
                         </Card>
                       </Col>
                       <Col span={24}>
@@ -920,7 +954,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                 </pre>
                 <Button
                   type="default"
-                  onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}`)}
+                  onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}&gateKind=${run.current_gate.gate_kind}`)}
                 >
                   Go to Gate
                 </Button>

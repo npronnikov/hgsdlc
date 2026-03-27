@@ -81,6 +81,19 @@ export default function AppShell() {
   const isRuleEditorRoute = location.pathname.startsWith('/rules/');
   const isSkillEditorRoute = location.pathname.startsWith('/skills/');
   const isFlowEditorRoute = location.pathname.startsWith('/flows/');
+  const isHumanGateRoute = ['/human-gate', '/gate-approval', '/gate-input'].includes(location.pathname);
+  const searchParams = new URLSearchParams(location.search || '');
+  const runIdFromQuery = searchParams.get('runId');
+  const gateKindFromQuery = (searchParams.get('gateKind') || '').toLowerCase();
+  const humanGateTitle = gateKindFromQuery === 'human_approval'
+    ? 'Human Approval Gate'
+    : gateKindFromQuery === 'human_input'
+      ? 'Human Input Gate'
+      : location.pathname === '/gate-approval'
+        ? 'Human Approval Gate'
+        : location.pathname === '/gate-input'
+          ? 'Human Input Gate'
+          : 'Human Gate';
   const meta = routeMeta[location.pathname]
     || (isRuleEditorRoute ? { title: 'Rules', menuKey: '/rules' } : null)
     || (isSkillEditorRoute ? { title: 'Skills', menuKey: '/skills' } : null)
@@ -150,23 +163,40 @@ export default function AppShell() {
             <div className="hg-breadcrumbs">
               <button type="button" onClick={() => navigate('/overview')}>SDLC</button>
               <span>/</span>
-              <button type="button" onClick={() => navigate(selectedKey)}>{title}</button>
-              {showRuleIdCrumb && (
+              {isHumanGateRoute ? (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => navigate(runIdFromQuery ? `/run-console?runId=${runIdFromQuery}` : '/run-console')}
+                  >
+                    Run Console
+                  </button>
                   <span>/</span>
-                  <button type="button" onClick={() => navigate(location.pathname)}>{ruleIdFromPath}</button>
+                  <button type="button" onClick={() => navigate(location.pathname + location.search)}>
+                    {humanGateTitle}
+                  </button>
                 </>
-              )}
-              {showSkillIdCrumb && (
+              ) : (
                 <>
-                  <span>/</span>
-                  <button type="button" onClick={() => navigate(location.pathname)}>{skillIdFromPath}</button>
-                </>
-              )}
-              {showFlowIdCrumb && (
-                <>
-                  <span>/</span>
-                  <button type="button" onClick={() => navigate(location.pathname)}>{flowIdFromPath}</button>
+                  <button type="button" onClick={() => navigate(selectedKey)}>{title}</button>
+                  {showRuleIdCrumb && (
+                    <>
+                      <span>/</span>
+                      <button type="button" onClick={() => navigate(location.pathname)}>{ruleIdFromPath}</button>
+                    </>
+                  )}
+                  {showSkillIdCrumb && (
+                    <>
+                      <span>/</span>
+                      <button type="button" onClick={() => navigate(location.pathname)}>{skillIdFromPath}</button>
+                    </>
+                  )}
+                  {showFlowIdCrumb && (
+                    <>
+                      <span>/</span>
+                      <button type="button" onClick={() => navigate(location.pathname)}>{flowIdFromPath}</button>
+                    </>
+                  )}
                 </>
               )}
             </div>
