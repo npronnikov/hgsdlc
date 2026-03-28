@@ -10,7 +10,6 @@ import {
   MarkerType,
   Position,
   ReactFlow,
-  applyNodeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { parse as parseYaml } from 'yaml';
@@ -59,6 +58,8 @@ function FlowNode({ data, selected }) {
     </div>
   );
 }
+
+const RUN_LAUNCH_NODE_TYPES = { flowNode: FlowNode };
 
 function normalizeNodeKind(node) {
   const raw = node?.node_kind || node?.nodeKind || node?.type || node?.kind || '';
@@ -478,14 +479,8 @@ export default function RunLaunch() {
                     style={{ width: '100%', height: '100%' }}
                     nodes={launchConfig.nodes}
                     edges={launchConfig.edges}
-                    nodeTypes={{ flowNode: FlowNode }}
+                    nodeTypes={RUN_LAUNCH_NODE_TYPES}
                     nodesDraggable={false}
-                    onNodesChange={(changes) =>
-                      setLaunchConfig((prev) => ({
-                        ...prev,
-                        nodes: applyNodeChanges(changes, prev?.nodes || []),
-                      }))
-                    }
                     nodesConnectable={false}
                     zoomOnScroll={false}
                     panOnScroll
