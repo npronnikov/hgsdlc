@@ -28,6 +28,10 @@
   --danger-hover: #b91c1c;
   --danger-active: #991b1b;
   --info: #0891b2;
+  --code-bg: #f1f5f9;
+  --code-bg-elevated: #e2e8f0;
+  --code-text: #0f172a;
+  --code-border: #cbd5e1;
   --radius-lg: 6px;
   --radius-md: 4px;
   --radius-sm: 4px;
@@ -61,6 +65,10 @@
   --danger-hover: #f87171;
   --danger-active: #dc2626;
   --info: #38bdf8;
+  --code-bg: #0f172a;
+  --code-bg-elevated: #111827;
+  --code-text: #e2e8f0;
+  --code-border: #334155;
 }
 
 * {
@@ -519,8 +527,9 @@ body {
 }
 
 .code-block {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--code-bg);
+  color: var(--code-text);
+  border: 1px solid var(--code-border);
   border-radius: 12px;
   padding: 16px;
   font-family: "JetBrains Mono", monospace;
@@ -2225,8 +2234,9 @@ body {
 .node-log-pre {
   max-height: 520px;
   overflow: auto;
-  background: #111827;
-  color: #d1d5db;
+  background: var(--code-bg-elevated);
+  color: var(--code-text);
+  border: 1px solid var(--code-border);
   font-family: 'SF Mono', 'Fira Mono', 'Menlo', monospace;
   font-size: 12px;
   line-height: 1.6;

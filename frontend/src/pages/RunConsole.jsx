@@ -952,12 +952,14 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                 <pre className="code-block" style={{ maxHeight: 200, overflow: 'auto' }}>
                   {run.current_gate.payload?.user_instructions || '—'}
                 </pre>
-                <Button
-                  type="default"
-                  onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}&gateKind=${run.current_gate.gate_kind}`)}
-                >
-                  Go to Gate
-                </Button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                  <Button
+                    type="default"
+                    onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}&gateKind=${run.current_gate.gate_kind}`)}
+                  >
+                    Go to Gate
+                  </Button>
+                </div>
               </Space>
             ) : (
               <Text type="secondary">No active gate</Text>

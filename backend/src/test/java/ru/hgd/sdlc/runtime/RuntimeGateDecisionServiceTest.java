@@ -93,7 +93,11 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
 
     @Test
     void approveExpectedVersionMismatch() throws Exception {
-        var flow = createPublishedFlow("gate-approve-version", humanApprovalFlowYaml("gate-approve-version", "APPROVE_MISMATCH"), "implement-change");
+        var flow = createPublishedFlow(
+                "gate-approve-version",
+                humanApprovalFlowYaml("gate-approve-version", "APPROVE_MISMATCH", true),
+                "implement-change"
+        );
 
         UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Implement and review");
         waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
@@ -113,7 +117,11 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
 
     @Test
     void requestReworkExpectedVersionMismatch() throws Exception {
-        var flow = createPublishedFlow("gate-rework-version", humanApprovalFlowYaml("gate-rework-version", "REWORK_MISMATCH"), "implement-change");
+        var flow = createPublishedFlow(
+                "gate-rework-version",
+                humanApprovalFlowYaml("gate-rework-version", "REWORK_MISMATCH", true),
+                "implement-change"
+        );
 
         UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Implement and review");
         waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
@@ -121,7 +129,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
 
         ReworkGateCommand command = new ReworkGateCommand(
                 gate.getResourceVersion() + 1,
-                "keep",
                 "Needs update",
                 "Adjust naming",
                 List.of()
@@ -175,7 +182,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
         String marker = "DISCARD_MARKER_" + UUID.randomUUID().toString().substring(0, 8);
         var flow = createPublishedFlow(
                 "gate-rework-discard",
-                humanApprovalFlowYaml("gate-rework-discard", marker),
+                humanApprovalFlowYaml("gate-rework-discard", marker, false),
                 "implement-change"
         );
 
@@ -189,7 +196,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
 
         ReworkGateCommand command = new ReworkGateCommand(
                 gate.getResourceVersion(),
-                "discard",
                 "Discard changes",
                 "Rework required",
                 List.of()
@@ -205,7 +211,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
         String marker = "KEEP_MARKER_" + UUID.randomUUID().toString().substring(0, 8);
         var flow = createPublishedFlow(
                 "gate-rework-keep",
-                humanApprovalFlowYaml("gate-rework-keep", marker),
+                humanApprovalFlowYaml("gate-rework-keep", marker, true),
                 "implement-change"
         );
 
@@ -219,7 +225,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
 
         ReworkGateCommand command = new ReworkGateCommand(
                 gate.getResourceVersion(),
-                "keep",
                 "Keep changes",
                 "Rework required",
                 List.of()
@@ -288,7 +293,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 """.formatted(flowId, flowId);
     }
 
-    private String humanApprovalFlowYaml(String flowId, String marker) {
+    private String humanApprovalFlowYaml(String flowId, String marker, boolean keepChangesOnRework) {
         return """
                 id: %s
                 version: "1.0"
@@ -326,7 +331,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: true
+                      keep_changes: %s
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR
@@ -337,6 +342,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                     execution_context: []
                     produced_artifacts: []
                     expected_mutations: []
-                """.formatted(flowId, flowId, marker);
+                """.formatted(flowId, flowId, marker, keepChangesOnRework);
     }
 }

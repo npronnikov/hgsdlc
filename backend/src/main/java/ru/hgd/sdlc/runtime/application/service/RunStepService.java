@@ -62,6 +62,11 @@ public class RunStepService {
     private static final int DEFAULT_MAX_TICK_ITERATIONS = 128;
     private static final long MAX_INLINE_ARTIFACT_BYTES = 64 * 1024;
     private static final Set<String> FAILURE_TRANSITIONS = Set.of("on_failure");
+    private static final String REWORK_REASON_FLOW_POLICY_KEEP = "flow_policy_keep_changes";
+    private static final String REWORK_REASON_TARGET_MISSING = "rework_target_missing";
+    private static final String REWORK_REASON_TARGET_KIND_UNSUPPORTED = "rework_target_kind_unsupported";
+    private static final String REWORK_REASON_TARGET_CHECKPOINT_DISABLED = "rework_target_checkpoint_disabled";
+    private static final String REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND = "target_checkpoint_not_found";
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -389,7 +394,13 @@ public class RunStepService {
         Map<String, Object> payload = new LinkedHashMap<>();
         String nodeKind = normalizeNodeKind(node);
         if ("human_approval".equals(nodeKind)) {
-            payload.put("rework_discard_available", isReworkDiscardAvailable(run, node));
+            ReworkDiscardAvailability reworkAvailability = resolveReworkDiscardAvailability(run, node);
+            payload.put("rework_mode", reworkAvailability.mode());
+            payload.put("rework_keep_changes", reworkAvailability.keepChanges());
+            payload.put("rework_discard_available", reworkAvailability.discardAvailable());
+            if (reworkAvailability.unavailableReason() != null) {
+                payload.put("rework_discard_unavailable_reason", reworkAvailability.unavailableReason());
+            }
         }
         appendGitSummaryPayload(run, payload, nodeKind);
         if ("human_input".equals(nodeKind)) {
@@ -451,13 +462,14 @@ public class RunStepService {
         ));
     }
 
-    private boolean isReworkDiscardAvailable(RunEntity run, NodeModel approvalNode) {
-        if (approvalNode == null || approvalNode.getOnRework() == null) {
-            return false;
+    private ReworkDiscardAvailability resolveReworkDiscardAvailability(RunEntity run, NodeModel approvalNode) {
+        if (approvalNode == null || approvalNode.getOnRework() == null
+                || Boolean.TRUE.equals(approvalNode.getOnRework().getKeepChanges())) {
+            return new ReworkDiscardAvailability("keep", true, false, REWORK_REASON_FLOW_POLICY_KEEP);
         }
         String targetNodeId = trimToNull(approvalNode.getOnRework().getNextNode());
         if (targetNodeId == null) {
-            return false;
+            return new ReworkDiscardAvailability("discard", false, false, REWORK_REASON_TARGET_MISSING);
         }
         FlowModel flowModel = parseFlowSnapshot(run);
         NodeModel targetNode = flowModel.getNodes().stream()
@@ -465,13 +477,23 @@ public class RunStepService {
                 .findFirst()
                 .orElse(null);
         if (targetNode == null) {
-            return false;
+            return new ReworkDiscardAvailability("discard", false, false, REWORK_REASON_TARGET_MISSING);
         }
         String targetKind = normalizeNodeKind(targetNode);
         if (!"ai".equals(targetKind) && !"command".equals(targetKind)) {
-            return false;
+            return new ReworkDiscardAvailability("discard", false, false, REWORK_REASON_TARGET_KIND_UNSUPPORTED);
         }
-        return Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun());
+        if (!Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun())) {
+            return new ReworkDiscardAvailability("discard", false, false, REWORK_REASON_TARGET_CHECKPOINT_DISABLED);
+        }
+        NodeExecutionEntity targetExecution = nodeExecutionRepository
+                .findFirstByRunIdAndNodeIdOrderByAttemptNoDesc(run.getId(), targetNodeId)
+                .orElse(null);
+        String checkpointCommitSha = targetExecution == null ? null : trimToNull(targetExecution.getCheckpointCommitSha());
+        if (targetExecution == null || !targetExecution.isCheckpointEnabled() || checkpointCommitSha == null) {
+            return new ReworkDiscardAvailability("discard", false, false, REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND);
+        }
+        return new ReworkDiscardAvailability("discard", false, true, null);
     }
 
     private List<Map<String, Object>> resolveGateContextArtifacts(RunEntity run, NodeModel node) {
@@ -1641,6 +1663,13 @@ public class RunStepService {
             String stderr,
             String stdoutPath,
             String stderrPath
+    ) {}
+
+    private record ReworkDiscardAvailability(
+            String mode,
+            boolean keepChanges,
+            boolean discardAvailable,
+            String unavailableReason
     ) {}
 
     public static class NodeFailureException extends RuntimeException {

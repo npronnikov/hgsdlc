@@ -88,6 +88,10 @@ const RULES = [
   { re: /human_input gate requires on_submit: (.+)/i, msg: (_, id) => `human_input gate requires on_submit: ${id}` },
   { re: /human_approval gate requires on_approve: (.+)/i, msg: (_, id) => `human_approval gate requires on_approve: ${id}` },
   { re: /human_approval gate requires on_rework: (.+)/i, msg: (_, id) => `human_approval gate requires on_rework: ${id}` },
+  {
+    re: /human_approval on_rework\.keep_changes=false requires ai\/command target with checkpoint_before_run=true: (.+) -> (.+)/i,
+    msg: (_, source, target) => `human_approval on_rework.keep_changes=false requires ai/command target with checkpoint_before_run=true: ${source} -> ${target}`,
+  },
   { re: /checkpoint_before_run is only allowed for ai\/command nodes: (.+)/i, msg: (_, id) => `checkpoint_before_run is allowed only for ai/command nodes: ${id}` },
   { re: /CHECKPOINT_NOT_FOUND_FOR_REWORK:(.+)/i, msg: (_, detail) => `Checkpoint not found for rework: ${detail}` },
   { re: /REWORK_RESET_FAILED:(.+)/i, msg: (_, detail) => `Failed to roll back changes before rework: ${detail}` },

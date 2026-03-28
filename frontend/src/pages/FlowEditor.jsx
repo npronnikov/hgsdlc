@@ -354,6 +354,7 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
   const errors = [];
   const nodeIds = nodes.map((node) => node.id);
   const uniqueIds = new Set(nodeIds);
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
   if (nodes.length === 0) {
     errors.push('Flow has no nodes.');
   }
@@ -546,6 +547,16 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       }
       if (!data.onRework || !data.onRework.nextNode) {
         errors.push(`human_approval requires on_rework: ${node.id}`);
+      } else if (data.onRework.keepChanges === false) {
+        const targetNode = nodesById.get(data.onRework.nextNode);
+        const targetKind = targetNode?.data?.nodeKind || targetNode?.data?.type || '';
+        const checkpointEnabled = !!targetNode?.data?.checkpointBeforeRun;
+        if ((targetKind !== 'ai' && targetKind !== 'command') || !checkpointEnabled) {
+          errors.push(
+            `human_approval on_rework.keep_changes=false requires ai/command target with checkpoint_before_run=true: `
+            + `${node.id} -> ${data.onRework.nextNode}`
+          );
+        }
       }
     }
   });
@@ -576,7 +587,6 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
     });
   }
 
-  const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const predecessorMap = new Map();
   nodes.forEach((node) => {
     const data = node.data || {};
@@ -2455,6 +2465,32 @@ export default function FlowEditor() {
                                     onRework: {
                                       ...current,
                                       nextNode: value || '',
+                                    },
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div
+                              className="field-control"
+                              style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+                            >
+                              <div style={{ display: 'grid', gap: 2 }}>
+                                <Text>Keep changes after rework</Text>
+                                <Text type="secondary">
+                                  If off, rework can target only an AI or Command node with checkpoint enabled.
+                                </Text>
+                              </div>
+                              <Switch
+                                checked={!!(selectedNode.data.onRework || DEFAULT_REWORK).keepChanges}
+                                disabled={isReadOnly}
+                                checkedChildren="On"
+                                unCheckedChildren="Off"
+                                onChange={(checked) => {
+                                  const current = selectedNode.data.onRework || DEFAULT_REWORK;
+                                  updateSelectedNode({
+                                    onRework: {
+                                      ...current,
+                                      keepChanges: checked,
                                     },
                                   });
                                 }}

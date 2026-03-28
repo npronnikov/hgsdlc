@@ -61,7 +61,11 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$.feature_request").isString())
                 .andExpect(jsonPath("$.resource_version").isNumber())
                 .andExpect(jsonPath("$.current_gate.gate_id").isString())
-                .andExpect(jsonPath("$.current_gate.gate_kind").value("human_approval"));
+                .andExpect(jsonPath("$.current_gate.gate_kind").value("human_approval"))
+                .andExpect(jsonPath("$.current_gate.payload.rework_mode").value("keep"))
+                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes").value(true))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_available").value(false))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").value("flow_policy_keep_changes"));
 
         mockMvc.perform(get("/api/runs")
                         .param("limit", "20")
@@ -87,7 +91,9 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].gate_id").isString())
                 .andExpect(jsonPath("$[0].status").isString())
-                .andExpect(jsonPath("$[0].payload.git_summary").exists());
+                .andExpect(jsonPath("$[0].payload.git_summary").exists())
+                .andExpect(jsonPath("$[0].payload.rework_mode").value("keep"))
+                .andExpect(jsonPath("$[0].payload.rework_discard_unavailable_reason").value("flow_policy_keep_changes"));
 
         mockMvc.perform(get("/api/gates/{gateId}/changes", gate.getId())
                         .header("Authorization", "Bearer " + token))
@@ -97,7 +103,8 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$.gate_kind").value("human_approval"))
                 .andExpect(jsonPath("$.git_changes").isArray())
                 .andExpect(jsonPath("$.git_summary.files_changed").isNumber())
-                .andExpect(jsonPath("$.git_summary.status_label").isString());
+                .andExpect(jsonPath("$.git_summary.status_label").isString())
+                .andExpect(jsonPath("$.status_label").isString());
 
         mockMvc.perform(get("/api/gates/{gateId}/diff", gate.getId())
                         .param("path", "README.md")
@@ -194,6 +201,27 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$.running").isBoolean());
     }
 
+    @Test
+    void reworkDiscardAvailabilityReflectsCheckpointPresence() throws Exception {
+        var flow = createPublishedFlow(
+                "discard-unavailable-flow",
+                discardUnavailableFlowYaml("discard-unavailable-flow"),
+                "review-change"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Checkpoint availability");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
+
+        mockMvc.perform(get("/api/runs/{runId}", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.current_gate.gate_kind").value("human_approval"))
+                .andExpect(jsonPath("$.current_gate.payload.rework_mode").value("discard"))
+                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes").value(false))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_available").value(false))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").value("target_checkpoint_not_found"));
+    }
+
     private String contractFlowYaml(String flowId) {
         return """
                 id: %s
@@ -239,6 +267,58 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR
+
+                  - id: complete
+                    title: Terminal
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+                """.formatted(flowId, flowId);
+    }
+
+    private String discardUnavailableFlowYaml(String flowId) {
+        return """
+                id: %s
+                version: "1.0"
+                canonical_name: %s@1.0
+                title: Discard Availability Flow
+                description: Runtime discard availability contract flow
+                status: published
+                start_node_id: review-change
+                rule_refs: []
+                fail_on_missing_declared_output: true
+                fail_on_missing_expected_mutation: true
+
+                nodes:
+                  - id: review-change
+                    title: Review
+                    type: human_approval
+                    execution_context: []
+                    instruction: |
+                      Review changes.
+                    produced_artifacts: []
+                    expected_mutations: []
+                    on_approve: complete
+                    on_rework:
+                      keep_changes: false
+                      next_node: implement-change
+                    allowed_roles:
+                      - FLOW_CONFIGURATOR
+
+                  - id: implement-change
+                    title: Implement
+                    type: command
+                    checkpoint_before_run: true
+                    execution_context: []
+                    instruction: |
+                      echo "implement change" >> README.md
+                    produced_artifacts: []
+                    expected_mutations:
+                      - scope: project
+                        path: README.md
+                        required: true
+                    on_success: complete
 
                   - id: complete
                     title: Terminal

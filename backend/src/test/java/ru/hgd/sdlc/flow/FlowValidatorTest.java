@@ -254,4 +254,78 @@ class FlowValidatorTest {
         List<String> errors = validator.validate(flow);
         Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("supported only for ai nodes")));
     }
+
+    @Test
+    void reworkDiscardRequiresCheckpointEnabledTargetNode() {
+        NodeModel executor = NodeModel.builder()
+                .id("executor")
+                .type("ai")
+                .executionContext(List.of())
+                .instruction("generate")
+                .onSuccess("approval")
+                .onFailure("end")
+                .build();
+        NodeModel approval = NodeModel.builder()
+                .id("approval")
+                .type("human_approval")
+                .executionContext(List.of())
+                .onApprove("end")
+                .onRework(NodeModel.OnRework.builder().keepChanges(false).nextNode("end").build())
+                .producedArtifacts(List.of())
+                .expectedMutations(List.of())
+                .build();
+        NodeModel end = NodeModel.builder()
+                .id("end")
+                .type("terminal")
+                .executionContext(List.of())
+                .build();
+        FlowModel flow = FlowModel.builder()
+                .id("f")
+                .version("1.0")
+                .canonicalName("f@1.0")
+                .title("flow")
+                .startNodeId("executor")
+                .nodes(List.of(executor, approval, end))
+                .build();
+
+        List<String> errors = validator.validate(flow);
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("on_rework.keep_changes=false")));
+    }
+
+    @Test
+    void reworkDiscardToCheckpointedCommandTargetPassesValidation() {
+        NodeModel executor = NodeModel.builder()
+                .id("executor")
+                .type("command")
+                .executionContext(List.of())
+                .instruction("echo ok")
+                .checkpointBeforeRun(true)
+                .onSuccess("approval")
+                .build();
+        NodeModel approval = NodeModel.builder()
+                .id("approval")
+                .type("human_approval")
+                .executionContext(List.of())
+                .onApprove("end")
+                .onRework(NodeModel.OnRework.builder().keepChanges(false).nextNode("executor").build())
+                .producedArtifacts(List.of())
+                .expectedMutations(List.of())
+                .build();
+        NodeModel end = NodeModel.builder()
+                .id("end")
+                .type("terminal")
+                .executionContext(List.of())
+                .build();
+        FlowModel flow = FlowModel.builder()
+                .id("f")
+                .version("1.0")
+                .canonicalName("f@1.0")
+                .title("flow")
+                .startNodeId("executor")
+                .nodes(List.of(executor, approval, end))
+                .build();
+
+        List<String> errors = validator.validate(flow);
+        Assertions.assertTrue(errors.isEmpty(), "Expected no validation errors but got: " + errors);
+    }
 }

@@ -253,7 +253,8 @@ public class GateDecisionService {
         enforceGateRole(node, user);
 
         String transitionTarget = resolveReworkTarget(node);
-        boolean keepChanges = shouldKeepChangesOnRework(node, command.mode());
+        boolean keepChanges = shouldKeepChangesOnRework(node);
+        String effectiveMode = keepChanges ? "keep" : "discard";
         if (!keepChanges) {
             rollbackWorkspaceToCheckpoint(run, transitionTarget, gate.getId());
         }
@@ -263,7 +264,7 @@ public class GateDecisionService {
                 gate.getId(),
                 gate.getNodeExecutionId(),
                 identityPort.resolveActorId(user),
-                trimToNull(command.mode()),
+                effectiveMode,
                 trimToNull(command.comment()),
                 reworkInstruction,
                 command.reviewedArtifactVersionIds()
@@ -525,14 +526,7 @@ public class GateDecisionService {
         throw new ValidationException("on_rework target is missing");
     }
 
-    private boolean shouldKeepChangesOnRework(NodeModel node, String modeRaw) {
-        String mode = normalize(trimToNull(modeRaw));
-        if ("keep".equals(mode)) {
-            return true;
-        }
-        if ("discard".equals(mode)) {
-            return false;
-        }
+    private boolean shouldKeepChangesOnRework(NodeModel node) {
         return node.getOnRework() != null && Boolean.TRUE.equals(node.getOnRework().getKeepChanges());
     }
 

@@ -242,7 +242,6 @@ public class RuntimeController {
                 gateId,
                 new ReworkGateCommand(
                         request.expectedGateVersion(),
-                        request.mode(),
                         request.comment(),
                         request.instruction(),
                         request.reviewedArtifactVersionIds()
@@ -578,7 +577,6 @@ public class RuntimeController {
 
     public record GateReworkRequest(
             @JsonProperty("expected_gate_version") Long expectedGateVersion,
-            @JsonProperty("mode") String mode,
             @JsonProperty("comment") String comment,
             @JsonProperty("instruction") String instruction,
             @JsonProperty("reviewed_artifact_version_ids") List<UUID> reviewedArtifactVersionIds

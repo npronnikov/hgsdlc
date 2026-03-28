@@ -173,6 +173,20 @@ public class FlowValidator {
             var onRework = node.getOnRework();
             if (onRework != null && onRework.getNextNode() != null && !onRework.getNextNode().isBlank()) {
                 assertTarget(node.getId(), "on_rework", onRework.getNextNode(), nodesById, errors);
+                if (!Boolean.TRUE.equals(onRework.getKeepChanges())) {
+                    NodeModel targetNode = nodesById.get(onRework.getNextNode());
+                    if (targetNode != null) {
+                        String targetKind = normalize(targetNode.getNodeKind());
+                        if (targetKind == null) {
+                            targetKind = normalize(targetNode.getType());
+                        }
+                        boolean checkpointEnabled = Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun());
+                        if (!Set.of("ai", "command").contains(targetKind) || !checkpointEnabled) {
+                            errors.add("human_approval on_rework.keep_changes=false requires ai/command target with "
+                                    + "checkpoint_before_run=true: " + node.getId() + " -> " + onRework.getNextNode());
+                        }
+                    }
+                }
             } else {
                 errors.add("human_approval gate requires on_rework: " + node.getId());
             }

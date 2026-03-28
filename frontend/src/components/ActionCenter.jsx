@@ -1,8 +1,25 @@
 import React, { useState } from 'react';
-import { Button, Card, Input, Radio, Typography, message } from 'antd';
+import { Button, Card, Input, Tag, Typography, message } from 'antd';
 import { apiRequest } from '../api/request.js';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+
+function resolveDiscardUnavailableReason(reasonCode) {
+  switch (reasonCode) {
+    case 'flow_policy_keep_changes':
+      return 'Flow policy is configured to keep changes.';
+    case 'rework_target_missing':
+      return 'Rework target node is missing.';
+    case 'rework_target_kind_unsupported':
+      return 'Rework target must be an AI/Command node.';
+    case 'rework_target_checkpoint_disabled':
+      return 'Target node must have checkpoint_before_run=true.';
+    case 'target_checkpoint_not_found':
+      return 'Checkpoint is not available yet for the rework target node.';
+    default:
+      return 'Discard to checkpoint is currently unavailable.';
+  }
+}
 
 function extractGateContext(payload) {
   if (!payload) {
@@ -19,9 +36,13 @@ function extractGateContext(payload) {
 function ApprovalForm({ gate, onComplete }) {
   const [comment, setComment] = useState('');
   const [instruction, setInstruction] = useState('');
-  const [reworkMode, setReworkMode] = useState('discard');
   const [activeAction, setActiveAction] = useState(null);
-  const reworkDiscardAvailable = gate?.payload?.rework_discard_available !== false;
+  const reworkMode = gate?.payload?.rework_mode
+    || (gate?.payload?.rework_keep_changes === false ? 'discard' : 'keep');
+  const isDiscardPolicy = reworkMode === 'discard';
+  const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
+  const reworkDiscardBlocked = isDiscardPolicy && !reworkDiscardAvailable;
+  const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
 
   const approve = async () => {
     setActiveAction('approve');
@@ -51,13 +72,16 @@ function ApprovalForm({ gate, onComplete }) {
   };
 
   const doRework = async () => {
+    if (reworkDiscardBlocked) {
+      message.warning(resolveDiscardUnavailableReason(reworkDiscardUnavailableReason));
+      return;
+    }
     setActiveAction('rework');
     try {
       await apiRequest(`/gates/${gate.gate_id}/request-rework`, {
         method: 'POST',
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
-          mode: reworkDiscardAvailable ? reworkMode : 'keep',
           comment,
           instruction,
           reviewed_artifact_version_ids: [],
@@ -66,7 +90,6 @@ function ApprovalForm({ gate, onComplete }) {
       message.success('Rework requested');
       setComment('');
       setInstruction('');
-      setReworkMode('discard');
       onComplete();
     } catch (err) {
       if (err.status === 409) {
@@ -106,30 +129,24 @@ function ApprovalForm({ gate, onComplete }) {
           style={{ marginTop: 4 }}
         />
       </div>
-      {reworkDiscardAvailable ? (
-        <div>
-          <Text className="muted">Changes handling</Text>
-          <Radio.Group
-            value={reworkMode}
-            onChange={(event) => setReworkMode(event.target.value)}
-            optionType="button"
-            buttonStyle="solid"
-            style={{ display: 'block', marginTop: 4 }}
-          >
-            <Radio.Button value="keep">Keep changes</Radio.Button>
-            <Radio.Button value="discard">Discard changes</Radio.Button>
-          </Radio.Group>
+      <div>
+        <Text className="muted">Changes handling</Text>
+        <div style={{ marginTop: 4 }}>
+          <Tag color={isDiscardPolicy ? 'orange' : 'blue'}>
+            {isDiscardPolicy ? 'Discard to checkpoint' : 'Keep changes'}
+          </Tag>
         </div>
-      ) : (
-        <Text type="secondary">Current changes will be preserved</Text>
-      )}
+        {reworkDiscardBlocked && (
+          <Text type="danger">{resolveDiscardUnavailableReason(reworkDiscardUnavailableReason)}</Text>
+        )}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
         <Button style={{ borderColor: '#16a34a', color: '#16a34a' }} onClick={approve} loading={activeAction === 'approve'} disabled={activeAction !== null}>Approve</Button>
         <Button
           style={{ borderColor: '#d97706', color: '#d97706' }}
           onClick={rework}
           loading={activeAction === 'rework'}
-          disabled={activeAction !== null || !instruction.trim()}
+          disabled={activeAction !== null || !instruction.trim() || reworkDiscardBlocked}
         >
           Request rework
         </Button>

@@ -7,7 +7,6 @@ import {
   Drawer,
   Input,
   Modal,
-  Radio,
   Row,
   Space,
   Tag,
@@ -124,6 +123,23 @@ function buildReworkInstruction(requests) {
   }).join('\n\n');
 }
 
+function resolveDiscardUnavailableReason(reasonCode) {
+  switch (reasonCode) {
+    case 'flow_policy_keep_changes':
+      return 'Flow policy is configured to keep changes.';
+    case 'rework_target_missing':
+      return 'Rework target node is missing.';
+    case 'rework_target_kind_unsupported':
+      return 'Rework target must be an AI/Command node.';
+    case 'rework_target_checkpoint_disabled':
+      return 'Target node must have checkpoint_before_run=true.';
+    case 'target_checkpoint_not_found':
+      return 'Checkpoint is not available yet for the rework target node.';
+    default:
+      return 'Discard to checkpoint is currently unavailable.';
+  }
+}
+
 const EMPTY_REQUEST_DRAFT = {
   scope: 'file',
   path: '',
@@ -152,7 +168,6 @@ export default function HumanGate() {
 
   const [approveComment, setApproveComment] = useState('');
   const [reworkComment, setReworkComment] = useState('');
-  const [reworkMode, setReworkMode] = useState('discard');
   const [submitting, setSubmitting] = useState(null);
   const [editedByPath, setEditedByPath] = useState({});
 
@@ -167,7 +182,12 @@ export default function HumanGate() {
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
-  const reworkDiscardAvailable = gate?.payload?.rework_discard_available !== false;
+  const reworkMode = gate?.payload?.rework_mode
+    || (gate?.payload?.rework_keep_changes === false ? 'discard' : 'keep');
+  const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
+  const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
+  const isDiscardPolicy = reworkMode === 'discard';
+  const reworkDiscardBlocked = isDiscardPolicy && !reworkDiscardAvailable;
   const userInstructions = gate?.payload?.user_instructions || '';
   const editableArtifacts = Array.isArray(gate?.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
 
@@ -350,6 +370,10 @@ export default function HumanGate() {
 
   const requestRework = async () => {
     if (!gate) return false;
+    if (reworkDiscardBlocked) {
+      message.warning(resolveDiscardUnavailableReason(reworkDiscardUnavailableReason));
+      return false;
+    }
     if (reworkRequests.length === 0) {
       message.warning('Add at least one rework request');
       return false;
@@ -365,7 +389,6 @@ export default function HumanGate() {
         method: 'POST',
         body: JSON.stringify({
           expected_gate_version: gate.resource_version,
-          mode: reworkDiscardAvailable ? reworkMode : 'keep',
           comment: reworkComment,
           instruction: mergedInstruction,
           reviewed_artifact_version_ids: [],
@@ -679,27 +702,22 @@ export default function HumanGate() {
                   <Collapse items={reworkItems} />
                 )}
 
+                <Text className="muted">Changes handling policy</Text>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <Tag color={isDiscardPolicy ? 'orange' : 'blue'} style={{ width: 'fit-content' }}>
+                    {isDiscardPolicy ? 'Discard to checkpoint' : 'Keep changes'}
+                  </Tag>
+                  {reworkDiscardBlocked && (
+                    <Text type="danger">{resolveDiscardUnavailableReason(reworkDiscardUnavailableReason)}</Text>
+                  )}
+                </div>
+
                 <Text className="muted">Comment</Text>
                 <Input.TextArea
                   rows={3}
                   value={reworkComment}
                   onChange={(event) => setReworkComment(event.target.value)}
                 />
-
-                {reworkDiscardAvailable ? (
-                  <Radio.Group
-                    value={reworkMode}
-                    onChange={(event) => setReworkMode(event.target.value)}
-                    optionType="button"
-                    buttonStyle="solid"
-                    style={{ width: '100%' }}
-                  >
-                    <Radio.Button value="keep">Keep changes</Radio.Button>
-                    <Radio.Button value="discard">Discard changes</Radio.Button>
-                  </Radio.Group>
-                ) : (
-                  <Text type="secondary">Current changes will be preserved.</Text>
-                )}
               </Space>
             )}
           </div>
@@ -726,6 +744,7 @@ export default function HumanGate() {
                   setActiveActionPanel(null);
                 }}
                 loading={submitting === 'rework'}
+                disabled={reworkDiscardBlocked}
               >
                 Request rework
               </Button>

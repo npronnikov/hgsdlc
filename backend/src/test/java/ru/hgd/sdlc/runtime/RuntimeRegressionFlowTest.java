@@ -141,7 +141,6 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
 
         String reworkBody = objectMapper.writeValueAsString(Map.of(
                 "expected_gate_version", firstGate.getResourceVersion(),
-                "mode", "keep",
                 "comment", "Need refinements",
                 "instruction", "Please improve naming",
                 "reviewed_artifact_version_ids", List.of()
