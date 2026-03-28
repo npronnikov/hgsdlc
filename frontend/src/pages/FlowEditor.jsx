@@ -2222,14 +2222,23 @@ export default function FlowEditor() {
                 {(selectedNodeKind === 'ai' || selectedNodeKind === 'command') && (
                   <div>
                     <Text className="muted">Save node state before launch</Text>
-                    <div className="field-control">
-                      <Checkbox
+                    <div
+                      className="field-control"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+                    >
+                      <div style={{ display: 'grid', gap: 2 }}>
+                        <Text>Create Git checkpoint before execution</Text>
+                        <Text type="secondary">
+                          Saves a checkpoint before the node starts, so rework can roll back to this state.
+                        </Text>
+                      </div>
+                      <Switch
                         checked={!!selectedNode.data.checkpointBeforeRun}
                         disabled={isReadOnly}
-                        onChange={(event) => updateSelectedNode({ checkpointBeforeRun: event.target.checked })}
-                      >
-                        Yes/No
-                      </Checkbox>
+                        checkedChildren="On"
+                        unCheckedChildren="Off"
+                        onChange={(checked) => updateSelectedNode({ checkpointBeforeRun: checked })}
+                      />
                     </div>
                   </div>
                 )}
