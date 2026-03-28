@@ -7,11 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -30,7 +27,19 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.UnprocessableEntityException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.idempotency.application.IdempotencyService;
-import ru.hgd.sdlc.runtime.application.RuntimeService;
+import ru.hgd.sdlc.runtime.application.command.ApproveGateCommand;
+import ru.hgd.sdlc.runtime.application.command.CreateRunCommand;
+import ru.hgd.sdlc.runtime.application.command.ReworkGateCommand;
+import ru.hgd.sdlc.runtime.application.command.SubmitInputCommand;
+import ru.hgd.sdlc.runtime.application.command.SubmittedArtifact;
+import ru.hgd.sdlc.runtime.application.dto.ArtifactContentResult;
+import ru.hgd.sdlc.runtime.application.dto.AuditQueryResult;
+import ru.hgd.sdlc.runtime.application.dto.GateActionResult;
+import ru.hgd.sdlc.runtime.application.dto.GateChangesResult;
+import ru.hgd.sdlc.runtime.application.dto.GateDiffResult;
+import ru.hgd.sdlc.runtime.application.dto.NodeLogResult;
+import ru.hgd.sdlc.runtime.application.service.RuntimeCommandService;
+import ru.hgd.sdlc.runtime.application.service.RuntimeQueryService;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
 import ru.hgd.sdlc.runtime.domain.AuditEventEntity;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
@@ -39,23 +48,21 @@ import ru.hgd.sdlc.runtime.domain.RunEntity;
 @RestController
 @RequestMapping("/api")
 public class RuntimeController {
-    private static final Logger log = LoggerFactory.getLogger(RuntimeController.class);
-
-    private final RuntimeService runtimeService;
+    private final RuntimeCommandService runtimeCommandService;
+    private final RuntimeQueryService runtimeQueryService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
-    private final TaskExecutor taskExecutor;
 
     public RuntimeController(
-            RuntimeService runtimeService,
+            RuntimeCommandService runtimeCommandService,
+            RuntimeQueryService runtimeQueryService,
             IdempotencyService idempotencyService,
-            ObjectMapper objectMapper,
-            TaskExecutor taskExecutor
+            ObjectMapper objectMapper
     ) {
-        this.runtimeService = runtimeService;
+        this.runtimeCommandService = runtimeCommandService;
+        this.runtimeQueryService = runtimeQueryService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
-        this.taskExecutor = taskExecutor;
     }
 
     @PostMapping("/runs")
@@ -80,8 +87,8 @@ public class RuntimeController {
                 requestHash,
                 RunCreateResponse.class,
                 () -> {
-                    RunEntity run = runtimeService.createRun(
-                            new RuntimeService.CreateRunCommand(
+                    RunEntity run = runtimeCommandService.createRun(
+                            new CreateRunCommand(
                                     request.projectId(),
                                     request.targetBranch(),
                                     request.flowCanonicalName(),
@@ -100,11 +107,11 @@ public class RuntimeController {
                         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                             @Override
                             public void afterCommit() {
-                                startRunAsync(createdRunId);
+                                runtimeCommandService.dispatchStartRun(createdRunId);
                             }
                         });
                     } else {
-                        startRunAsync(run.getId());
+                        runtimeCommandService.dispatchStartRun(run.getId());
                     }
                     return created;
                 }
@@ -112,65 +119,45 @@ public class RuntimeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    private void tickAsync(UUID runId) {
-        taskExecutor.execute(() -> {
-            try {
-                runtimeService.tick(runId);
-            } catch (Exception ex) {
-                log.error("Async tick failed for run {}", runId, ex);
-            }
-        });
-    }
-
-    private void startRunAsync(UUID runId) {
-        taskExecutor.execute(() -> {
-            try {
-                runtimeService.startRun(runId);
-            } catch (Exception ex) {
-                log.error("Failed to start run {}", runId, ex);
-            }
-        });
-    }
-
     @GetMapping("/runs/{runId}")
     public RunResponse getRun(@PathVariable UUID runId) {
-        RunEntity run = runtimeService.getRun(runId);
-        GateSummaryResponse currentGate = runtimeService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        RunEntity run = runtimeQueryService.findRun(runId);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
         return RunResponse.from(run, currentGate);
     }
 
     @GetMapping("/runs")
     public List<RunResponse> listRuns(@RequestParam(name = "limit", defaultValue = "20") int limit) {
-        return runtimeService.listRuns(limit).stream()
+        return runtimeQueryService.findRuns(limit).stream()
                 .map((run) -> RunResponse.from(
                         run,
-                        runtimeService.findCurrentGate(run.getId()).map(this::toGateSummary).orElse(null)
+                        runtimeQueryService.findCurrentGate(run.getId()).map(this::toGateSummary).orElse(null)
                 ))
                 .toList();
     }
 
     @PostMapping("/runs/{runId}/resume")
     public RunResponse resumeRun(@PathVariable UUID runId) {
-        RunEntity run = runtimeService.resumeRun(runId);
-        GateSummaryResponse currentGate = runtimeService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        RunEntity run = runtimeCommandService.resumeRun(runId);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
         return RunResponse.from(run, currentGate);
     }
 
     @PostMapping("/runs/{runId}/cancel")
     public RunResponse cancelRun(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
-        RunEntity run = runtimeService.cancelRun(runId, user);
-        GateSummaryResponse currentGate = runtimeService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        RunEntity run = runtimeCommandService.cancelRun(runId, user);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
         return RunResponse.from(run, currentGate);
     }
 
     @GetMapping("/runs/{runId}/nodes")
     public List<NodeExecutionResponse> listNodes(@PathVariable UUID runId) {
-        return runtimeService.listNodeExecutions(runId).stream().map(NodeExecutionResponse::from).toList();
+        return runtimeQueryService.findNodeExecutions(runId).stream().map(NodeExecutionResponse::from).toList();
     }
 
     @GetMapping("/runs/{runId}/artifacts")
     public List<ArtifactResponse> listArtifacts(@PathVariable UUID runId) {
-        return runtimeService.listArtifacts(runId).stream().map(ArtifactResponse::from).toList();
+        return runtimeQueryService.findArtifacts(runId).stream().map(ArtifactResponse::from).toList();
     }
 
     @GetMapping("/runs/{runId}/artifacts/{artifactVersionId}/content")
@@ -178,7 +165,7 @@ public class RuntimeController {
             @PathVariable UUID runId,
             @PathVariable UUID artifactVersionId
     ) {
-        RuntimeService.ArtifactContentResult result = runtimeService.getArtifactContent(runId, artifactVersionId);
+        ArtifactContentResult result = runtimeQueryService.findArtifactContent(runId, artifactVersionId);
         return new ArtifactContentResponse(
                 result.artifact().getId(),
                 result.artifact().getRunId(),
@@ -190,14 +177,14 @@ public class RuntimeController {
 
     @GetMapping("/runs/{runId}/gates/current")
     public GateSummaryResponse currentGate(@PathVariable UUID runId) {
-        return runtimeService.findCurrentGate(runId)
+        return runtimeQueryService.findCurrentGate(runId)
                 .map(this::toGateSummary)
                 .orElse(null);
     }
 
     @GetMapping("/gates/inbox")
     public List<GateSummaryResponse> gateInbox(@AuthenticationPrincipal User user) {
-        return runtimeService.listInboxGates(user).stream().map(this::toGateSummary).toList();
+        return runtimeQueryService.findGateInbox(user).stream().map(this::toGateSummary).toList();
     }
 
     @PostMapping("/gates/{gateId}/submit-input")
@@ -206,12 +193,12 @@ public class RuntimeController {
             @RequestBody GateSubmitInputRequest request,
             @AuthenticationPrincipal User user
     ) {
-        RuntimeService.GateActionResult result = runtimeService.submitInput(
+        GateActionResult result = runtimeCommandService.submitInput(
                 gateId,
-                new RuntimeService.SubmitInputCommand(
+                new SubmitInputCommand(
                         request.expectedGateVersion(),
                         request.artifacts() == null ? List.of() : request.artifacts().stream()
-                                .map((artifact) -> new RuntimeService.SubmittedArtifact(
+                                .map((artifact) -> new SubmittedArtifact(
                                         artifact.artifactKey(),
                                         artifact.path(),
                                         artifact.scope(),
@@ -222,7 +209,7 @@ public class RuntimeController {
                 ),
                 user
         );
-        tickAsync(result.run().getId());
+        runtimeCommandService.dispatchProcessRunStep(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_submit");
     }
 
@@ -232,16 +219,16 @@ public class RuntimeController {
             @RequestBody GateApproveRequest request,
             @AuthenticationPrincipal User user
     ) {
-        RuntimeService.GateActionResult result = runtimeService.approveGate(
+        GateActionResult result = runtimeCommandService.approveGate(
                 gateId,
-                new RuntimeService.ApproveGateCommand(
+                new ApproveGateCommand(
                         request.expectedGateVersion(),
                         request.comment(),
                         request.reviewedArtifactVersionIds()
                 ),
                 user
         );
-        tickAsync(result.run().getId());
+        runtimeCommandService.dispatchProcessRunStep(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_approve");
     }
 
@@ -251,9 +238,9 @@ public class RuntimeController {
             @RequestBody GateReworkRequest request,
             @AuthenticationPrincipal User user
     ) {
-        RuntimeService.GateActionResult result = runtimeService.requestRework(
+        GateActionResult result = runtimeCommandService.requestRework(
                 gateId,
-                new RuntimeService.ReworkGateCommand(
+                new ReworkGateCommand(
                         request.expectedGateVersion(),
                         request.mode(),
                         request.comment(),
@@ -262,7 +249,7 @@ public class RuntimeController {
                 ),
                 user
         );
-        tickAsync(result.run().getId());
+        runtimeCommandService.dispatchProcessRunStep(result.run().getId());
         return GateActionResponse.from(result.gate(), result.run(), "on_rework");
     }
 
@@ -271,7 +258,7 @@ public class RuntimeController {
             @PathVariable UUID gateId,
             @AuthenticationPrincipal User user
     ) {
-        RuntimeService.GateChangesResult result = runtimeService.getGateChanges(gateId, user);
+        GateChangesResult result = runtimeQueryService.findGateChanges(gateId, user);
         return new GateChangesResponse(
                 result.gateId(),
                 result.runId(),
@@ -302,7 +289,7 @@ public class RuntimeController {
             @RequestParam("path") String path,
             @AuthenticationPrincipal User user
     ) {
-        RuntimeService.GateDiffResult result = runtimeService.getGateDiff(gateId, path, user);
+        GateDiffResult result = runtimeQueryService.findGateDiff(gateId, path, user);
         return new GateDiffResponse(
                 result.gateId(),
                 result.runId(),
@@ -315,12 +302,12 @@ public class RuntimeController {
 
     @GetMapping("/runs/{runId}/audit")
     public List<AuditEventResponse> listAudit(@PathVariable UUID runId) {
-        return runtimeService.listAuditEvents(runId).stream().map(this::toAuditResponse).toList();
+        return runtimeQueryService.findAuditEvents(runId).stream().map(this::toAuditResponse).toList();
     }
 
     @GetMapping("/runs/{runId}/audit/{eventId}")
     public AuditEventResponse getAuditEvent(@PathVariable UUID runId, @PathVariable UUID eventId) {
-        return toAuditResponse(runtimeService.getAuditEvent(runId, eventId));
+        return toAuditResponse(runtimeQueryService.findAuditEvent(runId, eventId));
     }
 
     @GetMapping("/runs/{runId}/audit/query")
@@ -332,7 +319,7 @@ public class RuntimeController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "100") int limit
     ) {
-        RuntimeService.AuditQueryResult result = runtimeService.queryAuditEvents(
+        AuditQueryResult result = runtimeQueryService.findAuditEvents(
                 runId, nodeExecutionId, eventType, actorType, cursor, limit
         );
         List<AuditEventResponse> events = result.events().stream().map(this::toAuditResponse).toList();
@@ -345,7 +332,7 @@ public class RuntimeController {
             @PathVariable UUID nodeExecutionId,
             @RequestParam(defaultValue = "0") long offset
     ) {
-        RuntimeService.NodeLogResult result = runtimeService.getNodeLog(runId, nodeExecutionId, offset);
+        NodeLogResult result = runtimeQueryService.findNodeLog(runId, nodeExecutionId, offset);
         return new NodeLogResponse(result.content(), result.offset(), result.running());
     }
 

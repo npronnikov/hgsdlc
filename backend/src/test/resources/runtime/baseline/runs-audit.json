@@ -1,0 +1,304 @@
+[ {
+  "actor_id" : "test",
+  "actor_type" : "human",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "run_created",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "flow_canonical_name" : "baseline-flow@1.0",
+    "project_id" : "<uuid>",
+    "target_branch" : "main"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 1
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "run_started",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : { },
+  "run_id" : "<uuid>",
+  "sequence_no" : 2
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "checkout_started",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "project_root" : "<path>/workspace/<uuid>",
+    "repo_url" : "file://<path>/remote-repo.git/",
+    "target_branch" : "main"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 3
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "checkout_finished",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "head" : "<hex>",
+    "project_root" : "<path>/workspace/<uuid>",
+    "stderr" : "Cloning into '<path>/workspace/<uuid>'...\n",
+    "stderr_path" : "<path>/workspace/<uuid>.checkout.stderr.log",
+    "stdout" : "",
+    "stdout_path" : "<path>/workspace/<uuid>.checkout.stdout.log",
+    "target_branch" : "main"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 4
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "workspace_prepared",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "project_root" : "<path>/workspace/<uuid>",
+    "run_scope_root" : "<path>/workspace/<uuid>/.hgsdlc",
+    "workspace_root" : "<path>/workspace/<uuid>"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 5
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_started",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "attempt_no" : 1,
+    "node_id" : "implement-change",
+    "node_kind" : "command"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 6
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "command_invocation_started",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "execution_context" : [ ],
+    "node_id" : "implement-change"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 7
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "artifact_version_created",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "artifact_key" : "summary",
+    "artifact_version_id" : "<uuid>",
+    "kind" : "produced",
+    "path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/summary.md",
+    "version_no" : 1
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 8
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "artifact_version_created",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "artifact_key" : "README",
+    "artifact_version_id" : "<uuid>",
+    "kind" : "mutation",
+    "path" : "<path>/workspace/<uuid>/README.md",
+    "version_no" : 1
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 9
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "command_invocation_finished",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "exit_code" : 0,
+    "stderr" : "",
+    "stderr_path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/command.stderr.log",
+    "stdout" : "",
+    "stdout_path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/command.stdout.log"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 10
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_succeeded",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "node_id" : "implement-change"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 11
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "transition_applied",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "target_node_id" : "review-change",
+    "transition" : "on_success"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 12
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_started",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "attempt_no" : 1,
+    "node_id" : "review-change",
+    "node_kind" : "human_approval"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 13
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "gate_opened",
+  "gate_id" : "<uuid>",
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "assignee_role" : "FLOW_CONFIGURATOR",
+    "gate_kind" : "human_approval"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 14
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "run_waiting_gate",
+  "gate_id" : "<uuid>",
+  "node_execution_id" : "<uuid>",
+  "payload" : { },
+  "run_id" : "<uuid>",
+  "sequence_no" : 15
+}, {
+  "actor_id" : "test",
+  "actor_type" : "human",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "gate_approved",
+  "gate_id" : "<uuid>",
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "comment" : "Looks good"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 16
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_succeeded",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "node_id" : "review-change"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 17
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "transition_applied",
+  "gate_id" : "<uuid>",
+  "node_execution_id" : null,
+  "payload" : {
+    "target_node_id" : "complete",
+    "transition" : "on_approve"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 18
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_started",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "attempt_no" : 1,
+    "node_id" : "complete",
+    "node_kind" : "terminal"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 19
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "node_execution_succeeded",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "node_id" : "complete"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 20
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "run_completed",
+  "gate_id" : null,
+  "node_execution_id" : "<uuid>",
+  "payload" : {
+    "terminal_status" : "completed"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 21
+} ]

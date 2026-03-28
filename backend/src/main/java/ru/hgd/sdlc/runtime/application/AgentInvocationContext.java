@@ -3,7 +3,7 @@ package ru.hgd.sdlc.runtime.application;
 import java.nio.file.Path;
 import java.util.List;
 
-record AgentInvocationContext(
+public record AgentInvocationContext(
         Path workingDirectory,
         List<String> command,
         Path promptPath,

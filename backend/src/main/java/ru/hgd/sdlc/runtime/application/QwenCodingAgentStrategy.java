@@ -2,10 +2,8 @@ package ru.hgd.sdlc.runtime.application;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +15,7 @@ import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
@@ -27,19 +26,22 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     private final RuntimeStepTxService runtimeStepTxService;
     private final AgentPromptBuilder agentPromptBuilder;
     private final CatalogContentResolver catalogContentResolver;
+    private final WorkspacePort workspacePort;
 
     QwenCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
             SkillVersionRepository skillVersionRepository,
             RuntimeStepTxService runtimeStepTxService,
             AgentPromptBuilder agentPromptBuilder,
-            CatalogContentResolver catalogContentResolver
+            CatalogContentResolver catalogContentResolver,
+            WorkspacePort workspacePort
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
         this.runtimeStepTxService = runtimeStepTxService;
         this.agentPromptBuilder = agentPromptBuilder;
         this.catalogContentResolver = catalogContentResolver;
+        this.workspacePort = workspacePort;
     }
 
     @Override
@@ -222,7 +224,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             return;
         }
         try {
-            Files.createDirectories(directory);
+            workspacePort.createDirectories(directory);
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to create directory: " + directory);
         }
@@ -231,29 +233,23 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     private void writeFile(Path path, byte[] content) throws CodingAgentException {
         try {
             if (path.getParent() != null) {
-                Files.createDirectories(path.getParent());
+                workspacePort.createDirectories(path.getParent());
             }
-            Files.write(path, content == null ? new byte[0] : content);
+            workspacePort.write(path, content == null ? new byte[0] : content);
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to write file: " + path);
         }
     }
 
     private void deleteDirectoryContents(Path directory) throws CodingAgentException {
-        if (directory == null || !Files.exists(directory)) {
+        if (directory == null || !workspacePort.exists(directory)) {
             return;
         }
-        try (var stream = Files.walk(directory)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .filter((path) -> !path.equals(directory))
-                    .forEach((path) -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ex) {
-                            throw new IllegalStateException(ex);
-                        }
-                    });
-        } catch (RuntimeException | IOException ex) {
+        try {
+            for (Path path : workspacePort.listDescendantsReverse(directory)) {
+                workspacePort.deleteIfExists(path);
+            }
+        } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to clean directory: " + directory);
         }
     }

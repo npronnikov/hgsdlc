@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
+import ru.hgd.sdlc.runtime.application.dto.CommandResult;
 
 @Service
 public class ExecutionTraceBuilder {
@@ -56,7 +57,7 @@ public class ExecutionTraceBuilder {
     public Map<String, Object> agentInvocationFinishedPayload(
             NodeModel node,
             String promptChecksum,
-            RuntimeService.CommandResult agentResult
+            CommandResult agentResult
     ) {
         return Map.of(
                 "node_id", node.getId(),

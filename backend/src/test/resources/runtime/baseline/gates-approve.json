@@ -1,0 +1,7 @@
+{
+  "gate_id" : "<uuid>",
+  "next_run_status" : "running",
+  "resource_version" : 1,
+  "status" : "approved",
+  "transition" : "on_approve"
+}

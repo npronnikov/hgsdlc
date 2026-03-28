@@ -1,0 +1,18 @@
+{
+  "created_at" : "<instant>",
+  "created_by" : "test",
+  "current_gate" : null,
+  "current_node_id" : "complete",
+  "error_code" : null,
+  "error_message" : null,
+  "feature_request" : "Snapshot baseline request",
+  "finished_at" : "<instant>",
+  "flow_canonical_name" : "baseline-flow@1.0",
+  "project_id" : "<uuid>",
+  "resource_version" : 5,
+  "run_id" : "<uuid>",
+  "started_at" : "<instant>",
+  "status" : "completed",
+  "target_branch" : "main",
+  "workspace_root" : "<path>/workspace/<uuid>"
+}

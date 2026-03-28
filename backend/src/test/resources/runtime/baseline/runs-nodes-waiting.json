@@ -1,0 +1,31 @@
+[ {
+  "attempt_no" : 1,
+  "checkpoint_commit_sha" : null,
+  "checkpoint_created_at" : null,
+  "checkpoint_enabled" : false,
+  "error_code" : null,
+  "error_message" : null,
+  "finished_at" : "<instant>",
+  "node_execution_id" : "<uuid>",
+  "node_id" : "implement-change",
+  "node_kind" : "command",
+  "resource_version" : 1,
+  "run_id" : "<uuid>",
+  "started_at" : "<instant>",
+  "status" : "succeeded"
+}, {
+  "attempt_no" : 1,
+  "checkpoint_commit_sha" : null,
+  "checkpoint_created_at" : null,
+  "checkpoint_enabled" : false,
+  "error_code" : null,
+  "error_message" : null,
+  "finished_at" : null,
+  "node_execution_id" : "<uuid>",
+  "node_id" : "review-change",
+  "node_kind" : "human_approval",
+  "resource_version" : 1,
+  "run_id" : "<uuid>",
+  "started_at" : "<instant>",
+  "status" : "waiting_gate"
+} ]

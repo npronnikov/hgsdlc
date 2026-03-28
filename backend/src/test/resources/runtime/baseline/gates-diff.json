@@ -1,0 +1,8 @@
+{
+  "gate_id" : "<uuid>",
+  "modified_content" : "# Runtime integration test\nsnapshot line\n",
+  "original_content" : "# Runtime integration test\n",
+  "patch" : "diff --git a/README.md b/README.md\nindex <hex>..<hex> 100644\n--- a/README.md\n+++ b/README.md\n@@ -1 +1,2 @@\n # Runtime integration test\n+snapshot line\n",
+  "path" : "README.md",
+  "run_id" : "<uuid>"
+}

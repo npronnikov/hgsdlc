@@ -2,7 +2,6 @@ package ru.hgd.sdlc.runtime.application;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
@@ -12,19 +11,22 @@ import ru.hgd.sdlc.flow.domain.FlowContentSource;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.rule.domain.RuleContentSource;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
+import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.skill.domain.SkillContentSource;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 
 @Component
-class CatalogContentResolver {
+public class CatalogContentResolver {
     private final SettingsService settingsService;
+    private final WorkspacePort workspacePort;
 
-    CatalogContentResolver(SettingsService settingsService) {
+    public CatalogContentResolver(SettingsService settingsService, WorkspacePort workspacePort) {
         this.settingsService = settingsService;
+        this.workspacePort = workspacePort;
     }
 
-    String resolveFlowYaml(FlowVersion flowVersion) {
+    public String resolveFlowYaml(FlowVersion flowVersion) {
         if (flowVersion == null) {
             throw new ValidationException("Flow version is required");
         }
@@ -34,7 +36,7 @@ class CatalogContentResolver {
         return flowVersion.getFlowYaml();
     }
 
-    String resolveRuleMarkdown(RuleVersion ruleVersion) {
+    public String resolveRuleMarkdown(RuleVersion ruleVersion) {
         if (ruleVersion == null) {
             throw new ValidationException("Rule version is required");
         }
@@ -44,7 +46,7 @@ class CatalogContentResolver {
         return ruleVersion.getRuleMarkdown();
     }
 
-    String resolveSkillMarkdown(SkillVersion skillVersion) {
+    public String resolveSkillMarkdown(SkillVersion skillVersion) {
         if (skillVersion == null) {
             throw new ValidationException("Skill version is required");
         }
@@ -64,7 +66,7 @@ class CatalogContentResolver {
         }
         Path mirrorRoot = resolveCatalogMirrorPath(settingsService.getWorkspaceRoot(), repoUrl);
         Path candidate = mirrorRoot.resolve(sourcePath).normalize();
-        if (Files.isDirectory(candidate)) {
+        if (workspacePort.isDirectory(candidate)) {
             candidate = candidate.resolve(defaultFileName);
         }
         if (!candidate.isAbsolute()) {
@@ -73,11 +75,11 @@ class CatalogContentResolver {
         if (!candidate.startsWith(mirrorRoot)) {
             throw new ValidationException("source_path points outside catalog mirror: " + sourcePath);
         }
-        if (!Files.exists(candidate)) {
+        if (!workspacePort.exists(candidate)) {
             throw new ValidationException("Git content file not found: " + candidate);
         }
         try {
-            return Files.readString(candidate, StandardCharsets.UTF_8);
+            return workspacePort.readString(candidate, StandardCharsets.UTF_8);
         } catch (IOException ex) {
             throw new ValidationException("Failed to read git content file: " + candidate + " (" + ex.getMessage() + ")");
         }

@@ -1,0 +1,25 @@
+[ {
+  "artifact_key" : "README",
+  "artifact_version_id" : "<uuid>",
+  "checksum" : "<checksum>",
+  "created_at" : "<instant>",
+  "kind" : "mutation",
+  "node_id" : "implement-change",
+  "path" : "<path>/workspace/<uuid>/README.md",
+  "run_id" : "<uuid>",
+  "scope" : "project",
+  "size_bytes" : 41,
+  "version_no" : 1
+}, {
+  "artifact_key" : "summary",
+  "artifact_version_id" : "<uuid>",
+  "checksum" : "<checksum>",
+  "created_at" : "<instant>",
+  "kind" : "produced",
+  "node_id" : "implement-change",
+  "path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/summary.md",
+  "run_id" : "<uuid>",
+  "scope" : "run",
+  "size_bytes" : 350,
+  "version_no" : 1
+} ]

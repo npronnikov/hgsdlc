@@ -1,0 +1,664 @@
+package ru.hgd.sdlc.runtime.application.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.User;
+import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.common.NotFoundException;
+import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.flow.application.FlowYamlParser;
+import ru.hgd.sdlc.flow.domain.FlowModel;
+import ru.hgd.sdlc.flow.domain.FlowVersion;
+import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
+import ru.hgd.sdlc.project.domain.Project;
+import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
+import ru.hgd.sdlc.runtime.application.CatalogContentResolver;
+import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
+import ru.hgd.sdlc.runtime.application.command.CreateRunCommand;
+import ru.hgd.sdlc.runtime.application.port.ClockPort;
+import ru.hgd.sdlc.runtime.application.port.GitPort;
+import ru.hgd.sdlc.runtime.application.port.IdentityPort;
+import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
+import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.runtime.domain.ActorType;
+import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.domain.RunStatus;
+import ru.hgd.sdlc.runtime.infrastructure.RunRepository;
+import ru.hgd.sdlc.settings.application.SettingsService;
+
+@Service
+public class RunLifecycleService {
+    private static final Logger log = LoggerFactory.getLogger(RunLifecycleService.class);
+    private static final List<RunStatus> ACTIVE_RUN_STATUSES = List.of(
+            RunStatus.CREATED,
+            RunStatus.RUNNING,
+            RunStatus.WAITING_GATE
+    );
+
+    private final RunRepository runRepository;
+    private final ProjectRepository projectRepository;
+    private final FlowVersionRepository flowVersionRepository;
+    private final RuntimeStepTxService runtimeStepTxService;
+    private final RunStepService runStepService;
+    private final FlowYamlParser flowYamlParser;
+    private final ObjectMapper objectMapper;
+    private final SettingsService settingsService;
+    private final CatalogContentResolver catalogContentResolver;
+    private final GitPort gitPort;
+    private final WorkspacePort workspacePort;
+    private final ClockPort clockPort;
+    private final IdentityPort identityPort;
+
+    public RunLifecycleService(
+            RunRepository runRepository,
+            ProjectRepository projectRepository,
+            FlowVersionRepository flowVersionRepository,
+            RuntimeStepTxService runtimeStepTxService,
+            RunStepService runStepService,
+            FlowYamlParser flowYamlParser,
+            ObjectMapper objectMapper,
+            SettingsService settingsService,
+            CatalogContentResolver catalogContentResolver,
+            GitPort gitPort,
+            WorkspacePort workspacePort,
+            ClockPort clockPort,
+            IdentityPort identityPort
+    ) {
+        this.runRepository = runRepository;
+        this.projectRepository = projectRepository;
+        this.flowVersionRepository = flowVersionRepository;
+        this.runtimeStepTxService = runtimeStepTxService;
+        this.runStepService = runStepService;
+        this.flowYamlParser = flowYamlParser;
+        this.objectMapper = objectMapper;
+        this.settingsService = settingsService;
+        this.catalogContentResolver = catalogContentResolver;
+        this.gitPort = gitPort;
+        this.workspacePort = workspacePort;
+        this.clockPort = clockPort;
+        this.identityPort = identityPort;
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity createRun(CreateRunCommand command, User user) {
+        validateCreateRunCommand(command);
+        Project project = projectRepository.findById(command.projectId())
+                .orElseThrow(() -> new NotFoundException("Project not found: " + command.projectId()));
+        FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
+                .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
+        FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
+        if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
+            throw new ValidationException("Flow has no nodes");
+        }
+        if (flowModel.getStartNodeId() == null || flowModel.getStartNodeId().isBlank()) {
+            throw new ValidationException("Flow start_node_id is required");
+        }
+        flowModel.setCodingAgent(flowVersion.getCodingAgent());
+
+        boolean activeRunExists = runRepository.existsByProjectIdAndTargetBranchAndStatusIn(
+                project.getId(),
+                normalizeBranch(command.targetBranch()),
+                ACTIVE_RUN_STATUSES
+        );
+        if (activeRunExists) {
+            throw new ConflictException("Active run already exists for project and target branch");
+        }
+
+        UUID runId = UUID.randomUUID();
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), runId);
+        createDirectories(runWorkspaceRoot);
+
+        List<String> manifestEntries = List.of();
+        return runtimeStepTxService.createRun(
+                runId,
+                project.getId(),
+                normalizeBranch(command.targetBranch()),
+                flowVersion.getCanonicalName(),
+                toJson(flowModel),
+                flowModel.getStartNodeId(),
+                command.featureRequest().trim(),
+                toJson(manifestEntries),
+                runWorkspaceRoot.toString(),
+                identityPort.resolveActorId(user),
+                clockPort.now()
+        );
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void startRun(UUID runId) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() == RunStatus.CREATED) {
+            run = runtimeStepTxService.markRunStarted(runId, clockPort.now());
+        }
+        if (run.getStatus() == RunStatus.RUNNING) {
+            ensureWorkspacePrepared(run);
+            runTickSafely(runId);
+        }
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity resumeRun(UUID runId) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() == RunStatus.CREATED || run.getStatus() == RunStatus.RUNNING) {
+            startRun(runId);
+        }
+        return getRunEntity(runId);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity cancelRun(UUID runId, User user) {
+        return runtimeStepTxService.cancelRun(runId, identityPort.resolveActorId(user));
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void recoverActiveRuns() {
+        List<RunEntity> activeRuns = runRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(RunStatus.RUNNING, RunStatus.WAITING_GATE)
+        );
+        for (RunEntity run : activeRuns) {
+            runtimeStepTxService.appendAudit(run.getId(), null, null, "run_recovered", ActorType.SYSTEM, "runtime", Map.of());
+            if (run.getStatus() == RunStatus.RUNNING) {
+                runTickSafely(run.getId());
+            }
+        }
+    }
+
+    private void runTickSafely(UUID runId) {
+        try {
+            runStepService.processRunStep(runId);
+        } catch (RuntimeException ex) {
+            log.error("runtime tick failed after commit for run_id={}", runId, ex);
+            throw ex;
+        }
+    }
+
+    private void ensureWorkspacePrepared(RunEntity run) {
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
+        Path projectRoot = resolveProjectScopeRoot(runWorkspaceRoot);
+        Path runScopeRoot = resolveRunScopeRoot(runWorkspaceRoot);
+        createDirectories(runWorkspaceRoot);
+
+        boolean checkoutCompleted = workspacePort.exists(projectRoot.resolve(".git"));
+        if (!checkoutCompleted) {
+            Project project = resolveProject(run.getProjectId());
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    null,
+                    null,
+                    "checkout_started",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "repo_url", redactRepoUrl(project.getRepoUrl()),
+                            "target_branch", run.getTargetBranch(),
+                            "project_root", projectRoot.toString()
+                    )
+            );
+            try {
+                CommandResult checkoutResult = runGitCheckout(run, projectRoot);
+                runtimeStepTxService.appendAudit(
+                        run.getId(),
+                        null,
+                        null,
+                        "checkout_finished",
+                        ActorType.SYSTEM,
+                        "runtime",
+                        mapOf(
+                                "project_root", projectRoot.toString(),
+                                "target_branch", run.getTargetBranch(),
+                                "head", readGitHead(run, projectRoot),
+                                "stdout_path", checkoutResult.stdoutPath(),
+                                "stderr_path", checkoutResult.stderrPath(),
+                                "stdout", truncate(checkoutResult.stdout(), 12000),
+                                "stderr", truncate(checkoutResult.stderr(), 12000)
+                        )
+                );
+            } catch (NodeFailureException ex) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("error_code", ex.errorCode);
+                payload.put("error_message", ex.getMessage());
+                if (ex.details != null && !ex.details.isEmpty()) {
+                    payload.putAll(ex.details);
+                }
+                runtimeStepTxService.appendAudit(
+                        run.getId(),
+                        null,
+                        null,
+                        "checkout_failed",
+                        ActorType.SYSTEM,
+                        "runtime",
+                        payload
+                );
+                runtimeStepTxService.failRun(run.getId(), ex.errorCode, ex.getMessage());
+                throw ex;
+            }
+        }
+
+        createDirectories(runScopeRoot.resolve("context"));
+        createDirectories(runScopeRoot.resolve("nodes"));
+        createDirectories(runScopeRoot.resolve("logs"));
+
+        writeContextManifest(
+                runScopeRoot,
+                run.getFeatureRequest(),
+                parseContextManifestEntries(run.getContextFileManifestJson())
+        );
+
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                null,
+                null,
+                "workspace_prepared",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "workspace_root", runWorkspaceRoot.toString(),
+                        "project_root", projectRoot.toString(),
+                        "run_scope_root", runScopeRoot.toString()
+                )
+        );
+    }
+
+    private CommandResult runGitCheckout(RunEntity run, Path projectRoot) {
+        Project project = resolveProject(run.getProjectId());
+        Path runWorkspaceRoot = resolveRunWorkspaceRoot(run);
+        Path workspaceParent = runWorkspaceRoot.getParent() == null
+                ? runWorkspaceRoot
+                : runWorkspaceRoot.getParent();
+        Path checkoutStdout = workspaceParent.resolve(run.getId() + ".checkout.stdout.log");
+        Path checkoutStderr = workspaceParent.resolve(run.getId() + ".checkout.stderr.log");
+        String repoUrl = trimToNull(project.getRepoUrl());
+        if (repoUrl == null) {
+            throw new NodeFailureException(
+                    "CHECKOUT_FAILED",
+                    "Project repo_url is empty",
+                    mapOf(
+                            "target_branch", run.getTargetBranch(),
+                            "project_root", projectRoot.toString()
+                    )
+            );
+        }
+        if (workspacePort.exists(projectRoot)) {
+            deleteDirectoryContents(projectRoot);
+            try {
+                workspacePort.deleteIfExists(projectRoot);
+            } catch (IOException ex) {
+                throw new NodeFailureException("CHECKOUT_FAILED", "Failed to clean project root before checkout");
+            }
+        }
+        createDirectories(runWorkspaceRoot);
+        try {
+            CommandResult cloneResult = executeGitCommand(
+                    run.getId(),
+                    List.of(
+                            "git",
+                            "clone",
+                            "--branch",
+                            run.getTargetBranch(),
+                            "--single-branch",
+                            repoUrl,
+                            projectRoot.toString()
+                    ),
+                    runWorkspaceRoot,
+                    settingsService.getAiTimeoutSeconds(),
+                    checkoutStdout,
+                    checkoutStderr
+            );
+            if (cloneResult.exitCode() != 0) {
+                String stderr = trimToNull(cloneResult.stderr());
+                String reason = stderr == null ? "unknown git error" : truncate(stderr, 2000);
+                throw new NodeFailureException(
+                        "CHECKOUT_FAILED",
+                        "git clone failed with exit code " + cloneResult.exitCode()
+                                + "; reason: " + reason
+                                + "; stderr_log=" + cloneResult.stderrPath()
+                                + "; stdout_log=" + cloneResult.stdoutPath(),
+                        mapOf(
+                                "repo_url", redactRepoUrl(repoUrl),
+                                "target_branch", run.getTargetBranch(),
+                                "project_root", projectRoot.toString(),
+                                "exit_code", cloneResult.exitCode(),
+                                "stdout_path", cloneResult.stdoutPath(),
+                                "stderr_path", cloneResult.stderrPath(),
+                                "stdout", truncate(cloneResult.stdout(), 12000),
+                                "stderr", truncate(cloneResult.stderr(), 12000)
+                        )
+                );
+            }
+            ensureRuntimeMetadataIgnored(projectRoot);
+            return cloneResult;
+        } catch (IOException ex) {
+            throw new NodeFailureException(
+                    "CHECKOUT_FAILED",
+                    "git clone I/O failure: " + ex.getMessage()
+                            + "; stderr_log=" + checkoutStderr
+                            + "; stdout_log=" + checkoutStdout,
+                    mapOf(
+                            "repo_url", redactRepoUrl(repoUrl),
+                            "target_branch", run.getTargetBranch(),
+                            "project_root", projectRoot.toString(),
+                            "stdout_path", checkoutStdout.toString(),
+                            "stderr_path", checkoutStderr.toString()
+                    )
+            );
+        }
+    }
+
+    private String readGitHead(RunEntity run, Path projectRoot) {
+        Path runScopeRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run));
+        Path stdoutPath = runScopeRoot.resolve("logs").resolve("git-head.stdout.log");
+        Path stderrPath = runScopeRoot.resolve("logs").resolve("git-head.stderr.log");
+        try {
+            CommandResult result = executeGitCommand(
+                    null,
+                    List.of("git", "-C", projectRoot.toString(), "rev-parse", "HEAD"),
+                    projectRoot,
+                    30,
+                    stdoutPath,
+                    stderrPath
+            );
+            if (result.exitCode() != 0) {
+                return null;
+            }
+            return trimToNull(result.stdout());
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
+    private CommandResult executeGitCommand(
+            UUID runId,
+            List<String> command,
+            Path workingDirectory,
+            int timeoutSeconds,
+            Path stdoutPath,
+            Path stderrPath
+    ) throws IOException {
+        ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+                new ProcessExecutionPort.ProcessExecutionRequest(
+                        runId,
+                        command,
+                        workingDirectory,
+                        timeoutSeconds,
+                        stdoutPath,
+                        stderrPath,
+                        true
+                )
+        );
+        return new CommandResult(
+                result.exitCode(),
+                result.stdout(),
+                result.stderr(),
+                result.stdoutPath(),
+                result.stderrPath()
+        );
+    }
+
+    private void validateCreateRunCommand(CreateRunCommand command) {
+        if (command == null) {
+            throw new ValidationException("Request body is required");
+        }
+        if (command.projectId() == null) {
+            throw new ValidationException("project_id is required");
+        }
+        if (command.flowCanonicalName() == null || command.flowCanonicalName().isBlank()) {
+            throw new ValidationException("flow_canonical_name is required");
+        }
+        if (command.featureRequest() == null || command.featureRequest().isBlank()) {
+            throw new ValidationException("feature_request is required");
+        }
+        if (command.targetBranch() == null || command.targetBranch().isBlank()) {
+            throw new ValidationException("target_branch is required");
+        }
+    }
+
+    private RunEntity getRunEntity(UUID runId) {
+        return runRepository.findById(runId)
+                .orElseThrow(() -> new NotFoundException("Run not found: " + runId));
+    }
+
+    private Project resolveProject(UUID projectId) {
+        return projectRepository.findById(projectId)
+                .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
+    }
+
+    private Path resolveRunWorkspaceRoot(String workspaceRoot, UUID runId) {
+        return Path.of(workspaceRoot).resolve(runId.toString()).toAbsolutePath().normalize();
+    }
+
+    private Path resolveProjectScopeRoot(Path runWorkspaceRoot) {
+        return runWorkspaceRoot.toAbsolutePath().normalize();
+    }
+
+    private Path resolveRunScopeRoot(Path runWorkspaceRoot) {
+        return runWorkspaceRoot.resolve(".hgsdlc").toAbsolutePath().normalize();
+    }
+
+    private Path resolveRunWorkspaceRoot(RunEntity run) {
+        String storedRoot = trimToNull(run.getWorkspaceRoot());
+        if (storedRoot != null) {
+            return Path.of(storedRoot).toAbsolutePath().normalize();
+        }
+        return resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), run.getId());
+    }
+
+    private void writeContextManifest(
+            Path runScopeRoot,
+            String featureRequest,
+            List<String> contextFileManifest
+    ) {
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("context_file_manifest", contextFileManifest);
+        manifest.put("feature_request", featureRequest);
+        writeFile(runScopeRoot.resolve("context").resolve("context-manifest.json"), toJson(manifest).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void writeFile(Path path, byte[] bytes) {
+        createDirectories(path.getParent());
+        try {
+            workspacePort.write(path, bytes);
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to write file: " + path);
+        }
+    }
+
+    private void createDirectories(Path path) {
+        try {
+            workspacePort.createDirectories(path);
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to create directories: " + path);
+        }
+    }
+
+    private void deleteDirectoryContents(Path directory) {
+        if (directory == null || !workspacePort.exists(directory)) {
+            return;
+        }
+        try {
+            for (Path path : workspacePort.listDescendantsReverse(directory)) {
+                workspacePort.deleteIfExists(path);
+            }
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to clean directory: " + directory);
+        }
+    }
+
+    private void ensureRuntimeMetadataIgnored(Path projectRoot) {
+        Path excludePath = projectRoot.resolve(".git").resolve("info").resolve("exclude");
+        if (!workspacePort.exists(excludePath)) {
+            return;
+        }
+        try {
+            String content = workspacePort.readString(excludePath, StandardCharsets.UTF_8);
+            List<String> managedPatterns = new ArrayList<>(List.of(
+                    ".hgsdlc",
+                    ".hgsdlc/",
+                    ".hgsdlc/*",
+                    "!.hgsdlc/nodes/",
+                    "!.hgsdlc/nodes/**",
+                    ".hgsdlc/nodes/**/*.log",
+                    ".hgsdlc/nodes/**/prompt.md",
+                    ".qwen/",
+                    ".claude/",
+                    ".cursor/"
+            ));
+            String runtimeAgent = normalize(trimToNull(settingsService.getRuntimeCodingAgent()));
+            if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
+                managedPatterns.add("." + runtimeAgent + "/");
+            }
+
+            List<String> preservedLines = content.lines()
+                    .filter((line) -> !managedPatterns.contains(line.trim()))
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+            List<String> desiredManagedPatterns = new ArrayList<>();
+            desiredManagedPatterns.add(".hgsdlc/*");
+            desiredManagedPatterns.add("!.hgsdlc/nodes/");
+            desiredManagedPatterns.add("!.hgsdlc/nodes/**");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/*.log");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/prompt.md");
+            if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
+                desiredManagedPatterns.add("." + runtimeAgent + "/");
+            }
+
+            StringBuilder updated = new StringBuilder();
+            for (String line : preservedLines) {
+                updated.append(line).append('\n');
+            }
+            if (updated.length() > 0) {
+                updated.append('\n');
+            }
+            for (String pattern : desiredManagedPatterns) {
+                updated.append(pattern).append('\n');
+            }
+            workspacePort.writeString(
+                    excludePath,
+                    updated.toString(),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.CREATE
+            );
+        } catch (IOException ex) {
+            log.warn("Failed to update git exclude for runtime metadata at {}", excludePath, ex);
+        }
+    }
+
+    private String normalizeBranch(String branch) {
+        String normalized = trimToNull(branch);
+        if (normalized == null) {
+            return "main";
+        }
+        return normalized;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new ValidationException("Failed to serialize JSON payload");
+        }
+    }
+
+    private List<String> parseContextManifestEntries(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<?> values = objectMapper.readValue(rawJson, List.class);
+            List<String> result = new ArrayList<>();
+            for (Object value : values) {
+                if (value instanceof String stringValue && !stringValue.isBlank()) {
+                    result.add(stringValue);
+                }
+            }
+            return result;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private Map<String, Object> mapOf(Object... keyValues) {
+        if (keyValues == null || keyValues.length % 2 != 0) {
+            throw new ValidationException("Invalid payload map");
+        }
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            Object key = keyValues[i];
+            if (!(key instanceof String keyString)) {
+                throw new ValidationException("Invalid payload map key");
+            }
+            map.put(keyString, keyValues[i + 1]);
+        }
+        return map;
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+    }
+
+    private String redactRepoUrl(String repoUrl) {
+        if (repoUrl == null || repoUrl.isBlank()) {
+            return repoUrl;
+        }
+        return repoUrl.replaceFirst("://([^/@]+)@", "://***@");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
+    }
+
+    private record CommandResult(
+            int exitCode,
+            String stdout,
+            String stderr,
+            String stdoutPath,
+            String stderrPath
+    ) {}
+
+    private static class NodeFailureException extends RuntimeException {
+        private final String errorCode;
+        private final Map<String, Object> details;
+
+        private NodeFailureException(String errorCode, String message) {
+            this(errorCode, message, Map.of());
+        }
+
+        private NodeFailureException(String errorCode, String message, Map<String, Object> details) {
+            super(message);
+            this.errorCode = errorCode;
+            this.details = details == null ? Map.of() : details;
+        }
+    }
+}

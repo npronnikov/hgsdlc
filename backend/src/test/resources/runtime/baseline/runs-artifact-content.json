@@ -1,0 +1,7 @@
+{
+  "artifact_key" : "README",
+  "artifact_version_id" : "<uuid>",
+  "content" : "# Runtime integration test\nsnapshot line\n",
+  "path" : "<path>/workspace/<uuid>/README.md",
+  "run_id" : "<uuid>"
+}

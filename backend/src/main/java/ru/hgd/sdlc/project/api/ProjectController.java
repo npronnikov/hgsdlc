@@ -17,17 +17,17 @@ import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.project.application.ProjectService;
-import ru.hgd.sdlc.runtime.application.RuntimeService;
+import ru.hgd.sdlc.runtime.application.service.RuntimeQueryService;
 
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectController {
     private final ProjectService projectService;
-    private final RuntimeService runtimeService;
+    private final RuntimeQueryService runtimeQueryService;
 
-    public ProjectController(ProjectService projectService, RuntimeService runtimeService) {
+    public ProjectController(ProjectService projectService, RuntimeQueryService runtimeQueryService) {
         this.projectService = projectService;
-        this.runtimeService = runtimeService;
+        this.runtimeQueryService = runtimeQueryService;
     }
 
     @GetMapping
@@ -64,7 +64,7 @@ public class ProjectController {
             @RequestParam(name = "limit", defaultValue = "10") int limit
     ) {
         projectService.get(projectId);
-        return runtimeService.listRunsByProject(projectId, limit).stream()
+        return runtimeQueryService.findRunsByProject(projectId, limit).stream()
                 .map((run) -> new RunSummaryResponse(
                         run.getId(),
                         run.getStatus().name().toLowerCase(),

@@ -1,0 +1,26 @@
+{
+  "gate_id" : "<uuid>",
+  "gate_kind" : "human_approval",
+  "gate_status" : "awaiting_decision",
+  "git_changes" : [ {
+    "added" : 1,
+    "is_binary" : false,
+    "path" : "README.md",
+    "removed" : 0,
+    "status" : "modified"
+  }, {
+    "added" : 22,
+    "is_binary" : false,
+    "path" : ".hgsdlc/nodes/implement-change/attempt-1/summary.md",
+    "removed" : 0,
+    "status" : "untracked"
+  } ],
+  "git_summary" : {
+    "added_lines" : 23,
+    "files_changed" : 2,
+    "removed_lines" : 0,
+    "status_label" : "Ready for review"
+  },
+  "run_id" : "<uuid>",
+  "status_label" : "Ready for review"
+}

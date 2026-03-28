@@ -19,7 +19,7 @@ import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
-import ru.hgd.sdlc.runtime.application.RuntimeService;
+import ru.hgd.sdlc.runtime.application.service.RuntimeQueryService;
 import ru.hgd.sdlc.runtime.infrastructure.AuditEventRepository;
 import ru.hgd.sdlc.runtime.infrastructure.GateInstanceRepository;
 import ru.hgd.sdlc.runtime.infrastructure.RunRepository;
@@ -42,7 +42,7 @@ public class OverviewService {
     private final AuditEventRepository auditEventRepository;
     private final ProjectRepository projectRepository;
     private final FlowService flowService;
-    private final RuntimeService runtimeService;
+    private final RuntimeQueryService runtimeQueryService;
 
     public OverviewService(
             RunRepository runRepository,
@@ -50,14 +50,14 @@ public class OverviewService {
             AuditEventRepository auditEventRepository,
             ProjectRepository projectRepository,
             FlowService flowService,
-            RuntimeService runtimeService
+            RuntimeQueryService runtimeQueryService
     ) {
         this.runRepository = runRepository;
         this.gateInstanceRepository = gateInstanceRepository;
         this.auditEventRepository = auditEventRepository;
         this.projectRepository = projectRepository;
         this.flowService = flowService;
-        this.runtimeService = runtimeService;
+        this.runtimeQueryService = runtimeQueryService;
     }
 
     @Transactional(readOnly = true)
@@ -85,7 +85,7 @@ public class OverviewService {
                 ))
                 .toList();
 
-        List<GateInboxItem> gateInbox = take(runtimeService.listInboxGates(user), 5).stream()
+        List<GateInboxItem> gateInbox = take(runtimeQueryService.findGateInbox(user), 5).stream()
                 .map((gate) -> new GateInboxItem(
                         gate.getId(),
                         gate.getRunId(),

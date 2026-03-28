@@ -1,0 +1,52 @@
+{
+  "created_at" : "<instant>",
+  "created_by" : "test",
+  "current_gate" : {
+    "assignee_role" : "FLOW_CONFIGURATOR",
+    "closed_at" : null,
+    "gate_id" : "<uuid>",
+    "gate_kind" : "human_approval",
+    "node_execution_id" : "<uuid>",
+    "node_id" : "review-change",
+    "opened_at" : "<instant>",
+    "payload" : {
+      "git_changes" : [ {
+        "added" : 1,
+        "is_binary" : false,
+        "path" : "README.md",
+        "removed" : 0,
+        "status" : "modified"
+      }, {
+        "added" : 22,
+        "is_binary" : false,
+        "path" : ".hgsdlc/nodes/implement-change/attempt-1/summary.md",
+        "removed" : 0,
+        "status" : "untracked"
+      } ],
+      "git_summary" : {
+        "added_lines" : 23,
+        "files_changed" : 2,
+        "removed_lines" : 0,
+        "status_label" : "Ready for review"
+      },
+      "rework_discard_available" : false,
+      "user_instructions" : "Review snapshot changes."
+    },
+    "resource_version" : 0,
+    "run_id" : "<uuid>",
+    "status" : "awaiting_decision"
+  },
+  "current_node_id" : "review-change",
+  "error_code" : null,
+  "error_message" : null,
+  "feature_request" : "Snapshot baseline request",
+  "finished_at" : null,
+  "flow_canonical_name" : "baseline-flow@1.0",
+  "project_id" : "<uuid>",
+  "resource_version" : 3,
+  "run_id" : "<uuid>",
+  "started_at" : "<instant>",
+  "status" : "waiting_gate",
+  "target_branch" : "main",
+  "workspace_root" : "<path>/workspace/<uuid>"
+}
