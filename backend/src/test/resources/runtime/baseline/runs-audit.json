@@ -316,12 +316,50 @@
   "actor_type" : "system",
   "event_id" : "<uuid>",
   "event_time" : "<instant>",
-  "event_type" : "run_completed",
+  "event_type" : "run_waiting_publish",
   "gate_id" : null,
   "node_execution_id" : "<uuid>",
+  "payload" : {
+    "publish_mode" : "local",
+    "work_branch" : "run/<uuid>"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 22
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "publish_started",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : { },
+  "run_id" : "<uuid>",
+  "sequence_no" : 23
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "publish_commit_succeeded",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "publish_commit_sha" : "<hex>"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 24
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "run_completed",
+  "gate_id" : null,
+  "node_execution_id" : null,
   "payload" : {
     "terminal_status" : "completed"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 22
+  "sequence_no" : 25
 } ]

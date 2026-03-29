@@ -627,8 +627,13 @@ public class RuntimeStepTxService {
 
         run.setStatus(RunStatus.WAITING_PUBLISH);
         run.setPublishStatus(RunPublishStatus.PENDING);
-        run.setPushStatus(RunPublishStatus.PENDING);
-        run.setPrStatus(RunPublishStatus.PENDING);
+        if (run.getPublishMode() == RunPublishMode.PR) {
+            run.setPushStatus(RunPublishStatus.PENDING);
+            run.setPrStatus(RunPublishStatus.PENDING);
+        } else {
+            run.setPushStatus(RunPublishStatus.SKIPPED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
+        }
         run.setPublishErrorStep(null);
         run.setErrorCode(null);
         run.setErrorMessage(null);
@@ -657,11 +662,16 @@ public class RuntimeStepTxService {
         }
         run.setStatus(RunStatus.WAITING_PUBLISH);
         run.setPublishStatus(RunPublishStatus.RUNNING);
-        if (run.getPushStatus() == RunPublishStatus.FAILED) {
-            run.setPushStatus(RunPublishStatus.PENDING);
-        }
-        if (run.getPrStatus() == RunPublishStatus.FAILED) {
-            run.setPrStatus(RunPublishStatus.PENDING);
+        if (run.getPublishMode() == RunPublishMode.PR) {
+            if (run.getPushStatus() == RunPublishStatus.FAILED) {
+                run.setPushStatus(RunPublishStatus.PENDING);
+            }
+            if (run.getPrStatus() == RunPublishStatus.FAILED) {
+                run.setPrStatus(RunPublishStatus.PENDING);
+            }
+        } else {
+            run.setPushStatus(RunPublishStatus.SKIPPED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
         }
         run.setPublishErrorStep(null);
         run.setErrorCode(null);
@@ -685,6 +695,23 @@ public class RuntimeStepTxService {
                 ActorType.SYSTEM,
                 "runtime",
                 mapOf("publish_commit_sha", trimToNull(publishCommitSha))
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishCommitSkipped(UUID runId, String reason) {
+        RunEntity run = getRun(runId);
+        run.setPublishStatus(RunPublishStatus.RUNNING);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "publish_commit_skipped",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf("reason", trimToNull(reason))
         );
         return run;
     }
@@ -765,8 +792,13 @@ public class RuntimeStepTxService {
         }
         run.setStatus(RunStatus.COMPLETED);
         run.setPublishStatus(RunPublishStatus.SUCCEEDED);
-        run.setPushStatus(RunPublishStatus.SUCCEEDED);
-        run.setPrStatus(RunPublishStatus.SUCCEEDED);
+        if (run.getPublishMode() == RunPublishMode.PR) {
+            run.setPushStatus(RunPublishStatus.SUCCEEDED);
+            run.setPrStatus(RunPublishStatus.SUCCEEDED);
+        } else {
+            run.setPushStatus(RunPublishStatus.SKIPPED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
+        }
         run.setPublishErrorStep(null);
         run.setErrorCode(null);
         run.setErrorMessage(null);

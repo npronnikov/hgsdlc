@@ -24,8 +24,6 @@ import PromptPackage from './pages/PromptPackage.jsx';
 import Artifacts from './pages/Artifacts.jsx';
 import DeltaSummary from './pages/DeltaSummary.jsx';
 import Versions from './pages/Versions.jsx';
-import HumanApprovalGateMock from './pages/HumanApprovalGateMock.jsx';
-import HumanInputGateMock from './pages/HumanInputGateMock.jsx';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 
 function RequireAuth({ children }) {
@@ -80,8 +78,6 @@ export default function App() {
             <Route path="gate-input" element={<HumanGate />} />
             <Route path="gate-approval" element={<HumanGate />} />
             <Route path="human-gate" element={<HumanGate />} />
-            <Route path="human-approval-gate-mock" element={<HumanApprovalGateMock />} />
-            <Route path="human-input-gate-mock" element={<HumanInputGateMock />} />
             <Route path="audit-runtime" element={<AuditRuntime />} />
             <Route path="audit-agent" element={<AuditAgent />} />
             <Route path="audit-review" element={<AuditReview />} />

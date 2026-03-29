@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -82,11 +83,8 @@ public class RunPublishService {
         if (run.getStatus() == RunStatus.COMPLETED) {
             return run;
         }
-        if (run.getPublishMode() != RunPublishMode.PR) {
-            throw new ConflictException("Retry publish is supported only for publish_mode=pr");
-        }
         if (run.getStatus() != RunStatus.PUBLISH_FAILED && run.getStatus() != RunStatus.WAITING_PUBLISH) {
-            throw new ConflictException("Retry publish is allowed only for PUBLISH_FAILED or WAITING_PUBLISH");
+            throw new ConflictException("Retry publish is allowed only for PUBLISH_FAILED or WAITING_PUBLISH runs");
         }
         runtimeStepTxService.resetPublishForRetry(runId, actorId);
         dispatchPublish(runId);
@@ -107,9 +105,6 @@ public class RunPublishService {
 
     private void publishRunInternal(UUID runId) {
         RunEntity run = getRun(runId);
-        if (run.getPublishMode() != RunPublishMode.PR) {
-            return;
-        }
         if (run.getStatus() == RunStatus.COMPLETED || run.getStatus() == RunStatus.CANCELLED || run.getStatus() == RunStatus.FAILED) {
             return;
         }
@@ -120,6 +115,12 @@ public class RunPublishService {
         runtimeStepTxService.markPublishRunning(runId);
         try {
             run = getRun(runId);
+            Path projectRoot = resolveProjectRoot(run);
+            if (run.getPublishMode() == RunPublishMode.LOCAL && !isGitWorkspace(projectRoot)) {
+                runtimeStepTxService.markPublishCommitSkipped(runId, "workspace_not_git_repository");
+                runtimeStepTxService.markPublishCompleted(runId);
+                return;
+            }
             ensureOnWorkBranch(run);
             configureLocalGitIdentity(run);
 
@@ -128,16 +129,18 @@ public class RunPublishService {
                 runtimeStepTxService.markPublishCommitSucceeded(runId, publishCommitSha);
             }
 
-            run = getRun(runId);
-            if (run.getPushStatus() != RunPublishStatus.SUCCEEDED) {
-                pushWorkBranch(run);
-                runtimeStepTxService.markPublishPushSucceeded(runId);
-            }
+            if (run.getPublishMode() == RunPublishMode.PR) {
+                run = getRun(runId);
+                if (run.getPushStatus() != RunPublishStatus.SUCCEEDED) {
+                    pushWorkBranch(run);
+                    runtimeStepTxService.markPublishPushSucceeded(runId);
+                }
 
-            run = getRun(runId);
-            if (run.getPrStatus() != RunPublishStatus.SUCCEEDED) {
-                PrResult pr = createOrFindPullRequest(run);
-                runtimeStepTxService.markPublishPrSucceeded(runId, pr.url(), pr.number());
+                run = getRun(runId);
+                if (run.getPrStatus() != RunPublishStatus.SUCCEEDED) {
+                    PrResult pr = createOrFindPullRequest(run);
+                    runtimeStepTxService.markPublishPrSucceeded(runId, pr.url(), pr.number());
+                }
             }
 
             runtimeStepTxService.markPublishCompleted(runId);
@@ -166,8 +169,8 @@ public class RunPublishService {
         if (localUser == null || localEmail == null) {
             throw new PublishException(
                     "commit",
-                    "LOCAL_AUTH_MISSING",
-                    "local_git_username and local_git_email must be configured for PR publishing"
+                    "LOCAL_AUTH_INVALID",
+                    "runtime local git identity is empty"
             );
         }
         Path root = resolveProjectRoot(run);
@@ -466,6 +469,14 @@ public class RunPublishService {
 
     private Path resolvePublishOperationRoot(RunEntity run) {
         return resolveRunWorkspaceRoot(run).resolve(".hgsdlc").resolve(".runtime").resolve("publish").toAbsolutePath().normalize();
+    }
+
+    private boolean isGitWorkspace(Path root) {
+        if (root == null || !Files.isDirectory(root)) {
+            return false;
+        }
+        Path gitPath = root.resolve(".git");
+        return Files.exists(gitPath);
     }
 
     private String trimToNull(String value) {

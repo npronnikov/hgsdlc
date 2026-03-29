@@ -372,12 +372,8 @@ public class RunStepService {
             runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), RunStatus.FAILED);
             return false;
         }
-        if (run.getPublishMode() == RunPublishMode.PR) {
-            runtimeStepTxService.markRunWaitingPublish(run.getId(), execution.getId(), node.getId());
-            runPublishService.dispatchPublish(run.getId());
-            return false;
-        }
-        runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), RunStatus.COMPLETED);
+        runtimeStepTxService.markRunWaitingPublish(run.getId(), execution.getId(), node.getId());
+        runPublishService.dispatchPublish(run.getId());
         return false;
     }
 
@@ -949,6 +945,7 @@ public class RunStepService {
         Path operationRoot = resolveNodeExecutionRoot(run, execution);
         Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         String checkpointCommitMessage = "checkpoint:" + node.getId() + ":" + execution.getId();
+        configureCheckpointGitIdentity(run, execution, workingDirectory, operationRoot);
 
         CommandResult addResult = runGitCommand(
                 run,
@@ -1017,6 +1014,44 @@ public class RunStepService {
                         "stderr", truncate(commitResult.stderr(), 4000)
                 )
         );
+    }
+
+    private void configureCheckpointGitIdentity(
+            RunEntity run,
+            NodeExecutionEntity execution,
+            Path workingDirectory,
+            Path operationRoot
+    ) {
+        SettingsService.RuntimeSettings settings = settingsService.getRuntimeSettings();
+        String localUser = trimToNull(settings.localGitUsername());
+        String localEmail = trimToNull(settings.localGitEmail());
+        if (localUser == null || localEmail == null) {
+            throw new NodeFailureException(
+                    "CHECKPOINT_CREATION_FAILED",
+                    "Runtime local git identity is empty",
+                    false
+            );
+        }
+
+        CommandResult configNameResult = runGitCommand(
+                run,
+                execution,
+                "checkpoint_config_user_name",
+                List.of("git", "config", "user.name", localUser),
+                workingDirectory,
+                operationRoot
+        );
+        ensureGitCommandSuccess("checkpoint config user.name", configNameResult);
+
+        CommandResult configEmailResult = runGitCommand(
+                run,
+                execution,
+                "checkpoint_config_user_email",
+                List.of("git", "config", "user.email", localEmail),
+                workingDirectory,
+                operationRoot
+        );
+        ensureGitCommandSuccess("checkpoint config user.email", configEmailResult);
     }
 
     private CommandResult runGitCommand(

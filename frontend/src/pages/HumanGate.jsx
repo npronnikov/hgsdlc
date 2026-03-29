@@ -201,6 +201,14 @@ export default function HumanGate() {
   const diffEditorRef = useRef(null);
   const modifiedEditorRef = useRef(null);
   const reworkDecorationIdsRef = useRef([]);
+  const diffOriginalModelPath = useMemo(
+    () => `inmemory://human-gate/original/${runId || 'run'}/${gateId || 'gate'}`,
+    [runId, gateId]
+  );
+  const diffModifiedModelPath = useMemo(
+    () => `inmemory://human-gate/modified/${runId || 'run'}/${gateId || 'gate'}`,
+    [runId, gateId]
+  );
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
@@ -333,7 +341,10 @@ export default function HumanGate() {
       return;
     }
     const model = editor.getModel();
-    if (!model || !isApproval || !selectedPath) {
+    if (!model || (typeof model.isDisposed === 'function' && model.isDisposed())) {
+      return;
+    }
+    if (!isApproval || !selectedPath) {
       reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
       return;
     }
@@ -370,6 +381,10 @@ export default function HumanGate() {
   useEffect(() => () => {
     const editor = modifiedEditorRef.current;
     if (!editor) {
+      return;
+    }
+    const model = editor.getModel();
+    if (!model || (typeof model.isDisposed === 'function' && model.isDisposed())) {
       return;
     }
     reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
@@ -603,22 +618,29 @@ export default function HumanGate() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={6}>
-          <Card title="Changed Files" loading={loading} className="human-approval-file-list">
-            <Tree
-              showLine={{ showLeafIcon: false }}
-              blockNode
-              treeData={treeData}
-              defaultExpandAll
-              switcherIcon={({ isLeaf, expanded }) => (isLeaf ? null : (expanded ? '-' : '+'))}
-              selectedKeys={selectedPath ? [selectedPath] : []}
-              onSelect={(keys, info) => {
-                if (!info?.node?.isLeaf) {
-                  return;
-                }
-                setSelectedPath(String(keys[0] || ''));
-              }}
-            />
-          </Card>
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <Card title="Node instruction" className="human-gate-node-instruction-card">
+              <pre className="human-gate-main-instruction-content">
+                {userInstructions || '—'}
+              </pre>
+            </Card>
+            <Card title="Changed Files" loading={loading} className="human-approval-file-list">
+              <Tree
+                showLine={{ showLeafIcon: false }}
+                blockNode
+                treeData={treeData}
+                defaultExpandAll
+                switcherIcon={({ isLeaf, expanded }) => (isLeaf ? null : (expanded ? '-' : '+'))}
+                selectedKeys={selectedPath ? [selectedPath] : []}
+                onSelect={(keys, info) => {
+                  if (!info?.node?.isLeaf) {
+                    return;
+                  }
+                  setSelectedPath(String(keys[0] || ''));
+                }}
+              />
+            </Card>
+          </Space>
         </Col>
 
         <Col xs={24} lg={18}>
@@ -667,6 +689,10 @@ export default function HumanGate() {
                   height="520px"
                   beforeMount={configureMonacoThemes}
                   theme={monacoTheme}
+                  originalModelPath={diffOriginalModelPath}
+                  modifiedModelPath={diffModifiedModelPath}
+                  keepCurrentOriginalModel
+                  keepCurrentModifiedModel
                   original={originalContent}
                   modified={modifiedContent}
                   language={selectedLanguage}
@@ -674,6 +700,22 @@ export default function HumanGate() {
                     diffEditorRef.current = editorInstance;
                     modifiedEditorRef.current = editorInstance.getModifiedEditor();
                     applyReworkDecorations();
+                  }}
+                  onUnmount={(editorInstance) => {
+                    try {
+                      const model = editorInstance?.getModel?.();
+                      if (model) {
+                        editorInstance.setModel(null);
+                        model.original?.dispose?.();
+                        model.modified?.dispose?.();
+                      }
+                    } catch (_) {
+                      // ignore dispose errors during unmount
+                    } finally {
+                      diffEditorRef.current = null;
+                      modifiedEditorRef.current = null;
+                      reworkDecorationIdsRef.current = [];
+                    }
                   }}
                   options={{
                     readOnly: true,
@@ -762,20 +804,24 @@ export default function HumanGate() {
       >
         <div className="human-gate-drawer-content">
           <div className="human-gate-drawer-body">
-            <Card size="small" className="human-gate-drawer-info">
-              <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                <Text className="muted">Current action</Text>
-                <Text>
-                  {activeActionPanel === 'approve'
-                    ? 'You are approving this human gate.'
-                    : 'You are requesting rework for this human gate.'}
+            <div className="human-gate-drawer-hero">
+              <Text className="human-gate-drawer-kicker">Current action</Text>
+              <Text className="human-gate-drawer-title">
+                {activeActionPanel === 'approve'
+                  ? 'You are approving this human gate.'
+                  : 'You are requesting rework for this human gate.'}
+              </Text>
+              {activeActionPanel === 'rework' && keepChanges && (
+                <Text className="human-gate-drawer-alert is-danger">
+                  Attention! All current changes will be committed; next gates will show only requested modifications.
                 </Text>
-                <Text className="muted">Node instruction</Text>
-                <pre className="code-block human-gate-instruction" style={{ margin: 0, maxHeight: 180, overflow: 'auto' }}>
-                  {userInstructions || '—'}
-                </pre>
-              </Space>
-            </Card>
+              )}
+              {activeActionPanel === 'rework' && !keepChanges && (
+                <Text className="human-gate-drawer-alert is-warning">
+                  Attention! Changes will be rolled back to the latest checkpoint before rework.
+                </Text>
+              )}
+            </div>
 
             {activeActionPanel === 'approve' && (
               <Space direction="vertical" size={12} style={{ width: '100%' }}>

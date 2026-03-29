@@ -17,7 +17,17 @@ import {
   Typography,
   message,
 } from 'antd';
-import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined, SyncOutlined } from '@ant-design/icons';
+import {
+  BranchesOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloudUploadOutlined,
+  CloseCircleOutlined,
+  LinkOutlined,
+  LoadingOutlined,
+  MinusCircleOutlined,
+  SyncOutlined,
+} from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -76,6 +86,77 @@ function formatDate(value) {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(new Date(value));
+}
+
+function shortSha(value) {
+  if (!value) {
+    return '—';
+  }
+  return String(value).slice(0, 10);
+}
+
+function publishStageClass(status) {
+  if (status === 'succeeded') return 'is-success';
+  if (status === 'failed') return 'is-failed';
+  if (status === 'running' || status === 'pending') return 'is-active';
+  if (status === 'skipped') return 'is-muted';
+  return 'is-default';
+}
+
+function publishStageIcon(stageKey, status) {
+  if (status === 'running') return <LoadingOutlined />;
+  if (status === 'pending') return <SyncOutlined />;
+  if (status === 'succeeded') return <CheckCircleOutlined />;
+  if (status === 'failed') return <CloseCircleOutlined />;
+  if (status === 'skipped') return <MinusCircleOutlined />;
+  if (stageKey === 'push') return <CloudUploadOutlined />;
+  if (stageKey === 'pr') return <BranchesOutlined />;
+  return <SyncOutlined />;
+}
+
+function isPublishPhaseVisible(run) {
+  return ['waiting_publish', 'publish_failed', 'completed'].includes(run?.status);
+}
+
+function publishHeadline(run) {
+  if (['created', 'running', 'waiting_gate'].includes(run.status)) {
+    return 'Publish not started yet';
+  }
+  if (['failed', 'cancelled'].includes(run.status)) {
+    return 'Publish skipped';
+  }
+  if (run.publish_status === 'failed') {
+    return 'Publish failed';
+  }
+  if (run.publish_status === 'succeeded' && run.publish_mode === 'pr') {
+    return 'Published with Pull Request';
+  }
+  if (run.publish_status === 'succeeded' && run.publish_mode === 'local') {
+    return 'Published locally';
+  }
+  if (run.publish_status === 'running') {
+    return 'Publishing in progress';
+  }
+  if (run.publish_status === 'pending') {
+    return 'Awaiting publish execution';
+  }
+  return 'Publish pipeline';
+}
+
+function publishSubtitle(run) {
+  if (['created', 'running', 'waiting_gate'].includes(run.status)) {
+    return 'Workflow is still in progress. Publish starts after terminal node.';
+  }
+  if (['failed', 'cancelled'].includes(run.status)) {
+    return 'Run ended before publish phase, so publish pipeline was skipped.';
+  }
+  if (run.publish_mode === 'local') {
+    return 'Runtime prepares a final local commit without pushing branch and without PR.';
+  }
+  if (run.publish_mode === 'pr') {
+    return 'Runtime prepares final commit, pushes work branch and opens pull request.';
+  }
+  return 'Publish mode is not set for this run.';
 }
 
 function formatAuditValue(value) {
@@ -771,6 +852,28 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     return <Card loading={loading} />;
   }
 
+  const publishPhaseVisible = isPublishPhaseVisible(run);
+  const publishStages = [
+    {
+      key: 'publish',
+      label: 'Publish',
+      status: publishPhaseVisible ? run.publish_status : null,
+      hint: run.publish_mode === 'local' ? 'Prepare local final commit' : 'Prepare final release commit',
+    },
+    {
+      key: 'push',
+      label: 'Push',
+      status: publishPhaseVisible ? run.push_status : null,
+      hint: 'Push work branch to remote',
+    },
+    {
+      key: 'pr',
+      label: 'Pull Request',
+      status: publishPhaseVisible ? run.pr_status : null,
+      hint: 'Open pull request to target branch',
+    },
+  ];
+
   return (
     <div>
       <div className="page-header">
@@ -941,25 +1044,115 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                   key: 'publish',
                   label: 'Publish',
                   children: (
-                    <Card>
-                      <Title level={5}>Publish details</Title>
-                      <Descriptions bordered size="small" column={1}>
-                        <Descriptions.Item label="Work branch">{run.work_branch || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="Publish mode">{run.publish_mode || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="PR commit strategy">{run.pr_commit_strategy || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="Publish status">{run.publish_status || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="Push status">{run.push_status || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="PR status">{run.pr_status || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="Publish error step">{run.publish_error_step || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="Final commit SHA">{run.publish_commit_sha || '—'}</Descriptions.Item>
-                        <Descriptions.Item label="PR URL">
-                          {run.pr_url ? (
-                            <a href={run.pr_url} target="_blank" rel="noreferrer">{run.pr_url}</a>
-                          ) : '—'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="PR number">{run.pr_number ?? '—'}</Descriptions.Item>
-                      </Descriptions>
-                    </Card>
+                    <div className="publish-tab-layout">
+                      <Card className="publish-hero-card" bordered={false}>
+                        <div className="publish-hero-head">
+                          <div>
+                            <Text className="publish-eyebrow">Delivery</Text>
+                            <Title level={4} className="publish-hero-title">{publishHeadline(run)}</Title>
+                            <Text type="secondary">{publishSubtitle(run)}</Text>
+                          </div>
+                          <Space wrap size={[8, 8]} className="publish-hero-tags">
+                            <StatusTag value={run.publish_mode} />
+                            {publishPhaseVisible && <StatusTag value={run.publish_status} />}
+                          </Space>
+                        </div>
+                        <Row gutter={[10, 10]} className="publish-meta-grid">
+                          <Col xs={24} md={12} xl={6}>
+                            <div className="publish-meta-card">
+                              <Text className="publish-meta-label">Work branch</Text>
+                              <div className="publish-meta-value mono">{run.work_branch || '—'}</div>
+                            </div>
+                          </Col>
+                          <Col xs={24} md={12} xl={6}>
+                            <div className="publish-meta-card">
+                              <Text className="publish-meta-label">PR strategy</Text>
+                              <div className="publish-meta-value">{run.pr_commit_strategy || '—'}</div>
+                            </div>
+                          </Col>
+                          <Col xs={24} md={12} xl={6}>
+                            <div className="publish-meta-card">
+                              <Text className="publish-meta-label">Final commit</Text>
+                              <div className="publish-meta-value mono">{shortSha(run.publish_commit_sha)}</div>
+                            </div>
+                          </Col>
+                          <Col xs={24} md={12} xl={6}>
+                            <div className="publish-meta-card">
+                              <Text className="publish-meta-label">PR</Text>
+                              <div className="publish-meta-value">
+                                {run.pr_number ? `#${run.pr_number}` : '—'}
+                              </div>
+                            </div>
+                          </Col>
+                        </Row>
+                      </Card>
+
+                      <Row gutter={[10, 10]}>
+                        {publishStages.map((stage) => (
+                          <Col xs={24} lg={8} key={stage.key}>
+                            <div className={`publish-stage-card ${publishStageClass(stage.status)}`}>
+                              <div className="publish-stage-head">
+                                <span className="publish-stage-icon">{publishStageIcon(stage.key, stage.status)}</span>
+                                <div>
+                                  <div className="publish-stage-label">{stage.label}</div>
+                                  <Text className="publish-stage-hint">{stage.hint}</Text>
+                                </div>
+                              </div>
+                              <div className="publish-stage-footer">
+                                {stage.status ? <StatusTag value={stage.status} /> : <Text type="secondary">Not started</Text>}
+                              </div>
+                            </div>
+                          </Col>
+                        ))}
+                      </Row>
+
+                      {run.pr_url && (
+                        <Card size="small" className="publish-link-card">
+                          <Space size={8} wrap>
+                            <LinkOutlined />
+                            <Text strong>Pull request:</Text>
+                            <a href={run.pr_url} target="_blank" rel="noreferrer" className="publish-pr-link">{run.pr_url}</a>
+                          </Space>
+                        </Card>
+                      )}
+
+                      {(run.publish_error_step || run.error_message) && (
+                        <Card size="small" className="publish-error-card">
+                          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                            <Text strong className="publish-error-title">Publish diagnostics</Text>
+                            <Text>
+                              <Text strong>Step:</Text> {run.publish_error_step || '—'}
+                            </Text>
+                            <pre className="code-block publish-error-message">{run.error_message || 'No error message'}</pre>
+                          </Space>
+                        </Card>
+                      )}
+
+                      <Collapse
+                        size="small"
+                        items={[
+                          {
+                            key: 'technical',
+                            label: 'Technical details',
+                            children: (
+                              <Descriptions bordered size="small" column={1}>
+                                <Descriptions.Item label="Work branch">{run.work_branch || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="Publish mode">{run.publish_mode || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="PR commit strategy">{run.pr_commit_strategy || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="Publish error step">{run.publish_error_step || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="Final commit SHA">{run.publish_commit_sha || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="PR URL">
+                                  {run.pr_url ? (
+                                    <a href={run.pr_url} target="_blank" rel="noreferrer">{run.pr_url}</a>
+                                  ) : '—'}
+                                </Descriptions.Item>
+                                <Descriptions.Item label="PR number">{run.pr_number ?? '—'}</Descriptions.Item>
+                              </Descriptions>
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
                   ),
                 },
                 {

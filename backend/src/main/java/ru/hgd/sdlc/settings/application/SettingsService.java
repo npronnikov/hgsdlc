@@ -76,6 +76,8 @@ public class SettingsService {
     public static final String CATALOG_GIT_PASSWORD_KEY = "catalog.git.password_or_pat";
     public static final String CATALOG_LOCAL_GIT_USERNAME_KEY = "catalog.local_git.username";
     public static final String CATALOG_LOCAL_GIT_EMAIL_KEY = "catalog.local_git.email";
+    public static final String DEFAULT_LOCAL_GIT_USERNAME = "hgsdlc";
+    public static final String DEFAULT_LOCAL_GIT_EMAIL = "hgsdlc@sdlc.com";
     private static final String DEFAULT_WORKSPACE_ROOT = "/tmp/workspace";
     private static final String DEFAULT_CODING_AGENT = "qwen";
     private static final int DEFAULT_AI_TIMEOUT_SECONDS = 900;
@@ -234,8 +236,8 @@ public class SettingsService {
                 certKey.map(SystemSetting::getSettingValue).orElse(""),
                 gitUser.map(SystemSetting::getSettingValue).orElse(""),
                 gitPassword.map(SystemSetting::getSettingValue).orElse(""),
-                localGitUser.map(SystemSetting::getSettingValue).orElse(""),
-                localGitEmail.map(SystemSetting::getSettingValue).orElse(""),
+                resolveSettingValue(localGitUser, DEFAULT_LOCAL_GIT_USERNAME),
+                resolveSettingValue(localGitEmail, DEFAULT_LOCAL_GIT_EMAIL),
                 latestSetting == null ? null : latestSetting.getUpdatedAt(),
                 latestSetting == null ? null : latestSetting.getUpdatedBy()
         );
@@ -261,8 +263,8 @@ public class SettingsService {
                 repository.findById(CATALOG_GIT_CERTIFICATE_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 repository.findById(CATALOG_GIT_USERNAME_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 repository.findById(CATALOG_GIT_PASSWORD_KEY).map(SystemSetting::getSettingValue).orElse(""),
-                repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY).map(SystemSetting::getSettingValue).orElse(""),
-                repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY).map(SystemSetting::getSettingValue).orElse(""),
+                resolveSettingValue(repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY), DEFAULT_LOCAL_GIT_USERNAME),
+                resolveSettingValue(repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY), DEFAULT_LOCAL_GIT_EMAIL),
                 latestSetting.getUpdatedAt(),
                 latestSetting.getUpdatedBy()
         );
@@ -294,8 +296,8 @@ public class SettingsService {
         SystemSetting certKey = upsert(CATALOG_GIT_CERTIFICATE_KEY, gitCertificateKey == null ? "" : gitCertificateKey, actorId);
         SystemSetting user = upsert(CATALOG_GIT_USERNAME_KEY, gitUsername == null ? "" : gitUsername.trim(), actorId);
         SystemSetting pass = upsert(CATALOG_GIT_PASSWORD_KEY, gitPasswordOrPat == null ? "" : gitPasswordOrPat, actorId);
-        SystemSetting localUser = upsert(CATALOG_LOCAL_GIT_USERNAME_KEY, localGitUsername == null ? "" : localGitUsername.trim(), actorId);
-        SystemSetting localEmail = upsert(CATALOG_LOCAL_GIT_EMAIL_KEY, localGitEmail == null ? "" : localGitEmail.trim(), actorId);
+        SystemSetting localUser = upsert(CATALOG_LOCAL_GIT_USERNAME_KEY, normalizeLocalGitUsername(localGitUsername), actorId);
+        SystemSetting localEmail = upsert(CATALOG_LOCAL_GIT_EMAIL_KEY, normalizeLocalGitEmail(localGitEmail), actorId);
         SystemSetting latest = latestOf(repo, branch, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass, localUser, localEmail);
         return new RuntimeSettings(
                 getWorkspaceRoot(),
@@ -311,8 +313,8 @@ public class SettingsService {
                 certKey.getSettingValue(),
                 user.getSettingValue(),
                 pass.getSettingValue(),
-                localUser.getSettingValue(),
-                localEmail.getSettingValue(),
+                resolveSettingValue(Optional.of(localUser), DEFAULT_LOCAL_GIT_USERNAME),
+                resolveSettingValue(Optional.of(localEmail), DEFAULT_LOCAL_GIT_EMAIL),
                 latest.getUpdatedAt(),
                 latest.getUpdatedBy()
         );
@@ -1075,6 +1077,20 @@ public class SettingsService {
         return normalized;
     }
 
+    private String normalizeLocalGitUsername(String username) {
+        if (username == null || username.isBlank()) {
+            return DEFAULT_LOCAL_GIT_USERNAME;
+        }
+        return username.trim();
+    }
+
+    private String normalizeLocalGitEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return DEFAULT_LOCAL_GIT_EMAIL;
+        }
+        return email.trim();
+    }
+
     private String normalizeWorkspaceRoot(String workspaceRoot) {
         if (workspaceRoot == null || workspaceRoot.isBlank()) {
             throw new ValidationException("workspace_root is required");
@@ -1113,6 +1129,14 @@ public class SettingsService {
             }
         }
         return latest;
+    }
+
+    private String resolveSettingValue(Optional<SystemSetting> setting, String defaultValue) {
+        return setting
+                .map(SystemSetting::getSettingValue)
+                .map(String::trim)
+                .filter((value) -> !value.isBlank())
+                .orElse(defaultValue);
     }
 
     public record RuntimeSettings(
