@@ -2552,6 +2552,16 @@ body {
   text-transform: lowercase;
 }
 
+.monaco-editor .human-gate-rework-marker-line {
+  border-left: 2px solid #d97706;
+}
+
+.monaco-editor .human-gate-rework-marker-glyph {
+  background: #d97706;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.28);
+}
+
 .human-gate-drawer-content {
   display: flex;
   flex-direction: column;

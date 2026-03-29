@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -200,6 +200,7 @@ export default function HumanGate() {
 
   const diffEditorRef = useRef(null);
   const modifiedEditorRef = useRef(null);
+  const reworkDecorationIdsRef = useRef([]);
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
@@ -325,6 +326,54 @@ export default function HumanGate() {
     }
     setKeepChanges(checked);
   };
+
+  const applyReworkDecorations = useCallback(() => {
+    const editor = modifiedEditorRef.current;
+    if (!editor) {
+      return;
+    }
+    const model = editor.getModel();
+    if (!model || !isApproval || !selectedPath) {
+      reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
+      return;
+    }
+    const fileRequests = reworkRequests.filter((request) => {
+      const path = request?.path || '';
+      return matchesEditablePath(path, selectedPath) || matchesEditablePath(selectedPath, path);
+    });
+    const decorations = fileRequests.map((request, index) => {
+      const startLine = Number.isInteger(request?.range?.startLineNumber) && request.range.startLineNumber > 0
+        ? request.range.startLineNumber
+        : 1;
+      return {
+        range: {
+          startLineNumber: startLine,
+          startColumn: 1,
+          endLineNumber: startLine,
+          endColumn: 1,
+        },
+        options: {
+          isWholeLine: true,
+          linesDecorationsClassName: 'human-gate-rework-marker-line',
+          glyphMarginClassName: 'human-gate-rework-marker-glyph',
+          glyphMarginHoverMessage: { value: `Rework request #${index + 1}\n\n${request.instruction || ''}` },
+        },
+      };
+    });
+    reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, decorations);
+  }, [isApproval, reworkRequests, selectedPath]);
+
+  useEffect(() => {
+    applyReworkDecorations();
+  }, [applyReworkDecorations, modifiedContent, originalContent]);
+
+  useEffect(() => () => {
+    const editor = modifiedEditorRef.current;
+    if (!editor) {
+      return;
+    }
+    reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
+  }, []);
 
   const goBack = () => navigate(`/run-console?runId=${runId}`);
 
@@ -624,11 +673,13 @@ export default function HumanGate() {
                   onMount={(editorInstance) => {
                     diffEditorRef.current = editorInstance;
                     modifiedEditorRef.current = editorInstance.getModifiedEditor();
+                    applyReworkDecorations();
                   }}
                   options={{
                     readOnly: true,
                     renderSideBySide: isApproval,
                     contextmenu: false,
+                    glyphMargin: true,
                     minimap: { enabled: false },
                     wordWrap: 'on',
                     mouseWheelScrollSensitivity: 0.6,
