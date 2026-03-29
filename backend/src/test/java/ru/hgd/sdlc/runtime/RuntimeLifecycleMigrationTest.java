@@ -75,7 +75,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         project.getId(),
                         "main",
                         terminalFlowCanonicalName,
-                        "Resume lifecycle run"
+                        "Resume lifecycle run",
+                        "local",
+                        null,
+                        null
                 ),
                 null
         );
@@ -93,7 +96,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         project.getId(),
                         "main",
                         terminalFlowCanonicalName,
-                        "Cancel lifecycle run"
+                        "Cancel lifecycle run",
+                        "local",
+                        null,
+                        null
                 ),
                 null
         );
@@ -110,7 +116,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         project.getId(),
                         "main",
                         terminalFlowCanonicalName,
-                        "Recover running run"
+                        "Recover running run",
+                        "local",
+                        null,
+                        null
                 ),
                 null
         );
@@ -122,7 +131,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         secondProject.getId(),
                         "main",
                         humanInputFlowCanonicalName,
-                        "Recover waiting gate run"
+                        "Recover waiting gate run",
+                        "local",
+                        null,
+                        null
                 ),
                 null
         );
@@ -151,6 +163,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                 "target_branch", "main",
                 "flow_canonical_name", terminalFlowCanonicalName,
                 "feature_request", "Idempotent lifecycle run",
+                "publish_mode", "local",
                 "idempotency_key", idempotencyKey
         ));
 
@@ -181,7 +194,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         project.getId(),
                         "main",
                         terminalFlowCanonicalName,
-                        "First active run"
+                        "First active run",
+                        "local",
+                        null,
+                        null
                 ),
                 null
         );
@@ -193,7 +209,10 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                                 project.getId(),
                                 "main",
                                 terminalFlowCanonicalName,
-                                "Second active run"
+                                "Second active run",
+                                "local",
+                                null,
+                                null
                         ),
                         null
                 )
@@ -247,6 +266,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                   - id: draft-input
                     title: Draft Input
                     type: command
+                    checkpoint_before_run: false
                     execution_context: []
                     instruction: |
                       echo "input draft" > details.md

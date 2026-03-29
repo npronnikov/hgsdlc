@@ -6,6 +6,8 @@ public record CreateRunCommand(
         UUID projectId,
         String targetBranch,
         String flowCanonicalName,
-        String featureRequest
+        String featureRequest,
+        String publishMode,
+        String workBranch,
+        String prCommitStrategy
 ) {}
-

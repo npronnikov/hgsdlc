@@ -260,6 +260,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                   - id: draft-questions
                     title: Draft Questions
                     type: command
+                    checkpoint_before_run: false
                     execution_context: []
                     instruction: |
                       echo "prepare questions"

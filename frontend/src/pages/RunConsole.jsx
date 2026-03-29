@@ -23,7 +23,7 @@ import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
-const ACTIVE_RUN_STATUSES = ['created', 'running', 'waiting_gate'];
+const ACTIVE_RUN_STATUSES = ['created', 'running', 'waiting_gate', 'waiting_publish', 'publish_failed'];
 const MAX_NOTIFIED_GATES = 20;
 const NOTIFIED_GATES_STORAGE_KEY = 'runConsole.notifiedGates';
 
@@ -757,6 +757,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
   };
 
+  const retryPublish = async () => {
+    try {
+      await apiRequest(`/runs/${runId}/publish/retry`, { method: 'POST' });
+      message.success('Publish retry requested');
+      await load();
+    } catch (err) {
+      message.error(err.message || 'Failed to retry publish');
+    }
+  };
+
   if (!run) {
     return <Card loading={loading} />;
   }
@@ -766,12 +776,17 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Run Console</Title>
         <Space>
+          {run.status === 'publish_failed' && (
+            <Button type="primary" onClick={retryPublish}>
+              Retry publish
+            </Button>
+          )}
           <Button
             type="default"
             className="btn-danger-common"
             onClick={cancelRun}
             icon={<MinusCircleOutlined />}
-            disabled={['completed', 'failed', 'cancelled'].includes(run.status)}
+            disabled={['completed', 'failed', 'cancelled', 'publish_failed'].includes(run.status)}
           >
             Stop
           </Button>
@@ -800,7 +815,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         </div>
         <div>
           <Text className="muted">Working directory</Text>
-          <div className="mono">{runtimeSettings?.workspace_root || '—'}</div>
+          <div className="mono">{run.workspace_root || runtimeSettings?.workspace_root || '—'}</div>
         </div>
         <div>
           <Text className="muted">Coding agent</Text>
@@ -920,6 +935,31 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                         </Card>
                       </Col>
                     </Row>
+                  ),
+                },
+                {
+                  key: 'publish',
+                  label: 'Publish',
+                  children: (
+                    <Card>
+                      <Title level={5}>Publish details</Title>
+                      <Descriptions bordered size="small" column={1}>
+                        <Descriptions.Item label="Work branch">{run.work_branch || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="Publish mode">{run.publish_mode || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="PR commit strategy">{run.pr_commit_strategy || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="Publish status">{run.publish_status || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="Push status">{run.push_status || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="PR status">{run.pr_status || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="Publish error step">{run.publish_error_step || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="Final commit SHA">{run.publish_commit_sha || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="PR URL">
+                          {run.pr_url ? (
+                            <a href={run.pr_url} target="_blank" rel="noreferrer">{run.pr_url}</a>
+                          ) : '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="PR number">{run.pr_number ?? '—'}</Descriptions.Item>
+                      </Descriptions>
+                    </Card>
                   ),
                 },
                 {

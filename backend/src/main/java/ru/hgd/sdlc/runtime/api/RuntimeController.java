@@ -92,7 +92,10 @@ public class RuntimeController {
                                     request.projectId(),
                                     request.targetBranch(),
                                     request.flowCanonicalName(),
-                                    request.featureRequest()
+                                    request.featureRequest(),
+                                    request.publishMode(),
+                                    request.workBranch(),
+                                    request.prCommitStrategy()
                             ),
                             user
                     );
@@ -146,6 +149,13 @@ public class RuntimeController {
     @PostMapping("/runs/{runId}/cancel")
     public RunResponse cancelRun(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
         RunEntity run = runtimeCommandService.cancelRun(runId, user);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        return RunResponse.from(run, currentGate);
+    }
+
+    @PostMapping("/runs/{runId}/publish/retry")
+    public RunResponse retryPublish(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
+        RunEntity run = runtimeCommandService.retryPublish(runId, user);
         GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
         return RunResponse.from(run, currentGate);
     }
@@ -408,6 +418,9 @@ public class RuntimeController {
             @JsonProperty("target_branch") String targetBranch,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
             @JsonProperty("feature_request") String featureRequest,
+            @JsonProperty("publish_mode") String publishMode,
+            @JsonProperty("work_branch") String workBranch,
+            @JsonProperty("pr_commit_strategy") String prCommitStrategy,
             @JsonProperty("idempotency_key") String idempotencyKey
     ) {}
 
@@ -422,6 +435,16 @@ public class RuntimeController {
             @JsonProperty("run_id") UUID runId,
             @JsonProperty("project_id") UUID projectId,
             @JsonProperty("target_branch") String targetBranch,
+            @JsonProperty("work_branch") String workBranch,
+            @JsonProperty("publish_mode") String publishMode,
+            @JsonProperty("pr_commit_strategy") String prCommitStrategy,
+            @JsonProperty("publish_status") String publishStatus,
+            @JsonProperty("push_status") String pushStatus,
+            @JsonProperty("pr_status") String prStatus,
+            @JsonProperty("publish_error_step") String publishErrorStep,
+            @JsonProperty("publish_commit_sha") String publishCommitSha,
+            @JsonProperty("pr_url") String prUrl,
+            @JsonProperty("pr_number") Integer prNumber,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
             @JsonProperty("status") String status,
             @JsonProperty("current_node_id") String currentNodeId,
@@ -441,6 +464,16 @@ public class RuntimeController {
                     run.getId(),
                     run.getProjectId(),
                     run.getTargetBranch(),
+                    run.getWorkBranch(),
+                    run.getPublishMode() == null ? null : run.getPublishMode().name().toLowerCase(),
+                    run.getPrCommitStrategy() == null ? null : run.getPrCommitStrategy().name().toLowerCase(),
+                    run.getPublishStatus() == null ? null : run.getPublishStatus().name().toLowerCase(),
+                    run.getPushStatus() == null ? null : run.getPushStatus().name().toLowerCase(),
+                    run.getPrStatus() == null ? null : run.getPrStatus().name().toLowerCase(),
+                    run.getPublishErrorStep(),
+                    run.getPublishCommitSha(),
+                    run.getPrUrl(),
+                    run.getPrNumber(),
                     run.getFlowCanonicalName(),
                     run.getStatus().name().toLowerCase(),
                     run.getCurrentNodeId(),

@@ -50,6 +50,7 @@ class RuntimeBaselineSnapshotTest extends RuntimeIntegrationTestBase {
                 "target_branch", "main",
                 "flow_canonical_name", flow.getCanonicalName(),
                 "feature_request", "Snapshot baseline request",
+                "publish_mode", "local",
                 "idempotency_key", UUID.randomUUID().toString()
         ));
 
@@ -187,6 +188,7 @@ class RuntimeBaselineSnapshotTest extends RuntimeIntegrationTestBase {
                   - id: implement-change
                     title: Implement Change
                     type: command
+                    checkpoint_before_run: false
                     execution_context: []
                     instruction: |
                       echo "snapshot line" >> README.md

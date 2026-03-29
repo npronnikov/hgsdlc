@@ -26,7 +26,10 @@ import ru.hgd.sdlc.runtime.domain.GateKind;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
+import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.domain.RunPublishMode;
+import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
 import ru.hgd.sdlc.runtime.infrastructure.ArtifactVersionRepository;
 import ru.hgd.sdlc.runtime.infrastructure.AuditEventRepository;
@@ -73,6 +76,12 @@ public class RuntimeStepTxService {
             String targetBranch,
             String flowCanonicalName,
             String flowSnapshotJson,
+            RunPublishMode publishMode,
+            String workBranch,
+            PrCommitStrategy prCommitStrategy,
+            RunPublishStatus publishStatus,
+            RunPublishStatus pushStatus,
+            RunPublishStatus prStatus,
             String currentNodeId,
             String featureRequest,
             String contextFileManifestJson,
@@ -86,6 +95,12 @@ public class RuntimeStepTxService {
                 .targetBranch(targetBranch)
                 .flowCanonicalName(flowCanonicalName)
                 .flowSnapshotJson(flowSnapshotJson)
+                .publishMode(publishMode)
+                .workBranch(workBranch)
+                .prCommitStrategy(prCommitStrategy)
+                .publishStatus(publishStatus)
+                .pushStatus(pushStatus)
+                .prStatus(prStatus)
                 .status(RunStatus.CREATED)
                 .currentNodeId(currentNodeId)
                 .featureRequest(featureRequest)
@@ -102,10 +117,13 @@ public class RuntimeStepTxService {
                 "run_created",
                 ActorType.HUMAN,
                 createdBy,
-                Map.of(
+                mapOf(
                         "project_id", projectId,
                         "target_branch", targetBranch,
-                        "flow_canonical_name", flowCanonicalName
+                        "flow_canonical_name", flowCanonicalName,
+                        "publish_mode", publishMode == null ? null : publishMode.name().toLowerCase(Locale.ROOT),
+                        "work_branch", workBranch,
+                        "pr_commit_strategy", prCommitStrategy == null ? null : prCommitStrategy.name().toLowerCase(Locale.ROOT)
                 )
         );
         return entity;
@@ -144,6 +162,9 @@ public class RuntimeStepTxService {
         }
         run.setStatus(RunStatus.CANCELLED);
         run.setFinishedAt(Instant.now());
+        run.setPublishStatus(RunPublishStatus.SKIPPED);
+        run.setPushStatus(RunPublishStatus.SKIPPED);
+        run.setPrStatus(RunPublishStatus.SKIPPED);
         runRepository.save(run);
 
         gateInstanceRepository.findFirstByRunIdAndStatusInOrderByOpenedAtDesc(runId, OPEN_GATE_STATUSES)
@@ -567,10 +588,223 @@ public class RuntimeStepTxService {
 
         run.setStatus(terminalStatus);
         run.setFinishedAt(Instant.now());
+        run.setPublishErrorStep(null);
+        if (terminalStatus == RunStatus.FAILED || terminalStatus == RunStatus.CANCELLED) {
+            run.setPublishStatus(RunPublishStatus.SKIPPED);
+            run.setPushStatus(RunPublishStatus.SKIPPED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
+        } else if (run.getPublishMode() == RunPublishMode.LOCAL) {
+            run.setPublishStatus(RunPublishStatus.SUCCEEDED);
+            run.setPushStatus(RunPublishStatus.SKIPPED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
+        }
         runRepository.save(run);
         String auditEventType = terminalStatus == RunStatus.FAILED ? "run_failed" : "run_completed";
         appendAuditInternal(runId, executionId, null, auditEventType, ActorType.SYSTEM, "runtime",
                 Map.of("terminal_status", terminalStatus.name().toLowerCase()));
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markRunWaitingPublish(UUID runId, UUID executionId, String nodeId) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
+        NodeExecutionEntity execution = getNodeExecution(runId, executionId);
+        execution.setStatus(NodeExecutionStatus.SUCCEEDED);
+        execution.setFinishedAt(Instant.now());
+        nodeExecutionRepository.save(execution);
+        appendAuditInternal(
+                runId,
+                executionId,
+                null,
+                "node_execution_succeeded",
+                ActorType.SYSTEM,
+                "runtime",
+                Map.of("node_id", nodeId)
+        );
+
+        run.setStatus(RunStatus.WAITING_PUBLISH);
+        run.setPublishStatus(RunPublishStatus.PENDING);
+        run.setPushStatus(RunPublishStatus.PENDING);
+        run.setPrStatus(RunPublishStatus.PENDING);
+        run.setPublishErrorStep(null);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                executionId,
+                null,
+                "run_waiting_publish",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "publish_mode", run.getPublishMode() == null ? null : run.getPublishMode().name().toLowerCase(Locale.ROOT),
+                        "work_branch", run.getWorkBranch()
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishRunning(UUID runId) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED || run.getStatus() == RunStatus.COMPLETED) {
+            return run;
+        }
+        run.setStatus(RunStatus.WAITING_PUBLISH);
+        run.setPublishStatus(RunPublishStatus.RUNNING);
+        if (run.getPushStatus() == RunPublishStatus.FAILED) {
+            run.setPushStatus(RunPublishStatus.PENDING);
+        }
+        if (run.getPrStatus() == RunPublishStatus.FAILED) {
+            run.setPrStatus(RunPublishStatus.PENDING);
+        }
+        run.setPublishErrorStep(null);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        runRepository.save(run);
+        appendAuditInternal(runId, null, null, "publish_started", ActorType.SYSTEM, "runtime", Map.of());
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishCommitSucceeded(UUID runId, String publishCommitSha) {
+        RunEntity run = getRun(runId);
+        run.setPublishCommitSha(trimToNull(publishCommitSha));
+        run.setPublishStatus(RunPublishStatus.RUNNING);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "publish_commit_succeeded",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf("publish_commit_sha", trimToNull(publishCommitSha))
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishPushSucceeded(UUID runId) {
+        RunEntity run = getRun(runId);
+        run.setPushStatus(RunPublishStatus.SUCCEEDED);
+        run.setPublishStatus(RunPublishStatus.RUNNING);
+        runRepository.save(run);
+        appendAuditInternal(runId, null, null, "publish_push_succeeded", ActorType.SYSTEM, "runtime", Map.of());
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishPrSucceeded(UUID runId, String prUrl, Integer prNumber) {
+        RunEntity run = getRun(runId);
+        run.setPrStatus(RunPublishStatus.SUCCEEDED);
+        run.setPrUrl(trimToNull(prUrl));
+        run.setPrNumber(prNumber);
+        run.setPublishStatus(RunPublishStatus.RUNNING);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "publish_pr_succeeded",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "pr_url", trimToNull(prUrl),
+                        "pr_number", prNumber
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishFailed(UUID runId, String step, String errorCode, String errorMessage) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
+        run.setStatus(RunStatus.PUBLISH_FAILED);
+        run.setPublishStatus(RunPublishStatus.FAILED);
+        String normalizedStep = trimToNull(step);
+        if ("push".equals(normalizedStep)) {
+            run.setPushStatus(RunPublishStatus.FAILED);
+        } else if ("create_pr".equals(normalizedStep)) {
+            run.setPrStatus(RunPublishStatus.FAILED);
+        }
+        run.setPublishErrorStep(normalizedStep);
+        run.setErrorCode(trimToNull(errorCode) == null ? "PUBLISH_FAILED" : trimToNull(errorCode));
+        run.setErrorMessage(trimToNull(errorMessage));
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "publish_failed",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "step", normalizedStep,
+                        "error_code", run.getErrorCode(),
+                        "error_message", run.getErrorMessage()
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity markPublishCompleted(UUID runId) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() == RunStatus.CANCELLED) {
+            return run;
+        }
+        run.setStatus(RunStatus.COMPLETED);
+        run.setPublishStatus(RunPublishStatus.SUCCEEDED);
+        run.setPushStatus(RunPublishStatus.SUCCEEDED);
+        run.setPrStatus(RunPublishStatus.SUCCEEDED);
+        run.setPublishErrorStep(null);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(Instant.now());
+        runRepository.save(run);
+        appendAuditInternal(runId, null, null, "run_completed", ActorType.SYSTEM, "runtime",
+                Map.of("terminal_status", RunStatus.COMPLETED.name().toLowerCase(Locale.ROOT)));
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity resetPublishForRetry(UUID runId, String actorId) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() != RunStatus.PUBLISH_FAILED && run.getStatus() != RunStatus.WAITING_PUBLISH) {
+            return run;
+        }
+        run.setStatus(RunStatus.WAITING_PUBLISH);
+        run.setPublishStatus(RunPublishStatus.PENDING);
+        if (run.getPushStatus() == RunPublishStatus.FAILED) {
+            run.setPushStatus(RunPublishStatus.PENDING);
+        }
+        if (run.getPrStatus() == RunPublishStatus.FAILED) {
+            run.setPrStatus(RunPublishStatus.PENDING);
+        }
+        run.setPublishErrorStep(null);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "publish_retry_requested",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                Map.of()
+        );
         return run;
     }
 
@@ -581,6 +815,9 @@ public class RuntimeStepTxService {
             return run;
         }
         run.setStatus(RunStatus.FAILED);
+        run.setPublishStatus(RunPublishStatus.SKIPPED);
+        run.setPushStatus(RunPublishStatus.SKIPPED);
+        run.setPrStatus(RunPublishStatus.SKIPPED);
         run.setErrorCode(errorCode);
         run.setErrorMessage(message);
         run.setFinishedAt(Instant.now());

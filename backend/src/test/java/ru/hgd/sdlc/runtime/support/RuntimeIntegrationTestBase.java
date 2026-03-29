@@ -95,6 +95,21 @@ public abstract class RuntimeIntegrationTestBase {
         settingsService.updateWorkspaceRoot(workspaceRoot.toAbsolutePath().toString(), "test");
         settingsService.updateRuntimeCodingAgent("stub", "test");
         settingsService.updateAiTimeoutSeconds(60, "test");
+        settingsService.updateCatalogSettings(
+                "",
+                "main",
+                "pr",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "Runtime Test",
+                "runtime-test@example.com",
+                "test"
+        );
     }
 
     protected String loginAsTestUser() throws Exception {
@@ -199,6 +214,7 @@ public abstract class RuntimeIntegrationTestBase {
                 "target_branch", "main",
                 "flow_canonical_name", flowCanonicalName,
                 "feature_request", featureRequest,
+                "publish_mode", "local",
                 "idempotency_key", UUID.randomUUID().toString()
         ));
         MvcResult result = mockMvc.perform(post("/api/runs")

@@ -49,6 +49,7 @@ import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.domain.RunPublishMode;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
 import ru.hgd.sdlc.runtime.infrastructure.ArtifactVersionRepository;
 import ru.hgd.sdlc.runtime.infrastructure.AuditEventRepository;
@@ -80,6 +81,7 @@ public class RunStepService {
     private final GitPort gitPort;
     private final WorkspacePort workspacePort;
     private final ClockPort clockPort;
+    private final RunPublishService runPublishService;
     private final Map<String, CodingAgentStrategy> codingAgentStrategiesByAgentId;
     private final int maxTickIterations;
 
@@ -97,6 +99,7 @@ public class RunStepService {
             GitPort gitPort,
             WorkspacePort workspacePort,
             ClockPort clockPort,
+            RunPublishService runPublishService,
             List<CodingAgentStrategy> codingAgentStrategies,
             @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations
     ) {
@@ -113,6 +116,7 @@ public class RunStepService {
         this.gitPort = gitPort;
         this.workspacePort = workspacePort;
         this.clockPort = clockPort;
+        this.runPublishService = runPublishService;
         this.codingAgentStrategiesByAgentId = (codingAgentStrategies == null ? List.<CodingAgentStrategy>of() : codingAgentStrategies)
                 .stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
@@ -364,7 +368,16 @@ public class RunStepService {
 
     boolean completeTerminalNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
         RunStatus terminalStatus = resolveTerminalStatus(run.getId());
-        runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), terminalStatus);
+        if (terminalStatus == RunStatus.FAILED) {
+            runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), RunStatus.FAILED);
+            return false;
+        }
+        if (run.getPublishMode() == RunPublishMode.PR) {
+            runtimeStepTxService.markRunWaitingPublish(run.getId(), execution.getId(), node.getId());
+            runPublishService.dispatchPublish(run.getId());
+            return false;
+        }
+        runtimeStepTxService.completeRun(run.getId(), execution.getId(), node.getId(), RunStatus.COMPLETED);
         return false;
     }
 

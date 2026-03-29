@@ -8,8 +8,11 @@
   "node_execution_id" : null,
   "payload" : {
     "flow_canonical_name" : "baseline-flow@1.0",
+    "pr_commit_strategy" : null,
     "project_id" : "<uuid>",
-    "target_branch" : "main"
+    "publish_mode" : "local",
+    "target_branch" : "main",
+    "work_branch" : "run/<uuid>"
   },
   "run_id" : "<uuid>",
   "sequence_no" : 1
@@ -35,10 +38,29 @@
   "payload" : {
     "project_root" : "<path>/workspace/<uuid>",
     "repo_url" : "file://<path>/remote-repo.git/",
-    "target_branch" : "main"
+    "target_branch" : "main",
+    "work_branch" : "run/<uuid>"
   },
   "run_id" : "<uuid>",
   "sequence_no" : 3
+}, {
+  "actor_id" : "runtime",
+  "actor_type" : "system",
+  "event_id" : "<uuid>",
+  "event_time" : "<instant>",
+  "event_type" : "work_branch_prepared",
+  "gate_id" : null,
+  "node_execution_id" : null,
+  "payload" : {
+    "stderr" : "Switched to a new branch 'run/<uuid>'\n",
+    "stderr_path" : "<path>/workspace/<uuid>.work-branch.stderr.log",
+    "stdout" : "",
+    "stdout_path" : "<path>/workspace/<uuid>.work-branch.stdout.log",
+    "target_branch" : "main",
+    "work_branch" : "run/<uuid>"
+  },
+  "run_id" : "<uuid>",
+  "sequence_no" : 4
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -54,10 +76,11 @@
     "stderr_path" : "<path>/workspace/<uuid>.checkout.stderr.log",
     "stdout" : "",
     "stdout_path" : "<path>/workspace/<uuid>.checkout.stdout.log",
-    "target_branch" : "main"
+    "target_branch" : "main",
+    "work_branch" : "run/<uuid>"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 4
+  "sequence_no" : 5
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -72,7 +95,7 @@
     "workspace_root" : "<path>/workspace/<uuid>"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 5
+  "sequence_no" : 6
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -87,7 +110,7 @@
     "node_kind" : "command"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 6
+  "sequence_no" : 7
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -101,7 +124,7 @@
     "node_id" : "implement-change"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 7
+  "sequence_no" : 8
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -118,7 +141,7 @@
     "version_no" : 1
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 8
+  "sequence_no" : 9
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -135,7 +158,7 @@
     "version_no" : 1
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 9
+  "sequence_no" : 10
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -152,7 +175,7 @@
     "stdout_path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/command.stdout.log"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 10
+  "sequence_no" : 11
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -165,7 +188,7 @@
     "node_id" : "implement-change"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 11
+  "sequence_no" : 12
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -179,7 +202,7 @@
     "transition" : "on_success"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 12
+  "sequence_no" : 13
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -194,7 +217,7 @@
     "node_kind" : "human_approval"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 13
+  "sequence_no" : 14
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -208,7 +231,7 @@
     "gate_kind" : "human_approval"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 14
+  "sequence_no" : 15
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -219,7 +242,7 @@
   "node_execution_id" : "<uuid>",
   "payload" : { },
   "run_id" : "<uuid>",
-  "sequence_no" : 15
+  "sequence_no" : 16
 }, {
   "actor_id" : "test",
   "actor_type" : "human",
@@ -232,7 +255,7 @@
     "comment" : "Looks good"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 16
+  "sequence_no" : 17
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -245,7 +268,7 @@
     "node_id" : "review-change"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 17
+  "sequence_no" : 18
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -259,7 +282,7 @@
     "transition" : "on_approve"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 18
+  "sequence_no" : 19
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -274,7 +297,7 @@
     "node_kind" : "terminal"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 19
+  "sequence_no" : 20
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -287,7 +310,7 @@
     "node_id" : "complete"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 20
+  "sequence_no" : 21
 }, {
   "actor_id" : "runtime",
   "actor_type" : "system",
@@ -300,5 +323,5 @@
     "terminal_status" : "completed"
   },
   "run_id" : "<uuid>",
-  "sequence_no" : 21
+  "sequence_no" : 22
 } ]

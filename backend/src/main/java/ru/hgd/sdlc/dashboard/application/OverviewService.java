@@ -29,7 +29,9 @@ public class OverviewService {
     private static final List<RunStatus> ACTIVE_RUN_STATUSES = List.of(
             RunStatus.CREATED,
             RunStatus.RUNNING,
-            RunStatus.WAITING_GATE
+            RunStatus.WAITING_GATE,
+            RunStatus.WAITING_PUBLISH,
+            RunStatus.PUBLISH_FAILED
     );
     private static final List<GateStatus> OPEN_GATE_STATUSES = List.of(
             GateStatus.AWAITING_INPUT,

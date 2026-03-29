@@ -61,7 +61,7 @@ const publicationTargetOptions = [
   { value: 'db_and_git', label: 'DB + Git' },
 ];
 const publishModeOptions = [
-  { value: 'local', label: 'local (direct push)' },
+  { value: 'local', label: 'local' },
   { value: 'pr', label: 'pr (create Pull Request)' },
 ];
 const skillKindOptions = [

@@ -40,6 +40,46 @@ public class RunEntity {
     private String flowSnapshotJson;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "publish_mode", nullable = false, length = 16)
+    @Builder.Default
+    private RunPublishMode publishMode = RunPublishMode.LOCAL;
+
+    @Column(name = "work_branch", nullable = false, length = 255)
+    @Builder.Default
+    private String workBranch = "main";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pr_commit_strategy", length = 32)
+    private PrCommitStrategy prCommitStrategy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publish_status", nullable = false, length = 32)
+    @Builder.Default
+    private RunPublishStatus publishStatus = RunPublishStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "push_status", nullable = false, length = 32)
+    @Builder.Default
+    private RunPublishStatus pushStatus = RunPublishStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pr_status", nullable = false, length = 32)
+    @Builder.Default
+    private RunPublishStatus prStatus = RunPublishStatus.PENDING;
+
+    @Column(name = "publish_error_step", length = 64)
+    private String publishErrorStep;
+
+    @Column(name = "publish_commit_sha", length = 64)
+    private String publishCommitSha;
+
+    @Column(name = "pr_url", length = 1024)
+    private String prUrl;
+
+    @Column(name = "pr_number")
+    private Integer prNumber;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private RunStatus status;
 

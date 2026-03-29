@@ -53,3 +53,9 @@ databaseChangeLog:
       file: db/changelog/031-publication-pipeline.sql
   - include:
       file: db/changelog/032-rules-flows-publication-pipeline.sql
+  - include:
+      file: db/changelog/033-runtime-finalize.sql
+  - include:
+      file: db/changelog/034-runtime-publish-rename.sql
+  - include:
+      file: db/changelog/035-runtime-publish-cleanup.sql

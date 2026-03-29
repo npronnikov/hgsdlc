@@ -203,6 +203,7 @@ export default function RunLaunch() {
   const projectIdValue = Form.useWatch('project_id', form);
   const targetBranchValue = Form.useWatch('target_branch', form);
   const featureRequestValue = Form.useWatch('feature_request', form);
+  const publishModeValue = Form.useWatch('publish_mode', form);
 
   useEffect(() => {
     const loadData = async () => {
@@ -226,6 +227,8 @@ export default function RunLaunch() {
         form.setFieldsValue({
           project_id: initialProjectId || undefined,
           target_branch: initialProject?.default_branch || 'main',
+          publish_mode: 'local',
+          pr_commit_strategy: 'squash',
         });
       } catch (err) {
         message.error(err.message || 'Failed to load launch data');
@@ -320,6 +323,9 @@ export default function RunLaunch() {
           target_branch: values.target_branch,
           flow_canonical_name: selectedFlowCanonical,
           feature_request: values.feature_request,
+          publish_mode: values.publish_mode,
+          work_branch: values.work_branch?.trim() || undefined,
+          pr_commit_strategy: values.publish_mode === 'pr' ? (values.pr_commit_strategy || 'squash') : undefined,
           idempotency_key: crypto.randomUUID(),
         }),
       });
@@ -341,6 +347,7 @@ export default function RunLaunch() {
     && selectedFlowId
     && targetBranchValue?.trim()
     && featureRequestValue?.trim()
+    && publishModeValue
   );
 
   return (
@@ -416,6 +423,50 @@ export default function RunLaunch() {
                   placeholder="Describe the requested change"
                 />
               </Form.Item>
+              <Row gutter={12}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    label="Publish mode"
+                    name="publish_mode"
+                    rules={[{ required: true, message: 'Select publish mode' }]}
+                    initialValue="local"
+                  >
+                    <Select
+                      options={[
+                        { value: 'local', label: 'local' },
+                        { value: 'pr', label: 'pr' },
+                      ]}
+                      onChange={(value) => {
+                        if (value === 'pr' && !form.getFieldValue('pr_commit_strategy')) {
+                          form.setFieldValue('pr_commit_strategy', 'squash');
+                        }
+                      }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    label="Work branch"
+                    name="work_branch"
+                  >
+                    <Input placeholder="run/&lt;runId&gt; (default)" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              {publishModeValue === 'pr' && (
+                <Form.Item
+                  label="PR commit strategy"
+                  name="pr_commit_strategy"
+                  initialValue="squash"
+                  rules={[{ required: true, message: 'Select commit strategy' }]}
+                >
+                  <Select
+                    options={[
+                      { value: 'squash', label: 'squash' },
+                    ]}
+                  />
+                </Form.Item>
+              )}
             </Form>
             </Card>
             {selectedFlowId && (

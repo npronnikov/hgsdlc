@@ -20,17 +20,20 @@ public class RuntimeCommandService {
     private final RunLifecycleService runLifecycleService;
     private final RunStepService runStepService;
     private final GateDecisionService gateDecisionService;
+    private final RunPublishService runPublishService;
     private final TaskExecutor taskExecutor;
 
     public RuntimeCommandService(
             RunLifecycleService runLifecycleService,
             RunStepService runStepService,
             GateDecisionService gateDecisionService,
+            RunPublishService runPublishService,
             TaskExecutor taskExecutor
     ) {
         this.runLifecycleService = runLifecycleService;
         this.runStepService = runStepService;
         this.gateDecisionService = gateDecisionService;
+        this.runPublishService = runPublishService;
         this.taskExecutor = taskExecutor;
     }
 
@@ -68,6 +71,14 @@ public class RuntimeCommandService {
 
     public void processRunStep(UUID runId) {
         runStepService.processRunStep(runId);
+    }
+
+    public RunEntity retryPublish(UUID runId, User user) {
+        return runPublishService.retryPublish(runId, user == null ? "system" : user.getUsername());
+    }
+
+    public void dispatchPublishRun(UUID runId) {
+        runPublishService.dispatchPublish(runId);
     }
 
     public void dispatchStartRun(UUID runId) {

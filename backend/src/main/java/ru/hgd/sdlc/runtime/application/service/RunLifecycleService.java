@@ -36,7 +36,10 @@ import ru.hgd.sdlc.runtime.application.port.IdentityPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.ActorType;
+import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.domain.RunPublishMode;
+import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
 import ru.hgd.sdlc.runtime.infrastructure.RunRepository;
 import ru.hgd.sdlc.settings.application.SettingsService;
@@ -47,7 +50,9 @@ public class RunLifecycleService {
     private static final List<RunStatus> ACTIVE_RUN_STATUSES = List.of(
             RunStatus.CREATED,
             RunStatus.RUNNING,
-            RunStatus.WAITING_GATE
+            RunStatus.WAITING_GATE,
+            RunStatus.WAITING_PUBLISH,
+            RunStatus.PUBLISH_FAILED
     );
 
     private final RunRepository runRepository;
@@ -63,6 +68,7 @@ public class RunLifecycleService {
     private final WorkspacePort workspacePort;
     private final ClockPort clockPort;
     private final IdentityPort identityPort;
+    private final RunPublishService runPublishService;
 
     public RunLifecycleService(
             RunRepository runRepository,
@@ -77,7 +83,8 @@ public class RunLifecycleService {
             GitPort gitPort,
             WorkspacePort workspacePort,
             ClockPort clockPort,
-            IdentityPort identityPort
+            IdentityPort identityPort,
+            RunPublishService runPublishService
     ) {
         this.runRepository = runRepository;
         this.projectRepository = projectRepository;
@@ -92,6 +99,7 @@ public class RunLifecycleService {
         this.workspacePort = workspacePort;
         this.clockPort = clockPort;
         this.identityPort = identityPort;
+        this.runPublishService = runPublishService;
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -120,6 +128,17 @@ public class RunLifecycleService {
         }
 
         UUID runId = UUID.randomUUID();
+        RunPublishMode publishMode = resolvePublishMode(command.publishMode());
+        PrCommitStrategy prCommitStrategy = resolvePrCommitStrategy(publishMode, command.prCommitStrategy());
+        String workBranch = resolveWorkBranch(runId, command.workBranch(), command.targetBranch());
+        RunPublishStatus initialPublishStatus = RunPublishStatus.PENDING;
+        RunPublishStatus initialPushStatus = publishMode == RunPublishMode.LOCAL
+                ? RunPublishStatus.SKIPPED
+                : RunPublishStatus.PENDING;
+        RunPublishStatus initialPrStatus = publishMode == RunPublishMode.LOCAL
+                ? RunPublishStatus.SKIPPED
+                : RunPublishStatus.PENDING;
+
         Path runWorkspaceRoot = resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), runId);
         createDirectories(runWorkspaceRoot);
 
@@ -130,6 +149,12 @@ public class RunLifecycleService {
                 normalizeBranch(command.targetBranch()),
                 flowVersion.getCanonicalName(),
                 toJson(flowModel),
+                publishMode,
+                workBranch,
+                prCommitStrategy,
+                initialPublishStatus,
+                initialPushStatus,
+                initialPrStatus,
                 flowModel.getStartNodeId(),
                 command.featureRequest().trim(),
                 toJson(manifestEntries),
@@ -156,6 +181,8 @@ public class RunLifecycleService {
         RunEntity run = getRunEntity(runId);
         if (run.getStatus() == RunStatus.CREATED || run.getStatus() == RunStatus.RUNNING) {
             startRun(runId);
+        } else if (run.getStatus() == RunStatus.WAITING_PUBLISH) {
+            runPublishService.dispatchPublish(runId);
         }
         return getRunEntity(runId);
     }
@@ -168,12 +195,14 @@ public class RunLifecycleService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void recoverActiveRuns() {
         List<RunEntity> activeRuns = runRepository.findByStatusInOrderByCreatedAtAsc(
-                List.of(RunStatus.RUNNING, RunStatus.WAITING_GATE)
+                List.of(RunStatus.RUNNING, RunStatus.WAITING_GATE, RunStatus.WAITING_PUBLISH)
         );
         for (RunEntity run : activeRuns) {
             runtimeStepTxService.appendAudit(run.getId(), null, null, "run_recovered", ActorType.SYSTEM, "runtime", Map.of());
             if (run.getStatus() == RunStatus.RUNNING) {
                 runTickSafely(run.getId());
+            } else if (run.getStatus() == RunStatus.WAITING_PUBLISH) {
+                runPublishService.dispatchPublish(run.getId());
             }
         }
     }
@@ -206,6 +235,7 @@ public class RunLifecycleService {
                     mapOf(
                             "repo_url", redactRepoUrl(project.getRepoUrl()),
                             "target_branch", run.getTargetBranch(),
+                            "work_branch", run.getWorkBranch(),
                             "project_root", projectRoot.toString()
                     )
             );
@@ -221,6 +251,7 @@ public class RunLifecycleService {
                         mapOf(
                                 "project_root", projectRoot.toString(),
                                 "target_branch", run.getTargetBranch(),
+                                "work_branch", run.getWorkBranch(),
                                 "head", readGitHead(run, projectRoot),
                                 "stdout_path", checkoutResult.stdoutPath(),
                                 "stderr_path", checkoutResult.stderrPath(),
@@ -289,6 +320,7 @@ public class RunLifecycleService {
                     "Project repo_url is empty",
                     mapOf(
                             "target_branch", run.getTargetBranch(),
+                            "work_branch", run.getWorkBranch(),
                             "project_root", projectRoot.toString()
                     )
             );
@@ -331,6 +363,7 @@ public class RunLifecycleService {
                         mapOf(
                                 "repo_url", redactRepoUrl(repoUrl),
                                 "target_branch", run.getTargetBranch(),
+                                "work_branch", run.getWorkBranch(),
                                 "project_root", projectRoot.toString(),
                                 "exit_code", cloneResult.exitCode(),
                                 "stdout_path", cloneResult.stdoutPath(),
@@ -341,6 +374,7 @@ public class RunLifecycleService {
                 );
             }
             ensureRuntimeMetadataIgnored(projectRoot);
+            prepareWorkBranch(run, projectRoot, runWorkspaceRoot);
             return cloneResult;
         } catch (IOException ex) {
             throw new NodeFailureException(
@@ -351,12 +385,172 @@ public class RunLifecycleService {
                     mapOf(
                             "repo_url", redactRepoUrl(repoUrl),
                             "target_branch", run.getTargetBranch(),
+                            "work_branch", run.getWorkBranch(),
                             "project_root", projectRoot.toString(),
                             "stdout_path", checkoutStdout.toString(),
                             "stderr_path", checkoutStderr.toString()
                     )
             );
         }
+    }
+
+    private void prepareWorkBranch(RunEntity run, Path projectRoot, Path runWorkspaceRoot) {
+        Path workspaceParent = runWorkspaceRoot.getParent() == null
+                ? runWorkspaceRoot
+                : runWorkspaceRoot.getParent();
+        String suffix = run.getId() + ".work-branch";
+        Path stdoutPath = workspaceParent.resolve(suffix + ".stdout.log");
+        Path stderrPath = workspaceParent.resolve(suffix + ".stderr.log");
+
+        CommandResult existsResult;
+        try {
+            existsResult = executeGitCommand(
+                    run.getId(),
+                    List.of(
+                            "git",
+                            "-C",
+                            projectRoot.toString(),
+                            "show-ref",
+                            "--verify",
+                            "--quiet",
+                            "refs/heads/" + run.getWorkBranch()
+                    ),
+                    projectRoot,
+                    Math.max(10, settingsService.getAiTimeoutSeconds()),
+                    stdoutPath,
+                    stderrPath
+            );
+        } catch (IOException ex) {
+            throw new NodeFailureException("CHECKOUT_FAILED", "Failed to check local work_branch: " + ex.getMessage());
+        }
+
+        boolean workBranchExists = existsResult.exitCode() == 0;
+        if (existsResult.exitCode() != 0 && existsResult.exitCode() != 1) {
+            throw new NodeFailureException(
+                    "CHECKOUT_FAILED",
+                    "Failed to check local work_branch (exit=" + existsResult.exitCode() + ")",
+                    mapOf(
+                            "work_branch", run.getWorkBranch(),
+                            "target_branch", run.getTargetBranch(),
+                            "stdout_path", stdoutPath.toString(),
+                            "stderr_path", stderrPath.toString(),
+                            "stdout", truncate(existsResult.stdout(), 4000),
+                            "stderr", truncate(existsResult.stderr(), 4000)
+                    )
+            );
+        }
+
+        if (workBranchExists) {
+            CommandResult checkoutTargetResult = runGitOrThrow(
+                    run,
+                    projectRoot,
+                    List.of("git", "-C", projectRoot.toString(), "checkout", run.getTargetBranch()),
+                    "checkout_target_before_recreate",
+                    stdoutPath,
+                    stderrPath
+            );
+            CommandResult deleteBranchResult = runGitOrThrow(
+                    run,
+                    projectRoot,
+                    List.of("git", "-C", projectRoot.toString(), "branch", "-D", run.getWorkBranch()),
+                    "delete_existing_work_branch",
+                    stdoutPath,
+                    stderrPath
+            );
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    null,
+                    null,
+                    "work_branch_recreated",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "work_branch", run.getWorkBranch(),
+                            "target_branch", run.getTargetBranch(),
+                            "checkout_stdout", truncate(checkoutTargetResult.stdout(), 2000),
+                            "checkout_stderr", truncate(checkoutTargetResult.stderr(), 2000),
+                            "delete_stdout", truncate(deleteBranchResult.stdout(), 2000),
+                            "delete_stderr", truncate(deleteBranchResult.stderr(), 2000),
+                            "stdout_path", stdoutPath.toString(),
+                            "stderr_path", stderrPath.toString()
+                    )
+            );
+        }
+
+        CommandResult createBranchResult = runGitOrThrow(
+                run,
+                projectRoot,
+                List.of(
+                        "git",
+                        "-C",
+                        projectRoot.toString(),
+                        "checkout",
+                        "-b",
+                        run.getWorkBranch(),
+                        run.getTargetBranch()
+                ),
+                "create_work_branch",
+                stdoutPath,
+                stderrPath
+        );
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                null,
+                null,
+                "work_branch_prepared",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "work_branch", run.getWorkBranch(),
+                        "target_branch", run.getTargetBranch(),
+                        "stdout_path", stdoutPath.toString(),
+                        "stderr_path", stderrPath.toString(),
+                        "stdout", truncate(createBranchResult.stdout(), 4000),
+                        "stderr", truncate(createBranchResult.stderr(), 4000)
+                )
+        );
+    }
+
+    private CommandResult runGitOrThrow(
+            RunEntity run,
+            Path projectRoot,
+            List<String> command,
+            String step,
+            Path stdoutPath,
+            Path stderrPath
+    ) {
+        CommandResult result;
+        try {
+            result = executeGitCommand(
+                    run.getId(),
+                    command,
+                    projectRoot,
+                    Math.max(10, settingsService.getAiTimeoutSeconds()),
+                    stdoutPath,
+                    stderrPath
+            );
+        } catch (IOException ex) {
+            throw new NodeFailureException(
+                    "CHECKOUT_FAILED",
+                    "Failed to prepare work_branch at step " + step + ": " + ex.getMessage()
+            );
+        }
+        if (result.exitCode() == 0) {
+            return result;
+        }
+        throw new NodeFailureException(
+                "CHECKOUT_FAILED",
+                "Failed to prepare work_branch at step " + step + " (exit=" + result.exitCode() + ")",
+                mapOf(
+                        "step", step,
+                        "work_branch", run.getWorkBranch(),
+                        "target_branch", run.getTargetBranch(),
+                        "stdout_path", stdoutPath.toString(),
+                        "stderr_path", stderrPath.toString(),
+                        "stdout", truncate(result.stdout(), 4000),
+                        "stderr", truncate(result.stderr(), 4000)
+                )
+        );
     }
 
     private String readGitHead(RunEntity run, Path projectRoot) {
@@ -424,6 +618,9 @@ public class RunLifecycleService {
         }
         if (command.targetBranch() == null || command.targetBranch().isBlank()) {
             throw new ValidationException("target_branch is required");
+        }
+        if (command.publishMode() == null || command.publishMode().isBlank()) {
+            throw new ValidationException("publish_mode is required");
         }
     }
 
@@ -564,6 +761,40 @@ public class RunLifecycleService {
             return "main";
         }
         return normalized;
+    }
+
+    private RunPublishMode resolvePublishMode(String rawPublishMode) {
+        String normalized = normalize(trimToNull(rawPublishMode));
+        if ("local".equals(normalized)) {
+            return RunPublishMode.LOCAL;
+        }
+        if ("pr".equals(normalized)) {
+            return RunPublishMode.PR;
+        }
+        throw new ValidationException("publish_mode must be local or pr");
+    }
+
+    private PrCommitStrategy resolvePrCommitStrategy(RunPublishMode publishMode, String rawStrategy) {
+        if (publishMode != RunPublishMode.PR) {
+            return null;
+        }
+        String normalized = normalize(trimToNull(rawStrategy));
+        if (normalized == null || normalized.isBlank() || "squash".equals(normalized)) {
+            return PrCommitStrategy.SQUASH;
+        }
+        throw new ValidationException("pr_commit_strategy must be squash");
+    }
+
+    private String resolveWorkBranch(UUID runId, String rawWorkBranch, String rawTargetBranch) {
+        String targetBranch = normalizeBranch(rawTargetBranch);
+        String resolved = trimToNull(rawWorkBranch);
+        if (resolved == null) {
+            resolved = "run/" + runId;
+        }
+        if (resolved.equals(targetBranch)) {
+            throw new ValidationException("work_branch must differ from target_branch");
+        }
+        return resolved;
     }
 
     private String toJson(Object value) {

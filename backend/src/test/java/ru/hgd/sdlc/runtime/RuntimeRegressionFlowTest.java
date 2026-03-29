@@ -23,6 +23,7 @@ import ru.hgd.sdlc.runtime.application.RuntimeIntegrationTestConfig;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
+import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
 import ru.hgd.sdlc.runtime.support.RuntimeIntegrationTestBase;
 
@@ -195,6 +196,59 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
         Assertions.assertEquals("succeeded", nodes.get(0).path("status").asText());
     }
 
+    @Test
+    void prRunMovesToWaitingPublishThenFailsWithDiagnostics() throws Exception {
+        var flow = createPublishedFlow("terminal-pr-fail-flow", terminalOnlyFlowYaml("terminal-pr-fail-flow"), "complete");
+
+        UUID runId = createPrRunViaApi(token, project.getId(), flow.getCanonicalName(), "Publish via PR");
+        RunEntity failed = waitForRunStatus(runId, Duration.ofSeconds(15), RunStatus.PUBLISH_FAILED);
+
+        Assertions.assertEquals(RunStatus.PUBLISH_FAILED, failed.getStatus());
+        Assertions.assertEquals(RunPublishStatus.FAILED, failed.getPublishStatus());
+        Assertions.assertEquals(RunPublishStatus.SUCCEEDED, failed.getPushStatus());
+        Assertions.assertEquals(RunPublishStatus.FAILED, failed.getPrStatus());
+        Assertions.assertEquals("create_pr", failed.getPublishErrorStep());
+
+        MvcResult auditResult = mockMvc.perform(get("/api/runs/{runId}/audit", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode auditEvents = parseJson(readBody(auditResult));
+        boolean hasWaitingPublishAudit = false;
+        for (JsonNode event : auditEvents) {
+            if ("run_waiting_publish".equals(event.path("event_type").asText())) {
+                hasWaitingPublishAudit = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(hasWaitingPublishAudit, "Expected run_waiting_publish event");
+    }
+
+    @Test
+    void retryPublishCompletesRunAfterTransientFailure() throws Exception {
+        var flow = createPublishedFlow("terminal-pr-retry-flow", terminalOnlyFlowYaml("terminal-pr-retry-flow"), "complete");
+
+        UUID runId = createPrRunViaApi(token, project.getId(), flow.getCanonicalName(), "Publish retry");
+        RunEntity failed = waitForRunStatus(runId, Duration.ofSeconds(15), RunStatus.PUBLISH_FAILED);
+        Assertions.assertEquals(RunStatus.PUBLISH_FAILED, failed.getStatus());
+
+        failed.setPrUrl("https://github.com/example/repo/pull/1");
+        failed.setPrNumber(1);
+        failed.setPrStatus(RunPublishStatus.FAILED);
+        runRepository.save(failed);
+
+        mockMvc.perform(post("/api/runs/{runId}/publish/retry", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        RunEntity completed = waitForRunStatus(runId, Duration.ofSeconds(15), RunStatus.COMPLETED);
+        Assertions.assertEquals(RunStatus.COMPLETED, completed.getStatus());
+        Assertions.assertEquals(RunPublishStatus.SUCCEEDED, completed.getPublishStatus());
+        Assertions.assertEquals(RunPublishStatus.SUCCEEDED, completed.getPrStatus());
+        Assertions.assertNotNull(completed.getPrUrl());
+        Assertions.assertEquals(1, completed.getPrNumber());
+    }
+
     private GateInstanceEntity waitForDifferentGate(UUID runId, UUID previousGateId, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
@@ -232,6 +286,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                   - id: ai-start
                     title: AI Start
                     type: ai
+                    checkpoint_before_run: false
                     execution_context: []
                     instruction: |
                       %s
@@ -278,6 +333,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                   - id: draft-questions
                     title: Draft Questions
                     type: command
+                    checkpoint_before_run: false
                     execution_context: []
                     instruction: |
                       echo "prepare questions"
@@ -395,5 +451,24 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                     produced_artifacts: []
                     expected_mutations: []
                 """.formatted(flowId, flowId);
+    }
+
+    private UUID createPrRunViaApi(String authToken, UUID projectId, String flowCanonicalName, String featureRequest) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "project_id", projectId,
+                "target_branch", "main",
+                "flow_canonical_name", flowCanonicalName,
+                "feature_request", featureRequest,
+                "publish_mode", "pr",
+                "pr_commit_strategy", "squash",
+                "idempotency_key", UUID.randomUUID().toString()
+        ));
+        MvcResult result = mockMvc.perform(post("/api/runs")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(objectMapper.readTree(result.getResponse().getContentAsString()).path("run_id").asText());
     }
 }
