@@ -5,6 +5,7 @@ import {
   Col,
   Collapse,
   Drawer,
+  Grid,
   Input,
   Modal,
   Row,
@@ -41,18 +42,28 @@ function pathSegments(path) {
     .filter(Boolean);
 }
 
+function normalizePath(path) {
+  return String(path || '').replaceAll('\\', '/');
+}
+
 function buildTree(paths) {
   const root = new Map();
   paths.forEach((path) => {
     const parts = pathSegments(path);
     let level = root;
     parts.forEach((part, idx) => {
+      const isLeaf = idx === parts.length - 1;
+      const rawPath = String(path || '');
+      const dirKey = `dir:${parts.slice(0, idx + 1).join('/')}`;
+      const nodeKey = isLeaf ? rawPath : dirKey;
       if (!level.has(part)) {
-        level.set(part, { key: parts.slice(0, idx + 1).join('/'), title: part, children: new Map(), leaf: false });
+        level.set(part, { key: nodeKey, title: part, children: new Map(), leaf: false, path: null });
       }
       const node = level.get(part);
-      if (idx === parts.length - 1) {
+      if (isLeaf) {
         node.leaf = true;
+        node.key = rawPath;
+        node.path = rawPath;
       }
       level = node.children;
     });
@@ -62,6 +73,7 @@ function buildTree(paths) {
     .map((item) => ({
       key: item.key,
       title: item.title,
+      path: item.path,
       isLeaf: item.leaf && item.children.size === 0,
       selectable: item.leaf && item.children.size === 0,
       children: toTreeData(item.children),
@@ -197,18 +209,11 @@ export default function HumanGate() {
   const [requestDraft, setRequestDraft] = useState(EMPTY_REQUEST_DRAFT);
   const [contextMenuState, setContextMenuState] = useState({ open: false, x: 0, y: 0 });
   const [keepChanges, setKeepChanges] = useState(true);
+  const screens = Grid.useBreakpoint();
 
   const diffEditorRef = useRef(null);
   const modifiedEditorRef = useRef(null);
   const reworkDecorationIdsRef = useRef([]);
-  const diffOriginalModelPath = useMemo(
-    () => `inmemory://human-gate/original/${runId || 'run'}/${gateId || 'gate'}`,
-    [runId, gateId]
-  );
-  const diffModifiedModelPath = useMemo(
-    () => `inmemory://human-gate/modified/${runId || 'run'}/${gateId || 'gate'}`,
-    [runId, gateId]
-  );
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
@@ -234,9 +239,14 @@ export default function HumanGate() {
     () => editableArtifacts.find((artifact) => matchesEditablePath(selectedPath, artifact.path) || matchesEditablePath(artifact.path, selectedPath)) || null,
     [editableArtifacts, selectedPath]
   );
-  const selectedGitChange = useMemo(() => changes.find((item) => item.path === selectedPath) || null, [changes, selectedPath]);
+  const selectedGitChange = useMemo(() => {
+    const selectedNormalized = normalizePath(selectedPath);
+    return changes.find((item) => normalizePath(item.path) === selectedNormalized) || null;
+  }, [changes, selectedPath]);
   const selectedIsEditable = isInput && !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
+  const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
+  const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;
   const currentEditableContent = selectedEditable
     ? (editedByPath[selectedEditable.path] ?? selectedEditable.content ?? '')
     : '';
@@ -289,7 +299,8 @@ export default function HumanGate() {
       }
       setLoadingDiff(true);
       try {
-        const data = await apiRequest(`/gates/${gateId}/diff?path=${encodeURIComponent(selectedPath)}`);
+        const pathForDiff = selectedGitChange?.path || selectedPath;
+        const data = await apiRequest(`/gates/${gateId}/diff?path=${encodeURIComponent(pathForDiff)}`);
         setOriginalContent(data.original_content || '');
         setModifiedContent(data.modified_content || '');
       } catch (err) {
@@ -336,42 +347,46 @@ export default function HumanGate() {
   };
 
   const applyReworkDecorations = useCallback(() => {
-    const editor = modifiedEditorRef.current;
-    if (!editor) {
-      return;
+    try {
+      const editor = modifiedEditorRef.current;
+      if (!editor) {
+        return;
+      }
+      const model = editor.getModel();
+      if (!model || (typeof model.isDisposed === 'function' && model.isDisposed())) {
+        return;
+      }
+      if (!isApproval || !selectedPath) {
+        reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
+        return;
+      }
+      const fileRequests = reworkRequests.filter((request) => {
+        const path = request?.path || '';
+        return matchesEditablePath(path, selectedPath) || matchesEditablePath(selectedPath, path);
+      });
+      const decorations = fileRequests.map((request, index) => {
+        const startLine = Number.isInteger(request?.range?.startLineNumber) && request.range.startLineNumber > 0
+          ? request.range.startLineNumber
+          : 1;
+        return {
+          range: {
+            startLineNumber: startLine,
+            startColumn: 1,
+            endLineNumber: startLine,
+            endColumn: 1,
+          },
+          options: {
+            isWholeLine: true,
+            linesDecorationsClassName: 'human-gate-rework-marker-line',
+            glyphMarginClassName: 'human-gate-rework-marker-glyph',
+            glyphMarginHoverMessage: { value: `Rework request #${index + 1}\n\n${request.instruction || ''}` },
+          },
+        };
+      });
+      reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, decorations);
+    } catch (_) {
+      // ignore Monaco transient dispose races during layout recalculation
     }
-    const model = editor.getModel();
-    if (!model || (typeof model.isDisposed === 'function' && model.isDisposed())) {
-      return;
-    }
-    if (!isApproval || !selectedPath) {
-      reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, []);
-      return;
-    }
-    const fileRequests = reworkRequests.filter((request) => {
-      const path = request?.path || '';
-      return matchesEditablePath(path, selectedPath) || matchesEditablePath(selectedPath, path);
-    });
-    const decorations = fileRequests.map((request, index) => {
-      const startLine = Number.isInteger(request?.range?.startLineNumber) && request.range.startLineNumber > 0
-        ? request.range.startLineNumber
-        : 1;
-      return {
-        range: {
-          startLineNumber: startLine,
-          startColumn: 1,
-          endLineNumber: startLine,
-          endColumn: 1,
-        },
-        options: {
-          isWholeLine: true,
-          linesDecorationsClassName: 'human-gate-rework-marker-line',
-          glyphMarginClassName: 'human-gate-rework-marker-glyph',
-          glyphMarginHoverMessage: { value: `Rework request #${index + 1}\n\n${request.instruction || ''}` },
-        },
-      };
-    });
-    reworkDecorationIdsRef.current = editor.deltaDecorations(reworkDecorationIdsRef.current, decorations);
   }, [isApproval, reworkRequests, selectedPath]);
 
   useEffect(() => {
@@ -636,7 +651,7 @@ export default function HumanGate() {
                   if (!info?.node?.isLeaf) {
                     return;
                   }
-                  setSelectedPath(String(keys[0] || ''));
+                  setSelectedPath(String(info?.node?.path || keys[0] || ''));
                 }}
               />
             </Card>
@@ -686,13 +701,10 @@ export default function HumanGate() {
                 style={{ position: 'relative' }}
               >
                 <DiffEditor
+                  key={diffEditorKey}
                   height="520px"
                   beforeMount={configureMonacoThemes}
                   theme={monacoTheme}
-                  originalModelPath={diffOriginalModelPath}
-                  modifiedModelPath={diffModifiedModelPath}
-                  keepCurrentOriginalModel
-                  keepCurrentModifiedModel
                   original={originalContent}
                   modified={modifiedContent}
                   language={selectedLanguage}
@@ -702,24 +714,14 @@ export default function HumanGate() {
                     applyReworkDecorations();
                   }}
                   onUnmount={(editorInstance) => {
-                    try {
-                      const model = editorInstance?.getModel?.();
-                      if (model) {
-                        editorInstance.setModel(null);
-                        model.original?.dispose?.();
-                        model.modified?.dispose?.();
-                      }
-                    } catch (_) {
-                      // ignore dispose errors during unmount
-                    } finally {
-                      diffEditorRef.current = null;
-                      modifiedEditorRef.current = null;
-                      reworkDecorationIdsRef.current = [];
-                    }
+                    diffEditorRef.current = null;
+                    modifiedEditorRef.current = null;
+                    reworkDecorationIdsRef.current = [];
                   }}
                   options={{
                     readOnly: true,
                     renderSideBySide: isApproval,
+                    useInlineViewWhenSpaceIsLimited: false,
                     contextmenu: false,
                     glyphMargin: true,
                     minimap: { enabled: false },
