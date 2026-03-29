@@ -22,7 +22,6 @@ import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.runtime.application.dto.GateChangesResult;
 import ru.hgd.sdlc.runtime.application.dto.GateDiffResult;
 import ru.hgd.sdlc.runtime.application.dto.GitChangeEntry;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
@@ -38,7 +37,7 @@ public class GitReviewService {
     private final GateInstanceRepository gateInstanceRepository;
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
-    private final GitPort gitPort;
+    private final ProcessExecutionPort processExecutionPort;
     private final WorkspacePort workspacePort;
 
     public GitReviewService(
@@ -46,14 +45,14 @@ public class GitReviewService {
             GateInstanceRepository gateInstanceRepository,
             ObjectMapper objectMapper,
             SettingsService settingsService,
-            GitPort gitPort,
+            ProcessExecutionPort processExecutionPort,
             WorkspacePort workspacePort
     ) {
         this.runRepository = runRepository;
         this.gateInstanceRepository = gateInstanceRepository;
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
-        this.gitPort = gitPort;
+        this.processExecutionPort = processExecutionPort;
         this.workspacePort = workspacePort;
     }
 
@@ -197,7 +196,7 @@ public class GitReviewService {
         Path stdoutPath = operationRoot.resolve("git-" + suffix + ".stdout.log");
         Path stderrPath = operationRoot.resolve("git-" + suffix + ".stderr.log");
         try {
-            ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             command,

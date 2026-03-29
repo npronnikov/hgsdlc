@@ -31,7 +31,6 @@ import ru.hgd.sdlc.runtime.application.CatalogContentResolver;
 import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
 import ru.hgd.sdlc.runtime.application.command.CreateRunCommand;
 import ru.hgd.sdlc.runtime.application.port.ClockPort;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.IdentityPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
@@ -64,7 +63,7 @@ public class RunLifecycleService {
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
     private final CatalogContentResolver catalogContentResolver;
-    private final GitPort gitPort;
+    private final ProcessExecutionPort processExecutionPort;
     private final WorkspacePort workspacePort;
     private final ClockPort clockPort;
     private final IdentityPort identityPort;
@@ -80,7 +79,7 @@ public class RunLifecycleService {
             ObjectMapper objectMapper,
             SettingsService settingsService,
             CatalogContentResolver catalogContentResolver,
-            GitPort gitPort,
+            ProcessExecutionPort processExecutionPort,
             WorkspacePort workspacePort,
             ClockPort clockPort,
             IdentityPort identityPort,
@@ -95,7 +94,7 @@ public class RunLifecycleService {
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
         this.catalogContentResolver = catalogContentResolver;
-        this.gitPort = gitPort;
+        this.processExecutionPort = processExecutionPort;
         this.workspacePort = workspacePort;
         this.clockPort = clockPort;
         this.identityPort = identityPort;
@@ -583,7 +582,7 @@ public class RunLifecycleService {
             Path stdoutPath,
             Path stderrPath
     ) throws IOException {
-        ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+        ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                 new ProcessExecutionPort.ProcessExecutionRequest(
                         runId,
                         command,

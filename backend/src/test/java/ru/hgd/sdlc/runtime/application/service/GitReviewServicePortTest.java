@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import ru.hgd.sdlc.runtime.application.dto.GateChangesResult;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
@@ -31,7 +30,7 @@ class GitReviewServicePortTest {
         RunRepository runRepository = Mockito.mock(RunRepository.class);
         GateInstanceRepository gateInstanceRepository = Mockito.mock(GateInstanceRepository.class);
         SettingsService settingsService = Mockito.mock(SettingsService.class);
-        GitPort gitPort = Mockito.mock(GitPort.class);
+        ProcessExecutionPort processExecutionPort = Mockito.mock(ProcessExecutionPort.class);
         WorkspacePort workspacePort = Mockito.mock(WorkspacePort.class);
         ObjectMapper objectMapper = new ObjectMapper();
         GitReviewService service = new GitReviewService(
@@ -39,7 +38,7 @@ class GitReviewServicePortTest {
                 gateInstanceRepository,
                 objectMapper,
                 settingsService,
-                gitPort,
+                processExecutionPort,
                 workspacePort
         );
 
@@ -64,7 +63,7 @@ class GitReviewServicePortTest {
         Mockito.when(runRepository.findById(runId)).thenReturn(Optional.of(run));
         Mockito.when(settingsService.getAiTimeoutSeconds()).thenReturn(30);
         Mockito.when(workspacePort.isDirectory(Mockito.any())).thenReturn(false);
-        Mockito.when(gitPort.runGit(Mockito.any()))
+        Mockito.when(processExecutionPort.execute(Mockito.any()))
                 .thenReturn(new ProcessExecutionPort.ProcessExecutionResult(
                         0,
                         " M README.md\n",
@@ -91,7 +90,7 @@ class GitReviewServicePortTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<ProcessExecutionPort.ProcessExecutionRequest> captor =
                 ArgumentCaptor.forClass(ProcessExecutionPort.ProcessExecutionRequest.class);
-        Mockito.verify(gitPort, Mockito.times(2)).runGit(captor.capture());
+        Mockito.verify(processExecutionPort, Mockito.times(2)).execute(captor.capture());
         List<ProcessExecutionPort.ProcessExecutionRequest> requests = captor.getAllValues();
         Assertions.assertEquals(
                 List.of("git", "status", "--porcelain", "--untracked-files=all"),

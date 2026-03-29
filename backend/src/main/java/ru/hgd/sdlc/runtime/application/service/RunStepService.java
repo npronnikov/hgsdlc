@@ -35,7 +35,6 @@ import ru.hgd.sdlc.runtime.application.CodingAgentStrategy;
 import ru.hgd.sdlc.runtime.application.ExecutionTraceBuilder;
 import ru.hgd.sdlc.runtime.application.dto.GitChangeEntry;
 import ru.hgd.sdlc.runtime.application.port.ClockPort;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
@@ -78,7 +77,6 @@ public class RunStepService {
     private final SettingsService settingsService;
     private final NodeExecutionRouter nodeExecutionRouter;
     private final ProcessExecutionPort processExecutionPort;
-    private final GitPort gitPort;
     private final WorkspacePort workspacePort;
     private final ClockPort clockPort;
     private final RunPublishService runPublishService;
@@ -96,7 +94,6 @@ public class RunStepService {
             SettingsService settingsService,
             NodeExecutionRouter nodeExecutionRouter,
             ProcessExecutionPort processExecutionPort,
-            GitPort gitPort,
             WorkspacePort workspacePort,
             ClockPort clockPort,
             RunPublishService runPublishService,
@@ -113,7 +110,6 @@ public class RunStepService {
         this.settingsService = settingsService;
         this.nodeExecutionRouter = nodeExecutionRouter;
         this.processExecutionPort = processExecutionPort;
-        this.gitPort = gitPort;
         this.workspacePort = workspacePort;
         this.clockPort = clockPort;
         this.runPublishService = runPublishService;
@@ -1065,7 +1061,7 @@ public class RunStepService {
         Path stdoutPath = operationRoot.resolve(operationName + ".stdout.log");
         Path stderrPath = operationRoot.resolve(operationName + ".stderr.log");
         try {
-            ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             command,
@@ -1516,7 +1512,7 @@ public class RunStepService {
         Path stdoutPath = operationRoot.resolve("git-" + suffix + ".stdout.log");
         Path stderrPath = operationRoot.resolve("git-" + suffix + ".stderr.log");
         try {
-            ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             command,

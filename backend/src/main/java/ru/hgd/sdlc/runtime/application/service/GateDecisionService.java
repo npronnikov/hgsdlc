@@ -33,7 +33,6 @@ import ru.hgd.sdlc.runtime.application.command.ReworkGateCommand;
 import ru.hgd.sdlc.runtime.application.command.SubmitInputCommand;
 import ru.hgd.sdlc.runtime.application.command.SubmittedArtifact;
 import ru.hgd.sdlc.runtime.application.dto.GateActionResult;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.IdentityPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
@@ -64,7 +63,7 @@ public class GateDecisionService {
     private final RuntimeStepTxService runtimeStepTxService;
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
-    private final GitPort gitPort;
+    private final ProcessExecutionPort processExecutionPort;
     private final WorkspacePort workspacePort;
     private final IdentityPort identityPort;
 
@@ -76,7 +75,7 @@ public class GateDecisionService {
             RuntimeStepTxService runtimeStepTxService,
             SettingsService settingsService,
             ObjectMapper objectMapper,
-            GitPort gitPort,
+            ProcessExecutionPort processExecutionPort,
             WorkspacePort workspacePort,
             IdentityPort identityPort
     ) {
@@ -87,7 +86,7 @@ public class GateDecisionService {
         this.runtimeStepTxService = runtimeStepTxService;
         this.settingsService = settingsService;
         this.objectMapper = objectMapper;
-        this.gitPort = gitPort;
+        this.processExecutionPort = processExecutionPort;
         this.workspacePort = workspacePort;
         this.identityPort = identityPort;
     }
@@ -450,7 +449,7 @@ public class GateDecisionService {
         CommandResult resetResult;
         CommandResult cleanResult;
         try {
-            ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             List.of("git", "reset", "--hard", checkpointCommitSha),
@@ -468,7 +467,7 @@ public class GateDecisionService {
                     result.stdoutPath(),
                     result.stderrPath()
             );
-            ProcessExecutionPort.ProcessExecutionResult clean = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult clean = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             List.of("git", "clean", "-fd"),

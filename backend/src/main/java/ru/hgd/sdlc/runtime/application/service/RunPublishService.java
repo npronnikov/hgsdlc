@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -30,7 +29,6 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.project.domain.Project;
 import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
 import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
-import ru.hgd.sdlc.runtime.application.port.GitPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
@@ -49,7 +47,7 @@ public class RunPublishService {
     private final RunRepository runRepository;
     private final ProjectRepository projectRepository;
     private final RuntimeStepTxService runtimeStepTxService;
-    private final GitPort gitPort;
+    private final ProcessExecutionPort processExecutionPort;
     private final SettingsService settingsService;
     private final TaskExecutor taskExecutor;
     private final ObjectMapper objectMapper;
@@ -59,7 +57,7 @@ public class RunPublishService {
             RunRepository runRepository,
             ProjectRepository projectRepository,
             RuntimeStepTxService runtimeStepTxService,
-            GitPort gitPort,
+            ProcessExecutionPort processExecutionPort,
             SettingsService settingsService,
             TaskExecutor taskExecutor,
             ObjectMapper objectMapper
@@ -67,7 +65,7 @@ public class RunPublishService {
         this.runRepository = runRepository;
         this.projectRepository = projectRepository;
         this.runtimeStepTxService = runtimeStepTxService;
-        this.gitPort = gitPort;
+        this.processExecutionPort = processExecutionPort;
         this.settingsService = settingsService;
         this.taskExecutor = taskExecutor;
         this.objectMapper = objectMapper;
@@ -115,8 +113,7 @@ public class RunPublishService {
         runtimeStepTxService.markPublishRunning(runId);
         try {
             run = getRun(runId);
-            Path projectRoot = resolveProjectRoot(run);
-            if (run.getPublishMode() == RunPublishMode.LOCAL && !isGitWorkspace(projectRoot)) {
+            if (run.getPublishMode() == RunPublishMode.LOCAL && !isGitWorkspace(run)) {
                 runtimeStepTxService.markPublishCommitSkipped(runId, "workspace_not_git_repository");
                 runtimeStepTxService.markPublishCompleted(runId);
                 return;
@@ -395,7 +392,7 @@ public class RunPublishService {
         Path stdoutPath = operationRoot.resolve(suffix + ".stdout.log");
         Path stderrPath = operationRoot.resolve(suffix + ".stderr.log");
         try {
-            ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
+            ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                     new ProcessExecutionPort.ProcessExecutionRequest(
                             run.getId(),
                             command,
@@ -471,12 +468,14 @@ public class RunPublishService {
         return resolveRunWorkspaceRoot(run).resolve(".hgsdlc").resolve(".runtime").resolve("publish").toAbsolutePath().normalize();
     }
 
-    private boolean isGitWorkspace(Path root) {
-        if (root == null || !Files.isDirectory(root)) {
-            return false;
-        }
-        Path gitPath = root.resolve(".git");
-        return Files.exists(gitPath);
+    private boolean isGitWorkspace(RunEntity run) {
+        Path root = resolveProjectRoot(run);
+        CommandResult result = runGit(
+                run,
+                "workspace_probe",
+                List.of("git", "-C", root.toString(), "rev-parse", "--is-inside-work-tree")
+        );
+        return result.exitCode() == 0;
     }
 
     private String trimToNull(String value) {
