@@ -155,7 +155,7 @@ const NODE_TYPE_OPTIONS = [
   { key: 'terminal', label: 'Terminal' },
 ];
 
-const DEFAULT_REWORK = { keepChanges: false, nextNode: '' };
+const DEFAULT_REWORK = { nextNode: '' };
 
 function FlowNode({ data, selected }) {
   const visuals = NODE_KIND_META[data.nodeKind] || {};
@@ -278,8 +278,7 @@ function buildEdges(nodes) {
       addEdge(node.id, data.onApprove, 'on_approve', 'main');
     }
     if (data.onRework && data.onRework.nextNode) {
-      const keepChanges = !!data.onRework.keepChanges;
-      addEdge(node.id, data.onRework.nextNode, `rework: keep_changes=${keepChanges}`, 'rework');
+      addEdge(node.id, data.onRework.nextNode, 'on_rework', 'rework');
     }
   });
 
@@ -297,10 +296,10 @@ function toNodeData(node, isStart) {
   let onRework = null;
   if (rawRework) {
     onRework = {
-      keepChanges: rawRework.keep_changes ?? rawRework.keepChanges ?? false,
       nextNode: rawRework.next_node || rawRework.nextNode || '',
     };
   }
+  const defaultCheckpointBeforeRun = kind === 'ai' || kind === 'command';
   return {
     id: node.id || '',
     title: node.title || '',
@@ -317,7 +316,7 @@ function toNodeData(node, isStart) {
       };
     }),
     instruction: node.instruction || '',
-    checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? false,
+    checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? defaultCheckpointBeforeRun,
     skillRefs: node.skill_refs || node.skillRefs || [],
     responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
     producedArtifacts,
@@ -547,16 +546,6 @@ function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       }
       if (!data.onRework || !data.onRework.nextNode) {
         errors.push(`human_approval requires on_rework: ${node.id}`);
-      } else if (data.onRework.keepChanges === false) {
-        const targetNode = nodesById.get(data.onRework.nextNode);
-        const targetKind = targetNode?.data?.nodeKind || targetNode?.data?.type || '';
-        const checkpointEnabled = !!targetNode?.data?.checkpointBeforeRun;
-        if ((targetKind !== 'ai' && targetKind !== 'command') || !checkpointEnabled) {
-          errors.push(
-            `human_approval on_rework.keep_changes=false requires ai/command target with checkpoint_before_run=true: `
-            + `${node.id} -> ${data.onRework.nextNode}`
-          );
-        }
       }
     }
   });
@@ -956,7 +945,7 @@ export default function FlowEditor() {
       type: kind,
       executionContext: [],
       instruction: '',
-      checkpointBeforeRun: false,
+      checkpointBeforeRun: kind === 'ai' || kind === 'command',
       skillRefs: [],
       responseSchema: '',
       producedArtifacts: [],
@@ -1265,7 +1254,6 @@ export default function FlowEditor() {
       }
       if (data.onRework && data.onRework.nextNode) {
         lines.push('    on_rework:');
-        lines.push(`      keep_changes: ${!!data.onRework.keepChanges}`);
         lines.push(`      next_node: ${data.onRework.nextNode}`);
       }
     });
@@ -2026,7 +2014,7 @@ export default function FlowEditor() {
                           onSuccess: value === 'terminal' ? '' : selectedNode.data.onSuccess || '',
                           onFailure: value === 'ai' || value === 'command' ? (selectedNode.data.onFailure || '') : '',
                           checkpointBeforeRun: value === 'ai' || value === 'command'
-                            ? !!selectedNode.data.checkpointBeforeRun
+                            ? (selectedNode.data.checkpointBeforeRun ?? true)
                             : false,
                         });
                       }}
@@ -2237,7 +2225,20 @@ export default function FlowEditor() {
                         disabled={isReadOnly}
                         checkedChildren="On"
                         unCheckedChildren="Off"
-                        onChange={(checked) => updateSelectedNode({ checkpointBeforeRun: checked })}
+                        onChange={(checked) => {
+                          if (checked || !selectedNode.data.checkpointBeforeRun) {
+                            updateSelectedNode({ checkpointBeforeRun: checked });
+                            return;
+                          }
+                          Modal.confirm({
+                            title: 'Disable Git checkpoint?',
+                            content: 'If disabled, full rework will be impossible because the node will not be able to roll back its state.',
+                            okText: 'Disable',
+                            okButtonProps: { danger: true },
+                            cancelText: 'Cancel',
+                            onOk: () => updateSelectedNode({ checkpointBeforeRun: false }),
+                          });
+                        }}
                       />
                     </div>
                   </div>
@@ -2483,27 +2484,7 @@ export default function FlowEditor() {
                               className="field-control"
                               style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
                             >
-                              <div style={{ display: 'grid', gap: 2 }}>
-                                <Text>Keep changes after rework</Text>
-                                <Text type="secondary">
-                                  If off, rework can target only an AI or Command node with checkpoint enabled.
-                                </Text>
-                              </div>
-                              <Switch
-                                checked={!!(selectedNode.data.onRework || DEFAULT_REWORK).keepChanges}
-                                disabled={isReadOnly}
-                                checkedChildren="On"
-                                unCheckedChildren="Off"
-                                onChange={(checked) => {
-                                  const current = selectedNode.data.onRework || DEFAULT_REWORK;
-                                  updateSelectedNode({
-                                    onRework: {
-                                      ...current,
-                                      keepChanges: checked,
-                                    },
-                                  });
-                                }}
-                              />
+                              <Text type="secondary">Rework transition target for this gate.</Text>
                             </div>
                           </div>
                         </>

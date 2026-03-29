@@ -30,9 +30,10 @@
         "status_label" : "Ready for review"
       },
       "rework_discard_available" : false,
-      "rework_discard_unavailable_reason" : "flow_policy_keep_changes",
-      "rework_keep_changes" : true,
-      "rework_mode" : "keep",
+      "rework_discard_unavailable_reason" : "rework_target_checkpoint_disabled",
+      "rework_keep_changes" : false,
+      "rework_keep_changes_selectable" : false,
+      "rework_mode" : "discard",
       "user_instructions" : "Review snapshot changes."
     },
     "resource_version" : 0,

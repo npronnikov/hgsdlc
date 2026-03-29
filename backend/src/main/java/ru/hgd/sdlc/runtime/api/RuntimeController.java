@@ -244,6 +244,7 @@ public class RuntimeController {
                         request.expectedGateVersion(),
                         request.comment(),
                         request.instruction(),
+                        request.keepChanges(),
                         request.reviewedArtifactVersionIds()
                 ),
                 user
@@ -579,6 +580,7 @@ public class RuntimeController {
             @JsonProperty("expected_gate_version") Long expectedGateVersion,
             @JsonProperty("comment") String comment,
             @JsonProperty("instruction") String instruction,
+            @JsonProperty("keep_changes") Boolean keepChanges,
             @JsonProperty("reviewed_artifact_version_ids") List<UUID> reviewedArtifactVersionIds
     ) {}
 

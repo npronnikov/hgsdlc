@@ -7,5 +7,6 @@ public record ReworkGateCommand(
         Long expectedGateVersion,
         String comment,
         String instruction,
+        Boolean keepChanges,
         List<UUID> reviewedArtifactVersionIds
 ) {}

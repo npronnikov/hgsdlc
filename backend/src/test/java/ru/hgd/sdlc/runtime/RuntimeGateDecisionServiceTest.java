@@ -95,7 +95,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
     void approveExpectedVersionMismatch() throws Exception {
         var flow = createPublishedFlow(
                 "gate-approve-version",
-                humanApprovalFlowYaml("gate-approve-version", "APPROVE_MISMATCH", true),
+                humanApprovalFlowYaml("gate-approve-version", "APPROVE_MISMATCH"),
                 "implement-change"
         );
 
@@ -119,7 +119,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
     void requestReworkExpectedVersionMismatch() throws Exception {
         var flow = createPublishedFlow(
                 "gate-rework-version",
-                humanApprovalFlowYaml("gate-rework-version", "REWORK_MISMATCH", true),
+                humanApprovalFlowYaml("gate-rework-version", "REWORK_MISMATCH"),
                 "implement-change"
         );
 
@@ -131,6 +131,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 gate.getResourceVersion() + 1,
                 "Needs update",
                 "Adjust naming",
+                true,
                 List.of()
         );
 
@@ -182,7 +183,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
         String marker = "DISCARD_MARKER_" + UUID.randomUUID().toString().substring(0, 8);
         var flow = createPublishedFlow(
                 "gate-rework-discard",
-                humanApprovalFlowYaml("gate-rework-discard", marker, false),
+                humanApprovalFlowYaml("gate-rework-discard", marker),
                 "implement-change"
         );
 
@@ -193,17 +194,23 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
         Path readmePath = Path.of(run.getWorkspaceRoot()).resolve("README.md");
         String beforeRework = Files.readString(readmePath, StandardCharsets.UTF_8);
         Assertions.assertTrue(beforeRework.contains(marker), "Marker should exist before discard rework");
+        Path untrackedPath = Path.of(run.getWorkspaceRoot()).resolve("docs").resolve("generated.tmp");
+        Files.createDirectories(untrackedPath.getParent());
+        Files.writeString(untrackedPath, "temporary generated artifact", StandardCharsets.UTF_8);
+        Assertions.assertTrue(Files.exists(untrackedPath), "Untracked file should exist before discard rework");
 
         ReworkGateCommand command = new ReworkGateCommand(
                 gate.getResourceVersion(),
                 "Discard changes",
                 "Rework required",
+                false,
                 List.of()
         );
         gateDecisionService.requestRework(gate.getId(), command, flowConfigurator);
 
         String afterRework = Files.readString(readmePath, StandardCharsets.UTF_8);
         Assertions.assertFalse(afterRework.contains(marker), "Discard rework must reset workspace to checkpoint");
+        Assertions.assertFalse(Files.exists(untrackedPath), "Discard rework must remove untracked files after reset");
     }
 
     @Test
@@ -211,7 +218,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
         String marker = "KEEP_MARKER_" + UUID.randomUUID().toString().substring(0, 8);
         var flow = createPublishedFlow(
                 "gate-rework-keep",
-                humanApprovalFlowYaml("gate-rework-keep", marker, true),
+                humanApprovalFlowYaml("gate-rework-keep", marker),
                 "implement-change"
         );
 
@@ -227,6 +234,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 gate.getResourceVersion(),
                 "Keep changes",
                 "Rework required",
+                true,
                 List.of()
         );
         gateDecisionService.requestRework(gate.getId(), command, flowConfigurator);
@@ -293,7 +301,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 """.formatted(flowId, flowId);
     }
 
-    private String humanApprovalFlowYaml(String flowId, String marker, boolean keepChangesOnRework) {
+    private String humanApprovalFlowYaml(String flowId, String marker) {
         return """
                 id: %s
                 version: "1.0"
@@ -331,7 +339,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: %s
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR
@@ -342,6 +349,6 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                     execution_context: []
                     produced_artifacts: []
                     expected_mutations: []
-                """.formatted(flowId, flowId, marker, keepChangesOnRework);
+                """.formatted(flowId, flowId, marker);
     }
 }

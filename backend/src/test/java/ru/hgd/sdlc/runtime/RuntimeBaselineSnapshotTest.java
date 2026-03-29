@@ -211,7 +211,6 @@ class RuntimeBaselineSnapshotTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: true
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR

@@ -23,4 +23,4 @@ source_path: "flows/restore-architecture-flow/1.0"
 content_source: git
 visibility: internal
 lifecycle_status: active
-checksum: "278a55a453a12c911dbcc83f26e64db7eb4fb3e63f058539ba3630860f21614b"
+checksum: "a603499c80d124d7422b7d1d281bc424ed7dbd07d0b0cc6c9bdcb91e5eac7b7c"

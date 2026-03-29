@@ -64,8 +64,9 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$.current_gate.gate_kind").value("human_approval"))
                 .andExpect(jsonPath("$.current_gate.payload.rework_mode").value("keep"))
                 .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes").value(true))
-                .andExpect(jsonPath("$.current_gate.payload.rework_discard_available").value(false))
-                .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").value("flow_policy_keep_changes"));
+                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes_selectable").value(true))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_available").value(true))
+                .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").doesNotExist());
 
         mockMvc.perform(get("/api/runs")
                         .param("limit", "20")
@@ -92,8 +93,7 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$[0].gate_id").isString())
                 .andExpect(jsonPath("$[0].status").isString())
                 .andExpect(jsonPath("$[0].payload.git_summary").exists())
-                .andExpect(jsonPath("$[0].payload.rework_mode").value("keep"))
-                .andExpect(jsonPath("$[0].payload.rework_discard_unavailable_reason").value("flow_policy_keep_changes"));
+                .andExpect(jsonPath("$[0].payload.rework_mode").value("keep"));
 
         mockMvc.perform(get("/api/gates/{gateId}/changes", gate.getId())
                         .header("Authorization", "Bearer " + token))
@@ -216,8 +216,9 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.current_gate.gate_kind").value("human_approval"))
-                .andExpect(jsonPath("$.current_gate.payload.rework_mode").value("discard"))
-                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes").value(false))
+                .andExpect(jsonPath("$.current_gate.payload.rework_mode").value("keep"))
+                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes").value(true))
+                .andExpect(jsonPath("$.current_gate.payload.rework_keep_changes_selectable").value(true))
                 .andExpect(jsonPath("$.current_gate.payload.rework_discard_available").value(false))
                 .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").value("target_checkpoint_not_found"));
     }
@@ -239,6 +240,7 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                   - id: implement-change
                     title: Implement Change
                     type: command
+                    checkpoint_before_run: true
                     execution_context: []
                     instruction: |
                       echo "contract line" >> README.md
@@ -263,7 +265,6 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: true
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR
@@ -301,7 +302,6 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: false
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Col, Input, Row, Tabs, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Input, Row, Switch, Tabs, Tag, Typography, message } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -8,14 +8,12 @@ const { Title, Text } = Typography;
 
 function resolveDiscardUnavailableReason(reasonCode) {
   switch (reasonCode) {
-    case 'flow_policy_keep_changes':
-      return 'Flow policy is configured to keep changes.';
     case 'rework_target_missing':
       return 'Rework target node is missing.';
     case 'rework_target_kind_unsupported':
       return 'Rework target must be an AI/Command node.';
     case 'rework_target_checkpoint_disabled':
-      return 'Target node must have checkpoint_before_run=true.';
+      return 'Rollback before rework is unavailable because checkpoint creation is disabled on the target node.';
     case 'target_checkpoint_not_found':
       return 'Checkpoint is not available yet for the rework target node.';
     default:
@@ -32,13 +30,17 @@ export default function GateApproval() {
   const [gate, setGate] = useState(null);
   const [comment, setComment] = useState('');
   const [instruction, setInstruction] = useState('');
+  const [keepChanges, setKeepChanges] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const reworkMode = gate?.payload?.rework_mode
-    || (gate?.payload?.rework_keep_changes === false ? 'discard' : 'keep');
-  const isDiscardPolicy = reworkMode === 'discard';
+  const keepChangesSelectable = gate?.payload?.rework_keep_changes_selectable === true;
+  const isDiscardPolicy = !keepChanges;
   const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
   const reworkDiscardBlocked = isDiscardPolicy && !reworkDiscardAvailable;
   const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
+
+  useEffect(() => {
+    setKeepChanges(gate?.payload?.rework_keep_changes !== false);
+  }, [gate?.gate_id, gate?.resource_version, gate?.payload?.rework_keep_changes]);
 
   const load = async () => {
     if (!runId) {
@@ -102,6 +104,7 @@ export default function GateApproval() {
           expected_gate_version: gate.resource_version,
           comment,
           instruction,
+          keep_changes: keepChanges,
           reviewed_artifact_version_ids: [],
         }),
       });
@@ -170,6 +173,15 @@ export default function GateApproval() {
             <Tag color={isDiscardPolicy ? 'orange' : 'blue'} style={{ marginTop: 8 }}>
               {isDiscardPolicy ? 'Discard to checkpoint' : 'Keep changes'}
             </Tag>
+            <div style={{ marginTop: 8 }}>
+              <Switch
+                checked={keepChanges}
+                onChange={setKeepChanges}
+                disabled={!keepChangesSelectable || submitting}
+                checkedChildren="Keep"
+                unCheckedChildren="Discard"
+              />
+            </div>
             {reworkDiscardBlocked && (
               <Text type="danger" style={{ marginTop: 12, display: 'block' }}>
                 {resolveDiscardUnavailableReason(reworkDiscardUnavailableReason)}

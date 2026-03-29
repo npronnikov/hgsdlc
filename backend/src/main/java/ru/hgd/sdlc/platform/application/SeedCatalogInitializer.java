@@ -240,6 +240,7 @@ nodes:
   - id: analyze-architecture
     title: Analyze codebase architecture
     type: ai
+    checkpoint_before_run: true
     execution_context: []
     instruction: |
       Reconstruct architecture from the codebase.
@@ -265,7 +266,6 @@ nodes:
     expected_mutations: []
     on_approve: complete
     on_rework:
-      keep_changes: true
       next_node: analyze-architecture
   - id: complete
     title: Complete flow
@@ -301,6 +301,7 @@ nodes:
   - id: analyze-request-and-generate-questions
     title: Analyze request and generate questions
     type: ai
+    checkpoint_before_run: true
     execution_context: []
     instruction: |
       Study the project and the original user request.
@@ -341,6 +342,7 @@ nodes:
   - id: execute-request
     title: Generate requirements from request
     type: ai
+    checkpoint_before_run: true
     execution_context:
       - type: artifact_ref
         node_id: answer-questions

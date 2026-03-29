@@ -143,6 +143,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                 "expected_gate_version", firstGate.getResourceVersion(),
                 "comment", "Need refinements",
                 "instruction", "Please improve naming",
+                "keep_changes", true,
                 "reviewed_artifact_version_ids", List.of()
         ));
         mockMvc.perform(post("/api/gates/{gateId}/request-rework", firstGate.getId())
@@ -335,6 +336,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                   - id: implement-change
                     title: Implement Change
                     type: command
+                    checkpoint_before_run: true
                     execution_context: []
                     instruction: |
                       echo "change line" >> README.md
@@ -359,7 +361,6 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                     expected_mutations: []
                     on_approve: complete
                     on_rework:
-                      keep_changes: true
                       next_node: implement-change
                     allowed_roles:
                       - FLOW_CONFIGURATOR

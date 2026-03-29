@@ -18,6 +18,7 @@ nodes:
     instruction: |
       Reconstruct architecture from the codebase.
       Produce C4 and sequence diagram summaries.
+    checkpoint_before_run: true
     skill_refs:
       - restore-c4-architecture@1.0
       - restore-sequence-diagrams@1.0
@@ -39,7 +40,6 @@ nodes:
     expected_mutations: []
     on_approve: complete
     on_rework:
-      keep_changes: true
       next_node: analyze-architecture
   - id: complete
     title: Complete flow

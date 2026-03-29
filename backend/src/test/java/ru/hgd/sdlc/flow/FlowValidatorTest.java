@@ -222,7 +222,7 @@ class FlowValidatorTest {
                                 .build()
                 ))
                 .onApprove("end")
-                .onRework(NodeModel.OnRework.builder().keepChanges(true).nextNode("src").build())
+                .onRework(NodeModel.OnRework.builder().nextNode("src").build())
                 .producedArtifacts(List.of())
                 .expectedMutations(List.of())
                 .build();
@@ -270,7 +270,7 @@ class FlowValidatorTest {
                 .type("human_approval")
                 .executionContext(List.of())
                 .onApprove("end")
-                .onRework(NodeModel.OnRework.builder().keepChanges(false).nextNode("end").build())
+                .onRework(NodeModel.OnRework.builder().nextNode("end").build())
                 .producedArtifacts(List.of())
                 .expectedMutations(List.of())
                 .build();
@@ -289,7 +289,7 @@ class FlowValidatorTest {
                 .build();
 
         List<String> errors = validator.validate(flow);
-        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("on_rework.keep_changes=false")));
+        Assertions.assertTrue(errors.isEmpty(), "Expected no validation errors but got: " + errors);
     }
 
     @Test
@@ -307,7 +307,7 @@ class FlowValidatorTest {
                 .type("human_approval")
                 .executionContext(List.of())
                 .onApprove("end")
-                .onRework(NodeModel.OnRework.builder().keepChanges(false).nextNode("executor").build())
+                .onRework(NodeModel.OnRework.builder().nextNode("executor").build())
                 .producedArtifacts(List.of())
                 .expectedMutations(List.of())
                 .build();

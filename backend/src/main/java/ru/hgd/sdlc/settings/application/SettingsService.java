@@ -1,7 +1,9 @@
 package ru.hgd.sdlc.settings.application;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.net.URI;
@@ -24,7 +26,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.common.ChecksumUtil;
+import ru.hgd.sdlc.common.JsonSchemaValidator;
+import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
 import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.flow.application.FlowYamlParser;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.domain.FlowEnvironment;
@@ -84,6 +89,9 @@ public class SettingsService {
     private final RuleVersionRepository ruleVersionRepository;
     private final SkillVersionRepository skillVersionRepository;
     private final FlowVersionRepository flowVersionRepository;
+    private final FlowYamlParser flowYamlParser;
+    private final JsonSchemaValidator schemaValidator;
+    private final MarkdownFrontmatterParser frontmatterParser;
     private final JdbcTemplate jdbcTemplate;
     private final ReentrantLock repairLock = new ReentrantLock();
 
@@ -92,12 +100,17 @@ public class SettingsService {
             RuleVersionRepository ruleVersionRepository,
             SkillVersionRepository skillVersionRepository,
             FlowVersionRepository flowVersionRepository,
+            FlowYamlParser flowYamlParser,
+            JsonSchemaValidator schemaValidator,
             JdbcTemplate jdbcTemplate
     ) {
         this.repository = repository;
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
         this.flowVersionRepository = flowVersionRepository;
+        this.flowYamlParser = flowYamlParser;
+        this.schemaValidator = schemaValidator;
+        this.frontmatterParser = new MarkdownFrontmatterParser();
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -430,6 +443,7 @@ public class SettingsService {
     }
 
     private UpsertOutcome upsertRule(ParsedMetadata metadata, String actorId) {
+        validateRuleContentAgainstSchema(metadata);
         RuleProvider provider = RuleProvider.from(metadata.require("coding_agent"));
         Optional<RuleVersion> existingOptional = ruleVersionRepository.findFirstByCanonicalName(metadata.canonicalName());
         if (existingOptional.isPresent()) {
@@ -483,6 +497,7 @@ public class SettingsService {
     }
 
     private UpsertOutcome upsertSkill(ParsedMetadata metadata, String actorId) {
+        validateSkillContentAgainstSchema(metadata);
         SkillProvider provider = SkillProvider.from(metadata.require("coding_agent"));
         Optional<SkillVersion> existingOptional = skillVersionRepository.findFirstByCanonicalName(metadata.canonicalName());
         if (existingOptional.isPresent()) {
@@ -537,6 +552,7 @@ public class SettingsService {
     }
 
     private UpsertOutcome upsertFlow(ParsedMetadata metadata, String actorId) {
+        validateFlowContentAgainstSchema(metadata);
         Map<String, Object> flowDoc = parseYamlMap(metadata.content(), "Flow yaml is not valid");
         String startNodeId = stringValue(flowDoc.get("start_node_id"));
         if (startNodeId == null || startNodeId.isBlank()) {
@@ -594,6 +610,75 @@ public class SettingsService {
         target.setLifecycleStatus(parseFlowLifecycle(metadata.optional("lifecycle_status")));
         target.setSavedBy(actorId);
         target.setSavedAt(Instant.now());
+    }
+
+    private void validateFlowContentAgainstSchema(ParsedMetadata metadata) {
+        try {
+            flowYamlParser.parse(metadata.content());
+        } catch (ValidationException ex) {
+            throw new ValidationException("Catalog flow content does not match schema: "
+                    + metadata.canonicalName() + ": " + ex.getMessage());
+        }
+    }
+
+    private void validateRuleContentAgainstSchema(ParsedMetadata metadata) {
+        MarkdownFrontmatterParser.ParsedMarkdown parsed;
+        try {
+            parsed = frontmatterParser.parse(metadata.content());
+        } catch (ValidationException ex) {
+            throw new ValidationException("Catalog rule markdown is invalid: "
+                    + metadata.canonicalName() + ": " + ex.getMessage());
+        }
+        JsonNode merged = parsed.frontmatter().deepCopy();
+        if (!(merged instanceof ObjectNode objectNode)) {
+            throw new ValidationException("Catalog rule frontmatter must be a YAML object: " + metadata.canonicalName());
+        }
+        putIfMissing(objectNode, "id", metadata.id());
+        putIfMissing(objectNode, "version", metadata.version());
+        putIfMissing(objectNode, "canonical_name", metadata.canonicalName());
+        putIfMissing(objectNode, "title", metadata.displayName());
+        putIfMissing(objectNode, "description", metadata.optional("description"));
+        try {
+            schemaValidator.validate(objectNode, "schemas/rule.schema.json");
+        } catch (ValidationException ex) {
+            throw new ValidationException("Catalog rule content does not match schema: "
+                    + metadata.canonicalName() + ": " + ex.getMessage());
+        }
+    }
+
+    private void validateSkillContentAgainstSchema(ParsedMetadata metadata) {
+        MarkdownFrontmatterParser.ParsedMarkdown parsed;
+        try {
+            parsed = frontmatterParser.parse(metadata.content());
+        } catch (ValidationException ex) {
+            throw new ValidationException("Catalog skill markdown is invalid: "
+                    + metadata.canonicalName() + ": " + ex.getMessage());
+        }
+        JsonNode merged = parsed.frontmatter().deepCopy();
+        if (!(merged instanceof ObjectNode objectNode)) {
+            throw new ValidationException("Catalog skill frontmatter must be a YAML object: " + metadata.canonicalName());
+        }
+        putIfMissing(objectNode, "id", metadata.id());
+        putIfMissing(objectNode, "version", metadata.version());
+        putIfMissing(objectNode, "canonical_name", metadata.canonicalName());
+        putIfMissing(objectNode, "name", metadata.displayName());
+        putIfMissing(objectNode, "description", metadata.optional("description"));
+        try {
+            schemaValidator.validate(objectNode, "schemas/skill.schema.json");
+        } catch (ValidationException ex) {
+            throw new ValidationException("Catalog skill content does not match schema: "
+                    + metadata.canonicalName() + ": " + ex.getMessage());
+        }
+    }
+
+    private void putIfMissing(ObjectNode node, String fieldName, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        JsonNode existing = node.get(fieldName);
+        if (existing == null || existing.isNull() || (existing.isTextual() && existing.asText().isBlank())) {
+            node.put(fieldName, value);
+        }
     }
 
     private SkillEnvironment parseSkillEnvironment(String value) {

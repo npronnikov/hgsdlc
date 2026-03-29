@@ -73,7 +73,6 @@ function toNodeData(node, isStart) {
   let onRework = null;
   if (rawRework) {
     onRework = {
-      keepChanges: rawRework.keep_changes ?? rawRework.keepChanges ?? false,
       nextNode: rawRework.next_node || rawRework.nextNode || '',
     };
   }
@@ -128,8 +127,7 @@ function buildEdges(nodes) {
       addEdge(node.id, data.onApprove, 'on_approve', 'main');
     }
     if (data.onRework && data.onRework.nextNode) {
-      const keepChanges = !!data.onRework.keepChanges;
-      addEdge(node.id, data.onRework.nextNode, `rework: keep_changes=${keepChanges}`, 'rework');
+      addEdge(node.id, data.onRework.nextNode, 'on_rework', 'rework');
     }
     if (data.onReworkRoutes && typeof data.onReworkRoutes === 'object') {
       Object.entries(data.onReworkRoutes).forEach(([mode, target]) => {

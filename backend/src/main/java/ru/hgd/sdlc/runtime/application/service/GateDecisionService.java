@@ -253,7 +253,9 @@ public class GateDecisionService {
         enforceGateRole(node, user);
 
         String transitionTarget = resolveReworkTarget(node);
-        boolean keepChanges = shouldKeepChangesOnRework(node);
+        boolean checkpointConfigured = isCheckpointEnabledForReworkTarget(run, transitionTarget);
+        boolean requestedKeepChanges = command.keepChanges() == null ? checkpointConfigured : Boolean.TRUE.equals(command.keepChanges());
+        boolean keepChanges = checkpointConfigured ? requestedKeepChanges : false;
         String effectiveMode = keepChanges ? "keep" : "discard";
         if (!keepChanges) {
             rollbackWorkspaceToCheckpoint(run, transitionTarget, gate.getId());
@@ -446,6 +448,7 @@ public class GateDecisionService {
         Path operationRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve(".runtime").resolve("rework-reset");
         Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         CommandResult resetResult;
+        CommandResult cleanResult;
         try {
             ProcessExecutionPort.ProcessExecutionResult result = gitPort.runGit(
                     new ProcessExecutionPort.ProcessExecutionRequest(
@@ -464,6 +467,24 @@ public class GateDecisionService {
                     result.stderr(),
                     result.stdoutPath(),
                     result.stderrPath()
+            );
+            ProcessExecutionPort.ProcessExecutionResult clean = gitPort.runGit(
+                    new ProcessExecutionPort.ProcessExecutionRequest(
+                            run.getId(),
+                            List.of("git", "clean", "-fd"),
+                            workingDirectory,
+                            settingsService.getAiTimeoutSeconds(),
+                            operationRoot.resolve("checkpoint_clean.stdout.log"),
+                            operationRoot.resolve("checkpoint_clean.stderr.log"),
+                            true
+                    )
+            );
+            cleanResult = new CommandResult(
+                    clean.exitCode(),
+                    clean.stdout(),
+                    clean.stderr(),
+                    clean.stdoutPath(),
+                    clean.stderrPath()
             );
         } catch (IOException ex) {
             runtimeStepTxService.appendAudit(
@@ -502,6 +523,26 @@ public class GateDecisionService {
                     "REWORK_RESET_FAILED: git reset --hard failed for checkpoint " + checkpointCommitSha
             );
         }
+        if (cleanResult.exitCode() != 0) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    null,
+                    gateId,
+                    "checkpoint_reset_failed",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "phase", "clean",
+                            "rework_target_node_id", reworkTargetNodeId,
+                            "checkpoint_commit_sha", checkpointCommitSha,
+                            "stdout", truncate(cleanResult.stdout(), 4000),
+                            "stderr", truncate(cleanResult.stderr(), 4000)
+                    )
+            );
+            throw new ValidationException(
+                    "REWORK_RESET_FAILED: git clean -fd failed after reset for checkpoint " + checkpointCommitSha
+            );
+        }
 
         runtimeStepTxService.appendAudit(
                 run.getId(),
@@ -513,8 +554,10 @@ public class GateDecisionService {
                 mapOf(
                         "rework_target_node_id", reworkTargetNodeId,
                         "checkpoint_commit_sha", checkpointCommitSha,
-                        "stdout", truncate(resetResult.stdout(), 4000),
-                        "stderr", truncate(resetResult.stderr(), 4000)
+                        "reset_stdout", truncate(resetResult.stdout(), 4000),
+                        "reset_stderr", truncate(resetResult.stderr(), 4000),
+                        "clean_stdout", truncate(cleanResult.stdout(), 4000),
+                        "clean_stderr", truncate(cleanResult.stderr(), 4000)
                 )
         );
     }
@@ -526,8 +569,14 @@ public class GateDecisionService {
         throw new ValidationException("on_rework target is missing");
     }
 
-    private boolean shouldKeepChangesOnRework(NodeModel node) {
-        return node.getOnRework() != null && Boolean.TRUE.equals(node.getOnRework().getKeepChanges());
+    private boolean isCheckpointEnabledForReworkTarget(RunEntity run, String targetNodeId) {
+        if (targetNodeId == null || targetNodeId.isBlank()) {
+            return false;
+        }
+        FlowModel flowModel = parseFlowSnapshot(run);
+        NodeModel targetNode = requireNode(flowModel, targetNodeId);
+        String targetKind = normalizeNodeKind(targetNode);
+        return Set.of("ai", "command").contains(targetKind) && Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun());
     }
 
     private void enforceGateRole(NodeModel node, User user) {

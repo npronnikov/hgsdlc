@@ -151,13 +151,8 @@ public class FlowController {
     }
 
     private FlowSummaryResponse toFlowSummary(ru.hgd.sdlc.flow.domain.FlowVersion version) {
-        Integer nodeCount = null;
-        try {
-            var model = flowYamlParser.parse(version.getFlowYaml());
-            nodeCount = model.getNodes() == null ? 0 : model.getNodes().size();
-        } catch (RuntimeException ignored) {
-            // Keep list endpoint resilient even if legacy flow_yaml cannot be parsed.
-        }
+        var model = flowYamlParser.parse(version.getFlowYaml());
+        Integer nodeCount = model.getNodes() == null ? 0 : model.getNodes().size();
         return FlowSummaryResponse.from(version, nodeCount);
     }
 

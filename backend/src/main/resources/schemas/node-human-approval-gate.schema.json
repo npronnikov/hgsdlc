@@ -34,7 +34,6 @@
     "on_rework": {
       "type": "object",
       "properties": {
-        "keep_changes": { "type": "boolean" },
         "next_node": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": true

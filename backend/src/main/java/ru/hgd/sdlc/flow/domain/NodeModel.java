@@ -104,9 +104,6 @@ public class NodeModel {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class OnRework {
-        @JsonProperty("keep_changes")
-        private Boolean keepChanges;
-
         @JsonProperty("next_node")
         private String nextNode;
     }

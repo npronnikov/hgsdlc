@@ -9,6 +9,7 @@ import {
   Modal,
   Row,
   Space,
+  Switch,
   Tag,
   Tree,
   Typography,
@@ -123,21 +124,39 @@ function buildReworkInstruction(requests) {
   }).join('\n\n');
 }
 
+function composeReworkInstruction(instructionFromForm, requests) {
+  const parts = [];
+  const manual = (instructionFromForm || '').trim();
+  const fromRequests = buildReworkInstruction(requests || []);
+  if (manual) {
+    parts.push(manual);
+  }
+  if (fromRequests.trim()) {
+    parts.push(fromRequests);
+  }
+  return parts.join('\n\n');
+}
+
 function resolveDiscardUnavailableReason(reasonCode) {
   switch (reasonCode) {
-    case 'flow_policy_keep_changes':
-      return 'Flow policy is configured to keep changes.';
     case 'rework_target_missing':
       return 'Rework target node is missing.';
     case 'rework_target_kind_unsupported':
       return 'Rework target must be an AI/Command node.';
     case 'rework_target_checkpoint_disabled':
-      return 'Target node must have checkpoint_before_run=true.';
+      return 'Rollback before rework is unavailable because checkpoint creation is disabled on the target node.';
     case 'target_checkpoint_not_found':
       return 'Checkpoint is not available yet for the rework target node.';
     default:
       return 'Discard to checkpoint is currently unavailable.';
   }
+}
+
+function resolveReworkDiscardBlockedReason(reasonCode, blockedByRequests) {
+  if (blockedByRequests) {
+    return 'Rollback before rework is unavailable while Rework requests are present. Keep changes so the agent can apply requested edits.';
+  }
+  return resolveDiscardUnavailableReason(reasonCode);
 }
 
 const EMPTY_REQUEST_DRAFT = {
@@ -168,6 +187,7 @@ export default function HumanGate() {
 
   const [approveComment, setApproveComment] = useState('');
   const [reworkComment, setReworkComment] = useState('');
+  const [reworkInstruction, setReworkInstruction] = useState('');
   const [submitting, setSubmitting] = useState(null);
   const [editedByPath, setEditedByPath] = useState({});
 
@@ -176,18 +196,25 @@ export default function HumanGate() {
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [requestDraft, setRequestDraft] = useState(EMPTY_REQUEST_DRAFT);
   const [contextMenuState, setContextMenuState] = useState({ open: false, x: 0, y: 0 });
+  const [keepChanges, setKeepChanges] = useState(true);
 
   const diffEditorRef = useRef(null);
   const modifiedEditorRef = useRef(null);
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
-  const reworkMode = gate?.payload?.rework_mode
-    || (gate?.payload?.rework_keep_changes === false ? 'discard' : 'keep');
+  const keepChangesSelectable = gate?.payload?.rework_keep_changes_selectable === true;
+  const reworkMode = keepChanges ? 'keep' : 'discard';
   const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
   const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
   const isDiscardPolicy = reworkMode === 'discard';
-  const reworkDiscardBlocked = isDiscardPolicy && !reworkDiscardAvailable;
+  const hasAnyReworkRequests = reworkRequests.length > 0;
+  const discardBlockedByRequests = reworkDiscardAvailable && hasAnyReworkRequests;
+  const effectiveDiscardAvailable = reworkDiscardAvailable && !discardBlockedByRequests;
+  const reworkDiscardBlockedReason = resolveReworkDiscardBlockedReason(reworkDiscardUnavailableReason, discardBlockedByRequests);
+  const reworkDiscardBlocked = isDiscardPolicy && !effectiveDiscardAvailable;
+  const hasManualReworkInstruction = !!(reworkInstruction || '').trim();
+  const canSubmitRework = hasAnyReworkRequests || hasManualReworkInstruction;
   const userInstructions = gate?.payload?.user_instructions || '';
   const editableArtifacts = Array.isArray(gate?.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
 
@@ -280,6 +307,25 @@ export default function HumanGate() {
     };
   }, [contextMenuState.open]);
 
+  useEffect(() => {
+    setKeepChanges(gate?.payload?.rework_keep_changes !== false);
+  }, [gate?.gate_id, gate?.resource_version, gate?.payload?.rework_keep_changes]);
+
+  useEffect(() => {
+    if (discardBlockedByRequests && !keepChanges) {
+      setKeepChanges(true);
+      message.info('Discard to checkpoint was disabled because Rework requests are present.');
+    }
+  }, [discardBlockedByRequests, keepChanges]);
+
+  const handleKeepChangesToggle = (checked) => {
+    if (!checked && !effectiveDiscardAvailable) {
+      message.warning(reworkDiscardBlockedReason);
+      return;
+    }
+    setKeepChanges(checked);
+  };
+
   const goBack = () => navigate(`/run-console?runId=${runId}`);
 
   const openAddRequestModalFromSelection = () => {
@@ -371,18 +417,14 @@ export default function HumanGate() {
   const requestRework = async () => {
     if (!gate) return false;
     if (reworkDiscardBlocked) {
-      message.warning(resolveDiscardUnavailableReason(reworkDiscardUnavailableReason));
+      message.warning(reworkDiscardBlockedReason);
       return false;
     }
-    if (reworkRequests.length === 0) {
-      message.warning('Add at least one rework request');
-      return false;
-    }
-    const mergedInstruction = buildReworkInstruction(reworkRequests);
-    if (!mergedInstruction.trim()) {
+    if (!canSubmitRework) {
       message.warning('Rework instruction is required');
       return false;
     }
+    const mergedInstruction = composeReworkInstruction(reworkInstruction, reworkRequests);
     setSubmitting('rework');
     try {
       await apiRequest(`/gates/${gate.gate_id}/request-rework`, {
@@ -391,6 +433,7 @@ export default function HumanGate() {
           expected_gate_version: gate.resource_version,
           comment: reworkComment,
           instruction: mergedInstruction,
+          keep_changes: keepChanges,
           reviewed_artifact_version_ids: [],
         }),
       });
@@ -633,6 +676,7 @@ export default function HumanGate() {
         }}
         onOk={addReworkRequest}
         okText="Add request"
+        okButtonProps={{ disabled: !(requestDraft.instruction || '').trim() }}
       >
         {requestDraft.scope === 'selection' ? (
           <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -702,19 +746,34 @@ export default function HumanGate() {
                   <Collapse items={reworkItems} />
                 )}
 
+                <Text className="muted">Instruction</Text>
+                <Input.TextArea
+                  rows={3}
+                  value={reworkInstruction}
+                  onChange={(event) => setReworkInstruction(event.target.value)}
+                />
+
                 <Text className="muted">Changes handling policy</Text>
                 <div style={{ display: 'grid', gap: 6 }}>
                   <Tag color={isDiscardPolicy ? 'orange' : 'blue'} style={{ width: 'fit-content' }}>
                     {isDiscardPolicy ? 'Discard to checkpoint' : 'Keep changes'}
                   </Tag>
+                  <Switch
+                    checked={keepChanges}
+                    onChange={handleKeepChangesToggle}
+                    disabled={!keepChangesSelectable || submitting !== null}
+                    checkedChildren="Keep"
+                    unCheckedChildren="Discard"
+                    style={{ width: "fit-content" }}
+                  />
                   {reworkDiscardBlocked && (
-                    <Text type="danger">{resolveDiscardUnavailableReason(reworkDiscardUnavailableReason)}</Text>
+                    <Text type="danger">{reworkDiscardBlockedReason}</Text>
                   )}
                 </div>
 
                 <Text className="muted">Comment</Text>
                 <Input.TextArea
-                  rows={3}
+                  rows={2}
                   value={reworkComment}
                   onChange={(event) => setReworkComment(event.target.value)}
                 />
@@ -744,7 +803,7 @@ export default function HumanGate() {
                   setActiveActionPanel(null);
                 }}
                 loading={submitting === 'rework'}
-                disabled={reworkDiscardBlocked}
+                disabled={!canSubmitRework}
               >
                 Request rework
               </Button>
