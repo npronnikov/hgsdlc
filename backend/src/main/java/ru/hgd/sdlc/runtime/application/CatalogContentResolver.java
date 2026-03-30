@@ -7,13 +7,10 @@ import java.nio.file.Paths;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.common.ValidationException;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
-import ru.hgd.sdlc.rule.domain.RuleContentSource;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.settings.application.SettingsService;
-import ru.hgd.sdlc.skill.domain.SkillContentSource;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 
 @Component
@@ -30,36 +27,27 @@ public class CatalogContentResolver {
         if (flowVersion == null) {
             throw new ValidationException("Flow version is required");
         }
-        if (flowVersion.getContentSource() == FlowContentSource.GIT) {
-            return readFromMirror(flowVersion.getSourcePath(), "FLOW.yaml");
-        }
-        return flowVersion.getFlowYaml();
+        String fallbackPath = "flows/" + flowVersion.getFlowId() + "/" + flowVersion.getVersion();
+        return readFromMirror(resolveSourcePath(flowVersion.getSourcePath(), fallbackPath), "FLOW.yaml");
     }
 
     public String resolveRuleMarkdown(RuleVersion ruleVersion) {
         if (ruleVersion == null) {
             throw new ValidationException("Rule version is required");
         }
-        if (ruleVersion.getContentSource() == RuleContentSource.GIT) {
-            return readFromMirror(ruleVersion.getSourcePath(), "RULE.md");
-        }
-        return ruleVersion.getRuleMarkdown();
+        String fallbackPath = "rules/" + ruleVersion.getRuleId() + "/" + ruleVersion.getVersion();
+        return readFromMirror(resolveSourcePath(ruleVersion.getSourcePath(), fallbackPath), "RULE.md");
     }
 
     public String resolveSkillMarkdown(SkillVersion skillVersion) {
         if (skillVersion == null) {
             throw new ValidationException("Skill version is required");
         }
-        if (skillVersion.getContentSource() == SkillContentSource.GIT) {
-            return readFromMirror(skillVersion.getSourcePath(), "SKILL.md");
-        }
-        return skillVersion.getSkillMarkdown();
+        String fallbackPath = "skills/" + skillVersion.getSkillId() + "/" + skillVersion.getVersion();
+        return readFromMirror(resolveSourcePath(skillVersion.getSourcePath(), fallbackPath), "SKILL.md");
     }
 
     private String readFromMirror(String sourcePath, String defaultFileName) {
-        if (sourcePath == null || sourcePath.isBlank()) {
-            throw new ValidationException("source_path is required for git content source");
-        }
         String repoUrl = settingsService.getCatalogRepoUrl();
         if (repoUrl == null || repoUrl.isBlank()) {
             throw new ValidationException("catalog_repo_url is required for git content source");
@@ -83,6 +71,16 @@ public class CatalogContentResolver {
         } catch (IOException ex) {
             throw new ValidationException("Failed to read git content file: " + candidate + " (" + ex.getMessage() + ")");
         }
+    }
+
+    private String resolveSourcePath(String sourcePath, String fallbackPath) {
+        if (sourcePath != null && !sourcePath.isBlank()) {
+            return sourcePath;
+        }
+        if (fallbackPath == null || fallbackPath.isBlank()) {
+            throw new ValidationException("source_path is required");
+        }
+        return fallbackPath;
     }
 
     private Path resolveCatalogMirrorPath(String workspaceRoot, String repoUrl) {

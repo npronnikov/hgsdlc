@@ -18,6 +18,7 @@ export default function Flows() {
     search: '',
     codingAgent: null,
     teamCode: null,
+    scope: null,
     platformCode: null,
     flowKind: null,
     riskLevel: null,
@@ -53,6 +54,7 @@ export default function Flows() {
       if (filters.search.trim()) params.set('search', filters.search.trim());
       if (filters.codingAgent) params.set('codingAgent', filters.codingAgent);
       if (filters.teamCode) params.set('teamCode', filters.teamCode);
+      if (filters.scope) params.set('scope', filters.scope);
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.flowKind) params.set('flowKind', filters.flowKind);
       if (filters.riskLevel) params.set('riskLevel', filters.riskLevel);
@@ -74,6 +76,7 @@ export default function Flows() {
         description: flow.description || '',
         codingAgent: flow.coding_agent,
         teamCode: flow.team_code,
+        scope: flow.scope,
         platformCode: flow.platform_code,
         tags: flow.tags || [],
         flowKind: flow.flow_kind,
@@ -115,6 +118,7 @@ export default function Flows() {
     filters.search,
     filters.codingAgent,
     filters.teamCode,
+    filters.scope,
     filters.platformCode,
     filters.flowKind,
     filters.riskLevel,
@@ -132,6 +136,7 @@ export default function Flows() {
   const codingAgents = useMemo(() => Array.from(new Set(flows.map((flow) => flow.codingAgent).filter(Boolean))), [flows]);
   const statuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.status).filter(Boolean))), [flows]);
   const teamCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.teamCode).filter(Boolean))), [flows]);
+  const scopes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.scope).filter(Boolean))), [flows]);
   const platformCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.platformCode).filter(Boolean))), [flows]);
   const flowKinds = useMemo(() => Array.from(new Set(flows.map((flow) => flow.flowKind).filter(Boolean))), [flows]);
   const riskLevels = useMemo(() => Array.from(new Set(flows.map((flow) => flow.riskLevel).filter(Boolean))), [flows]);
@@ -148,6 +153,7 @@ export default function Flows() {
     if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
     if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
     if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
+    if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.flowKind) items.push({ key: 'flowKind', label: `Type: ${filters.flowKind}` });
     if (filters.riskLevel) items.push({ key: 'riskLevel', label: `Risk: ${filters.riskLevel}` });
@@ -213,6 +219,7 @@ export default function Flows() {
                 <div className="minimal-card-meta-line">
                   <span>{flow.flowKind || 'type: —'}</span>
                   <span>{flow.riskLevel || 'risk: —'}</span>
+                  <span>{flow.scope || 'scope: —'}</span>
                   <span>{flow.platformCode || 'platform: —'}</span>
                   <span>nodes: {flow.nodeCount ?? '—'}</span>
                 </div>
@@ -270,6 +277,7 @@ export default function Flows() {
           <div className="filter-row"><Text className="muted">Status</Text><Select allowClear value={filters.status} onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))} options={statuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))} placeholder="Select status" /></div>
           <div className="filter-row"><Text className="muted">Approval</Text><Select allowClear value={filters.approvalStatus} onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))} options={approvalStatuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select approval" /></div>
           <div className="filter-row"><Text className="muted">Team</Text><Select allowClear value={filters.teamCode} onChange={(value) => setFilters((prev) => ({ ...prev, teamCode: value || null }))} options={teamCodes.map((value) => ({ value, label: value }))} placeholder="Select team" /></div>
+          <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.flowKind} onChange={(value) => setFilters((prev) => ({ ...prev, flowKind: value || null }))} options={flowKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Risk</Text><Select allowClear value={filters.riskLevel} onChange={(value) => setFilters((prev) => ({ ...prev, riskLevel: value || null }))} options={riskLevels.map((value) => ({ value, label: value }))} placeholder="Select risk" /></div>

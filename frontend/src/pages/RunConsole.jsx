@@ -375,6 +375,7 @@ function AuditTab({ runId, nodes, preFilterNodeId }) {
   const [filterNodeId, setFilterNodeId] = useState(undefined);
   const [filterEventType, setFilterEventType] = useState(undefined);
   const [filterActorType, setFilterActorType] = useState(undefined);
+  const [expandedEventKeys, setExpandedEventKeys] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -421,18 +422,40 @@ function AuditTab({ runId, nodes, preFilterNodeId }) {
     fetchEvents(null);
   }, [runId, filterNodeId, filterEventType, filterActorType]);
 
-  const items = events.map((item) => ({
-    key: item.event_id,
-    label: (
-      <Space size={12} wrap>
-        <Text strong>{item.event_type}</Text>
-        <StatusTag value={item.actor_type} />
-        <Text type="secondary">seq {item.sequence_no}</Text>
-        <Text type="secondary">{formatDate(item.event_time)}</Text>
-      </Space>
-    ),
-    children: renderAuditSections(item),
-  }));
+  useEffect(() => {
+    setExpandedEventKeys([]);
+  }, [runId, filterNodeId, filterEventType, filterActorType]);
+
+  const columns = [
+    {
+      title: 'Event',
+      dataIndex: 'event_type',
+      key: 'event_type',
+      render: (value) => <Text strong>{value || '—'}</Text>,
+    },
+    {
+      title: 'Status',
+      dataIndex: 'actor_type',
+      key: 'actor_type',
+      width: 130,
+      render: (value) => <StatusTag value={value || '—'} />,
+    },
+    {
+      title: 'Sequence',
+      dataIndex: 'sequence_no',
+      key: 'sequence_no',
+      width: 120,
+      align: 'left',
+      render: (value) => <span className="mono">{value ?? '—'}</span>,
+    },
+    {
+      title: 'Time',
+      dataIndex: 'event_time',
+      key: 'event_time',
+      width: 180,
+      render: (value) => <span className="mono">{formatDate(value)}</span>,
+    },
+  ];
 
   return (
     <div>
@@ -479,10 +502,24 @@ function AuditTab({ runId, nodes, preFilterNodeId }) {
           ]}
         />
       </Space>
-      {items.length === 0 && !loading ? (
+      {events.length === 0 && !loading ? (
         <Empty description="No audit events" />
       ) : (
-        <Collapse items={items} accordion />
+        <Table
+          size="small"
+          rowKey="event_id"
+          loading={loading}
+          columns={columns}
+          dataSource={events}
+          pagination={false}
+          expandable={{
+            expandedRowRender: (record) => renderAuditSections(record),
+            expandedRowKeys: expandedEventKeys,
+            onExpand: (expanded, record) => {
+              setExpandedEventKeys(expanded ? [record.event_id] : []);
+            },
+          }}
+        />
       )}
       {hasMore && (
         <Button

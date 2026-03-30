@@ -44,6 +44,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
                 || COALESCE(l.team_code, '')) LIKE CONCAT('%', LOWER(:search), '%'))
               AND (:codingAgent IS NULL OR l.coding_agent = :codingAgent)
               AND (:teamCode IS NULL OR l.team_code = :teamCode)
+              AND (:scope IS NULL OR l.scope = :scope)
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:flowKind IS NULL OR l.flow_kind = :flowKind)
               AND (:riskLevel IS NULL OR l.risk_level = :riskLevel)
@@ -71,6 +72,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
             @Param("search") String search,
             @Param("codingAgent") String codingAgent,
             @Param("teamCode") String teamCode,
+            @Param("scope") String scope,
             @Param("platformCode") String platformCode,
             @Param("flowKind") String flowKind,
             @Param("riskLevel") String riskLevel,

@@ -20,6 +20,7 @@ export default function Skills() {
     status: null,
     approvalStatus: null,
     teamCode: null,
+    scope: null,
     platformCode: null,
     skillKind: null,
     environment: null,
@@ -50,6 +51,7 @@ export default function Skills() {
       if (filters.status) params.set('status', filters.status);
       if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
       if (filters.teamCode) params.set('teamCode', filters.teamCode);
+      if (filters.scope) params.set('scope', filters.scope);
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.skillKind) params.set('skillKind', filters.skillKind);
       if (filters.environment) params.set('environment', filters.environment);
@@ -64,6 +66,7 @@ export default function Skills() {
         description: skill.description || '',
         codingAgent: skill.coding_agent,
         teamCode: skill.team_code,
+        scope: skill.scope,
         status: skill.status,
         approvalStatus: skill.approval_status,
         environment: skill.environment,
@@ -103,6 +106,7 @@ export default function Skills() {
     filters.status,
     filters.approvalStatus,
     filters.teamCode,
+    filters.scope,
     filters.platformCode,
     filters.skillKind,
     filters.environment,
@@ -114,6 +118,7 @@ export default function Skills() {
   const statuses = useMemo(() => Array.from(new Set(skills.map((s) => s.status).filter(Boolean))), [skills]);
   const approvalStatuses = useMemo(() => Array.from(new Set(skills.map((s) => s.approvalStatus).filter(Boolean))), [skills]);
   const teamCodes = useMemo(() => Array.from(new Set(skills.map((s) => s.teamCode).filter(Boolean))), [skills]);
+  const scopes = useMemo(() => Array.from(new Set(skills.map((s) => s.scope).filter(Boolean))), [skills]);
   const platforms = useMemo(() => Array.from(new Set(skills.map((s) => s.platformCode).filter(Boolean))), [skills]);
   const skillKinds = useMemo(() => Array.from(new Set(skills.map((s) => s.skillKind).filter(Boolean))), [skills]);
   const environments = useMemo(() => Array.from(new Set(skills.map((s) => s.environment).filter(Boolean))), [skills]);
@@ -126,6 +131,7 @@ export default function Skills() {
     if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
     if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
     if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
+    if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.skillKind) items.push({ key: 'skillKind', label: `Type: ${filters.skillKind}` });
     if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
@@ -188,6 +194,7 @@ export default function Skills() {
                 {skill.description && <Text type="secondary" className="resource-card-description">{skill.description}</Text>}
                 <div className="skill-card-meta-line">
                   <span>{skill.skillKind || 'type: —'}</span>
+                  <span>{skill.scope || 'scope: —'}</span>
                   <span>{skill.platformCode || 'platform: —'}</span>
                   <span>{skill.visibility || 'visibility: —'}</span>
                 </div>
@@ -238,6 +245,7 @@ export default function Skills() {
           <div className="filter-row"><Text className="muted">Status</Text><Select allowClear value={filters.status} onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))} options={statuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select status" /></div>
           <div className="filter-row"><Text className="muted">Approval</Text><Select allowClear value={filters.approvalStatus} onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))} options={approvalStatuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select approval" /></div>
           <div className="filter-row"><Text className="muted">Team</Text><Select allowClear value={filters.teamCode} onChange={(value) => setFilters((prev) => ({ ...prev, teamCode: value || null }))} options={teamCodes.map((value) => ({ value, label: value }))} placeholder="Select team" /></div>
+          <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platforms.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.skillKind} onChange={(value) => setFilters((prev) => ({ ...prev, skillKind: value || null }))} options={skillKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Environment</Text><Select allowClear value={filters.environment} onChange={(value) => setFilters((prev) => ({ ...prev, environment: value || null }))} options={environments.map((value) => ({ value, label: value }))} placeholder="Select environment" /></div>

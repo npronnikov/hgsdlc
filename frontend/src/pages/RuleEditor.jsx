@@ -71,8 +71,8 @@ const ruleKindOptions = [
   { value: 'governance', label: 'governance' },
 ];
 const scopeOptions = [
-  { value: 'global', label: 'global' },
-  { value: 'project', label: 'project' },
+  { value: 'organization', label: 'organization' },
+  { value: 'team', label: 'team' },
 ];
 
 const DEFAULT_VERSION = '0.1';
@@ -169,7 +169,7 @@ export default function RuleEditor() {
   const [platformCode, setPlatformCode] = useState('FRONT');
   const [tags, setTags] = useState([]);
   const [ruleKind, setRuleKind] = useState('');
-  const [scope, setScope] = useState('');
+  const [scope, setScope] = useState('organization');
   const [environment, setEnvironment] = useState('dev');
   const [visibility, setVisibility] = useState('internal');
   const [lifecycleStatus, setLifecycleStatus] = useState('active');
@@ -182,6 +182,7 @@ export default function RuleEditor() {
   const [publishVariant, setPublishVariant] = useState('minor');
   const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
   const [publishDialogMode, setPublishDialogMode] = useState('pr');
+  const [forkedFrom, setForkedFrom] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [isNewRule, setIsNewRule] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -207,7 +208,7 @@ export default function RuleEditor() {
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setRuleKind(data.rule_kind || '');
-      setScope(data.scope || '');
+      setScope(data.scope || 'organization');
       setEnvironment(data.environment || 'dev');
       setVisibility(data.visibility || 'internal');
       setLifecycleStatus(data.lifecycle_status || 'active');
@@ -215,6 +216,7 @@ export default function RuleEditor() {
       setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
       setPublicationTarget(data.publication_target || 'db_and_git');
+      setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(ruleId, data.version);
@@ -269,7 +271,7 @@ export default function RuleEditor() {
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setRuleKind(data.rule_kind || '');
-      setScope(data.scope || '');
+      setScope(data.scope || 'organization');
       setEnvironment(data.environment || 'dev');
       setVisibility(data.visibility || 'internal');
       setLifecycleStatus(data.lifecycle_status || 'active');
@@ -277,6 +279,7 @@ export default function RuleEditor() {
       setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
       setPublicationTarget(data.publication_target || 'db_and_git');
+      setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
       setIsEditing(keepEditing);
       if (data.coding_agent) {
@@ -329,6 +332,31 @@ export default function RuleEditor() {
       return;
     }
     await applyChange(isNewRule || !hasContent);
+  };
+
+  const handleRuleIdChange = (value) => {
+    if (scope === 'team') {
+      const trimmed = value.trim();
+      if (trimmed && !trimmed.startsWith('team-')) {
+        setRuleId(`team-${trimmed}`);
+        return;
+      }
+    }
+    setRuleId(value);
+  };
+
+  const handleScopeChange = (value) => {
+    setScope(value);
+    if (!isEditing) {
+      return;
+    }
+    if (value === 'team' && ruleId && !ruleId.startsWith('team-')) {
+      setRuleId(`team-${ruleId.trim()}`);
+      return;
+    }
+    if (value === 'organization' && ruleId && ruleId.startsWith('team-')) {
+      setRuleId(ruleId.replace(/^team-/, ''));
+    }
   };
 
   const saveRule = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
@@ -386,6 +414,7 @@ export default function RuleEditor() {
           environment,
           visibility,
           lifecycle_status: lifecycleStatus,
+          forked_from: forkedFrom || undefined,
           rule_markdown: editorValue,
           publish,
           publication_target: publicationTargetOverride || publicationTarget,
@@ -405,6 +434,8 @@ export default function RuleEditor() {
       setContentSource(response.content_source || contentSource);
       setPublicationStatus(response.publication_status || publicationStatus);
       setPublicationTarget(response.publication_target || publicationTarget);
+      setScope(response.scope || scope);
+      setForkedFrom(response.forked_from || forkedFrom);
       setIsNewRule(false);
       setIsEditing(false);
       await loadVersions(response.rule_id || normalizedRuleId, response.version || ruleVersion);
@@ -426,7 +457,7 @@ export default function RuleEditor() {
     setPlatformCode('FRONT');
     setTags([]);
     setRuleKind('');
-    setScope('');
+    setScope('organization');
     setEnvironment('dev');
     setVisibility('internal');
     setLifecycleStatus('active');
@@ -435,6 +466,7 @@ export default function RuleEditor() {
     setPublicationStatus('draft');
     setPublicationTarget('db_and_git');
     setPublishMode('pr');
+    setForkedFrom('');
     setEditorValue('');
     setResourceVersion(0);
     setRuleVersion('');
@@ -476,6 +508,10 @@ export default function RuleEditor() {
 
   const startDraftFromPublished = () => {
     const sourceVersion = ruleVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    const sourceId = selectedRuleId || ruleId;
+    if (sourceId && sourceVersion) {
+      setForkedFrom(`${sourceId}@${sourceVersion}`);
+    }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
     setIsEditing(true);
@@ -490,8 +526,8 @@ export default function RuleEditor() {
 
   const openPublishDialog = () => {
     setPublishVariant('minor');
-    setPublishDialogTarget(publicationTarget || 'db_and_git');
-    setPublishDialogMode(publishMode || 'pr');
+    setPublishDialogTarget(scope === 'team' ? 'db_and_git' : (publicationTarget || 'db_and_git'));
+    setPublishDialogMode(scope === 'team' ? 'local' : (publishMode || 'pr'));
     setPublishDialogOpen(true);
   };
 
@@ -684,7 +720,7 @@ export default function RuleEditor() {
             <Text className="muted">{requiredLabel('ID Rule')}</Text>
             <Input
               value={ruleId}
-              onChange={(event) => setRuleId(event.target.value)}
+              onChange={(event) => handleRuleIdChange(event.target.value)}
               placeholder="project-rule"
               title="Стабильный идентификатор правила для canonical_name и ссылок."
               style={{ marginTop: 4 }}
@@ -742,10 +778,10 @@ export default function RuleEditor() {
             <Text className="muted">Scope</Text>
             <Select
               value={scope || undefined}
-              onChange={setScope}
+              onChange={handleScopeChange}
               options={scopeOptions}
               placeholder="Select scope"
-              title="Область действия правила: global или project."
+              title="Область действия правила: team или organization."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -834,6 +870,7 @@ export default function RuleEditor() {
               value={publishDialogTarget}
               onChange={setPublishDialogTarget}
               options={publicationTargetOptions}
+              disabled={scope === 'team'}
             />
           </div>
           <div>
@@ -843,6 +880,7 @@ export default function RuleEditor() {
               value={publishDialogMode}
               onChange={setPublishDialogMode}
               options={publishModeOptions}
+              disabled={scope === 'team'}
             />
           </div>
         </div>

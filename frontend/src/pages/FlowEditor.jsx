@@ -216,6 +216,10 @@ const riskLevelOptions = [
   { value: 'high', label: 'high' },
   { value: 'critical', label: 'critical' },
 ];
+const scopeOptions = [
+  { value: 'organization', label: 'organization' },
+  { value: 'team', label: 'team' },
+];
 const requiredLabel = (label) => `${label} *`;
 
 const emptyFlow = {
@@ -230,6 +234,8 @@ const emptyFlow = {
   tags: [],
   flowKind: '',
   riskLevel: '',
+  scope: 'organization',
+  forkedFrom: '',
   environment: 'dev',
   visibility: 'internal',
   lifecycleStatus: 'active',
@@ -819,6 +825,33 @@ export default function FlowEditor() {
     setFlowMeta((prev) => ({ ...prev, ...updates }));
   };
 
+  const handleFlowIdChange = (value) => {
+    if (flowMeta.scope === 'team') {
+      const trimmed = value.trim();
+      if (trimmed && !trimmed.startsWith('team-')) {
+        updateFlowMeta({ flowId: `team-${trimmed}` });
+        return;
+      }
+    }
+    updateFlowMeta({ flowId: value });
+  };
+
+  const handleScopeChange = (value) => {
+    setFlowMeta((prev) => {
+      const next = { ...prev, scope: value };
+      if (isReadOnly) {
+        return next;
+      }
+      if (value === 'team' && next.flowId && !next.flowId.startsWith('team-')) {
+        next.flowId = `team-${next.flowId.trim()}`;
+      }
+      if (value === 'organization' && next.flowId && next.flowId.startsWith('team-')) {
+        next.flowId = next.flowId.replace(/^team-/, '');
+      }
+      return next;
+    });
+  };
+
   const removeNodeById = (nodeId) => {
     if (isReadOnly) {
       return;
@@ -1069,6 +1102,8 @@ export default function FlowEditor() {
         tags: data.tags || [],
         flowKind: data.flow_kind || '',
         riskLevel: data.risk_level || '',
+        scope: data.scope || 'organization',
+        forkedFrom: data.forked_from || '',
         environment: data.environment || 'dev',
         visibility: data.visibility || 'internal',
         lifecycleStatus: data.lifecycle_status || 'active',
@@ -1114,6 +1149,8 @@ export default function FlowEditor() {
         tags: data.tags || [],
         flowKind: data.flow_kind || '',
         riskLevel: data.risk_level || '',
+        scope: data.scope || 'organization',
+        forkedFrom: data.forked_from || '',
         environment: data.environment || 'dev',
         visibility: data.visibility || 'internal',
         lifecycleStatus: data.lifecycle_status || 'active',
@@ -1311,9 +1348,11 @@ export default function FlowEditor() {
           tags: flowMeta.tags || [],
           flow_kind: flowMeta.flowKind,
           risk_level: flowMeta.riskLevel,
+          scope: flowMeta.scope,
           environment: flowMeta.environment,
           visibility: flowMeta.visibility,
           lifecycle_status: flowMeta.lifecycleStatus,
+          forked_from: flowMeta.forkedFrom || undefined,
           flow_yaml: flowYaml,
           publish,
           publication_target: publicationTargetOverride || flowMeta.publicationTarget,
@@ -1337,6 +1376,8 @@ export default function FlowEditor() {
         tags: response.tags || prev.tags,
         flowKind: response.flow_kind || prev.flowKind,
         riskLevel: response.risk_level || prev.riskLevel,
+        scope: response.scope || prev.scope,
+        forkedFrom: response.forked_from || prev.forkedFrom,
         environment: response.environment || prev.environment,
         visibility: response.visibility || prev.visibility,
         lifecycleStatus: response.lifecycle_status || prev.lifecycleStatus,
@@ -1441,6 +1482,10 @@ export default function FlowEditor() {
 
   const startDraftFromPublished = () => {
     const sourceVersion = flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    const sourceId = flowMeta.flowId;
+    if (sourceId && sourceVersion) {
+      updateFlowMeta({ forkedFrom: `${sourceId}@${sourceVersion}` });
+    }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
     setIsEditing(true);
@@ -1455,8 +1500,8 @@ export default function FlowEditor() {
 
   const openPublishDialog = () => {
     setPublishVariant('minor');
-    setPublishDialogTarget(flowMeta.publicationTarget || 'db_and_git');
-    setPublishDialogMode(flowMeta.publishMode || 'pr');
+    setPublishDialogTarget(flowMeta.scope === 'team' ? 'db_and_git' : (flowMeta.publicationTarget || 'db_and_git'));
+    setPublishDialogMode(flowMeta.scope === 'team' ? 'local' : (flowMeta.publishMode || 'pr'));
     setPublishDialogOpen(true);
   };
 
@@ -1709,7 +1754,7 @@ export default function FlowEditor() {
                   <Input
                     value={flowMeta.flowId}
                     disabled={isReadOnly || !isCreateMode || versionOptions.length > 0}
-                    onChange={(event) => updateFlowMeta({ flowId: event.target.value })}
+                    onChange={(event) => handleFlowIdChange(event.target.value)}
                     title="Стабильный идентификатор flow для canonical_name и ссылок."
                   />
                 </div>
@@ -1734,6 +1779,18 @@ export default function FlowEditor() {
                     disabled={isReadOnly}
                     onChange={(event) => updateFlowMeta({ teamCode: event.target.value })}
                     title="Код команды-владельца flow."
+                  />
+                </div>
+              </div>
+              <div>
+                <Text className="muted">{requiredLabel('Scope')}</Text>
+                <div className="field-control">
+                  <Select
+                    value={flowMeta.scope || undefined}
+                    disabled={isReadOnly}
+                    onChange={handleScopeChange}
+                    options={scopeOptions}
+                    placeholder="Select scope"
                   />
                 </div>
               </div>
@@ -2537,6 +2594,7 @@ export default function FlowEditor() {
               value={publishDialogTarget}
               onChange={setPublishDialogTarget}
               options={publicationTargetOptions}
+              disabled={flowMeta.scope === 'team'}
             />
           </div>
           <div>
@@ -2546,6 +2604,7 @@ export default function FlowEditor() {
               value={publishDialogMode}
               onChange={setPublishDialogMode}
               options={publishModeOptions}
+              disabled={flowMeta.scope === 'team'}
             />
           </div>
         </div>

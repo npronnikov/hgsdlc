@@ -36,6 +36,9 @@ import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 public class RuleService {
     private static final String INITIAL_VERSION = "0.1";
     private static final Pattern RULE_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
+    private static final String TEAM_SCOPE = "team";
+    private static final String ORGANIZATION_SCOPE = "organization";
+    private static final String TEAM_ID_PREFIX = "team-";
 
     private final RuleVersionRepository repository;
     private final MarkdownFrontmatterParser frontmatterParser;
@@ -158,6 +161,8 @@ public class RuleService {
         if (!ruleId.equals(request.ruleId())) {
             throw new ValidationException("Path ruleId does not match request rule_id");
         }
+        String scope = parseScope(request.scope());
+        validateIdForScope(ruleId, scope, "rule_id");
         RuleProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
@@ -246,8 +251,15 @@ public class RuleService {
         entity.setPlatformCode(normalizeOptional(request.platformCode()));
         entity.setTags(normalizeTags(request.tags()));
         entity.setRuleKind(normalizeOptional(request.ruleKind()));
-        entity.setScope(normalizeOptional(request.scope()));
+        entity.setScope(scope);
         entity.setEnvironment(parseEnvironment(request.environment()));
+        if (TEAM_SCOPE.equals(scope)) {
+            entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
+            entity.setForkedBy(resolveForkedBy(user, request.forkedBy()));
+        } else {
+            entity.setForkedFrom(null);
+            entity.setForkedBy(null);
+        }
         entity.setApprovedBy(publishNow ? entity.getApprovedBy() : null);
         entity.setApprovedAt(publishNow ? entity.getApprovedAt() : null);
         entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
@@ -473,6 +485,35 @@ public class RuleService {
             return RuleContentSource.GIT;
         }
         return RuleContentSource.DB;
+    }
+
+    private String parseScope(String scope) {
+        String normalized = normalizeOptional(scope);
+        if (normalized == null) {
+            throw new ValidationException("scope is required");
+        }
+        String value = normalized.toLowerCase();
+        if (!TEAM_SCOPE.equals(value) && !ORGANIZATION_SCOPE.equals(value)) {
+            throw new ValidationException("Unsupported scope: " + scope);
+        }
+        return value;
+    }
+
+    private void validateIdForScope(String id, String scope, String fieldName) {
+        if (TEAM_SCOPE.equals(scope) && !id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for team scope must start with '" + TEAM_ID_PREFIX + "'");
+        }
+        if (ORGANIZATION_SCOPE.equals(scope) && id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for organization scope must not start with '" + TEAM_ID_PREFIX + "'");
+        }
+    }
+
+    private String resolveForkedBy(User user, String requestedForkedBy) {
+        String normalized = normalizeOptional(requestedForkedBy);
+        if (normalized != null) {
+            return normalized;
+        }
+        return user == null ? null : normalizeOptional(user.getUsername());
     }
 
     private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {

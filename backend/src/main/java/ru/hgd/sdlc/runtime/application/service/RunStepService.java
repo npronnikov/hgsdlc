@@ -544,6 +544,7 @@ public class RunStepService {
             result.add(mapOf(
                     "artifact_key", artifact.artifactKey(),
                     "path", artifact.path(),
+                    "workspace_path", relativizePath(resolveProjectRoot(run), outputPath),
                     "scope", artifact.scope(),
                     "required", artifact.required(),
                     "source_node_id", artifact.sourceNodeId(),
@@ -1314,6 +1315,14 @@ public class RunStepService {
                 .resolve(sourceExecution.getNodeId())
                 .resolve("attempt-" + sourceExecution.getAttemptNo());
         return nodeDir.resolve(fileName).normalize();
+    }
+
+    private String relativizePath(Path root, Path path) {
+        try {
+            return root.relativize(path).toString().replace('\\', '/');
+        } catch (Exception ex) {
+            return path.toAbsolutePath().normalize().toString().replace('\\', '/');
+        }
     }
 
     private String fileChecksumOrNull(Path path) {

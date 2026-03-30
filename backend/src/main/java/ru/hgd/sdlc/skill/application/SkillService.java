@@ -39,6 +39,9 @@ import ru.hgd.sdlc.skill.infrastructure.TagRepository;
 public class SkillService {
     private static final String INITIAL_VERSION = "0.1";
     private static final Pattern SKILL_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
+    private static final String TEAM_SCOPE = "team";
+    private static final String ORGANIZATION_SCOPE = "organization";
+    private static final String TEAM_ID_PREFIX = "team-";
 
     private final SkillVersionRepository repository;
     private final TagRepository tagRepository;
@@ -92,6 +95,7 @@ public class SkillService {
                 normalizeEnumFilter(query.status()),
                 normalizeEnumFilter(query.approvalStatus()),
                 normalizeFilter(query.teamCode()),
+                normalizeFilter(query.scope()),
                 normalizeEnumFilter(query.environment()),
                 normalizeFilter(query.platformCode()),
                 normalizeFilter(query.skillKind()),
@@ -220,6 +224,8 @@ public class SkillService {
         if (!skillId.equals(request.skillId())) {
             throw new ValidationException("Path skillId does not match request skill_id");
         }
+        String scope = parseScope(request.scope());
+        validateIdForScope(skillId, scope, "skill_id");
         SkillProvider codingAgent = parseCodingAgent(request.codingAgent());
         boolean publish = Boolean.TRUE.equals(request.publish());
         boolean release = Boolean.TRUE.equals(request.release());
@@ -311,9 +317,17 @@ public class SkillService {
         entity.setPlatformCode(normalizePlatformCode(request.platformCode()));
         entity.setTags(normalizedTags);
         entity.setSkillKind(normalizeOptional(request.skillKind()));
+        entity.setScope(scope);
         entity.setEnvironment(environment);
         entity.setVisibility(visibility);
         entity.setLifecycleStatus(lifecycleStatus);
+        if (TEAM_SCOPE.equals(scope)) {
+            entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
+            entity.setForkedBy(resolveForkedBy(user, request.forkedBy()));
+        } else {
+            entity.setForkedFrom(null);
+            entity.setForkedBy(null);
+        }
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
         entity.setContentSource(contentSource);
@@ -530,6 +544,35 @@ public class SkillService {
         return SkillContentSource.DB;
     }
 
+    private String parseScope(String scope) {
+        String normalized = normalizeOptional(scope);
+        if (normalized == null) {
+            throw new ValidationException("scope is required");
+        }
+        String value = normalized.toLowerCase();
+        if (!TEAM_SCOPE.equals(value) && !ORGANIZATION_SCOPE.equals(value)) {
+            throw new ValidationException("Unsupported scope: " + scope);
+        }
+        return value;
+    }
+
+    private void validateIdForScope(String id, String scope, String fieldName) {
+        if (TEAM_SCOPE.equals(scope) && !id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for team scope must start with '" + TEAM_ID_PREFIX + "'");
+        }
+        if (ORGANIZATION_SCOPE.equals(scope) && id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for organization scope must not start with '" + TEAM_ID_PREFIX + "'");
+        }
+    }
+
+    private String resolveForkedBy(User user, String requestedForkedBy) {
+        String normalized = normalizeOptional(requestedForkedBy);
+        if (normalized != null) {
+            return normalized;
+        }
+        return user == null ? null : normalizeOptional(user.getUsername());
+    }
+
     private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
         if (!publishRequested) {
             return PublicationTarget.DB_ONLY;
@@ -657,6 +700,7 @@ public class SkillService {
             String status,
             String approvalStatus,
             String teamCode,
+            String scope,
             String environment,
             String platformCode,
             String skillKind,

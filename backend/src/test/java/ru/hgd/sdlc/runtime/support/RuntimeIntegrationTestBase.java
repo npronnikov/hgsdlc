@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
@@ -144,6 +145,8 @@ public abstract class RuntimeIntegrationTestBase {
     protected FlowVersion createPublishedFlow(String flowId, String flowYaml, String startNodeId) {
         String version = "1.0";
         Instant now = Instant.now();
+        String sourcePath = "flows/" + flowId + "/" + version;
+        materializeFlowToMirror(sourcePath, flowYaml);
         FlowVersion flow = FlowVersion.builder()
                 .id(UUID.randomUUID())
                 .flowId(flowId)
@@ -167,13 +170,14 @@ public abstract class RuntimeIntegrationTestBase {
                 .approvedBy("test")
                 .approvedAt(now)
                 .publishedAt(now)
-                .sourceRef(null)
-                .sourcePath(null)
-                .contentSource(FlowContentSource.DB)
+                .sourceRef("local")
+                .sourcePath(sourcePath)
+                .contentSource(FlowContentSource.GIT)
                 .visibility(FlowVisibility.INTERNAL)
                 .lifecycleStatus(FlowLifecycleStatus.ACTIVE)
                 .publicationStatus(PublicationStatus.PUBLISHED)
                 .publicationTarget(PublicationTarget.DB_ONLY)
+                .scope("organization")
                 .publishedCommitSha(null)
                 .publishedPrUrl(null)
                 .lastPublishError(null)
@@ -181,6 +185,25 @@ public abstract class RuntimeIntegrationTestBase {
                 .savedAt(now)
                 .build();
         return flowVersionRepository.save(flow);
+    }
+
+    private void materializeFlowToMirror(String sourcePath, String flowYaml) {
+        try {
+            Path mirrorRoot = resolveCatalogMirrorRoot();
+            Path flowFile = mirrorRoot.resolve(sourcePath).resolve("FLOW.yaml").normalize();
+            Files.createDirectories(flowFile.getParent());
+            Files.writeString(flowFile, flowYaml, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to materialize flow yaml in catalog mirror", ex);
+        }
+    }
+
+    private Path resolveCatalogMirrorRoot() {
+        String repoUrl = settingsService.getCatalogRepoUrl();
+        String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
+        return Path.of(settingsService.getWorkspaceRoot()).toAbsolutePath().normalize()
+                .resolve(".catalog-mirror")
+                .resolve(suffix);
     }
 
     protected Path initGitRemoteRepo() {

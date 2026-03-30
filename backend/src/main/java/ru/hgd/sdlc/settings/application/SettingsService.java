@@ -481,7 +481,7 @@ public class SettingsService {
         target.setPlatformCode(metadata.optional("platform_code"));
         target.setTags(metadata.tags());
         target.setRuleKind(metadata.optional("rule_kind"));
-        target.setScope(metadata.optional("scope"));
+        target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
         target.setEnvironment(parseRuleEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(RuleApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
@@ -490,6 +490,8 @@ public class SettingsService {
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
         target.setContentSource(RuleContentSource.GIT);
+        target.setForkedFrom(metadata.optional("forked_from"));
+        target.setForkedBy(metadata.optional("forked_by"));
         if (target.getVisibility() == null) {
             target.setVisibility(RuleVisibility.INTERNAL);
         }
@@ -537,6 +539,7 @@ public class SettingsService {
         target.setPlatformCode(metadata.optional("platform_code"));
         target.setTags(metadata.tags());
         target.setSkillKind(metadata.optional("skill_kind"));
+        target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
         target.setEnvironment(parseSkillEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
@@ -545,6 +548,8 @@ public class SettingsService {
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
         target.setContentSource(SkillContentSource.GIT);
+        target.setForkedFrom(metadata.optional("forked_from"));
+        target.setForkedBy(metadata.optional("forked_by"));
         if (target.getVisibility() == null) {
             target.setVisibility(SkillVisibility.INTERNAL);
         }
@@ -598,6 +603,7 @@ public class SettingsService {
         target.setTags(metadata.tags());
         target.setFlowKind(metadata.optional("flow_kind"));
         target.setRiskLevel(metadata.optional("risk_level"));
+        target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
         target.setEnvironment(parseFlowEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(FlowApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
@@ -606,6 +612,8 @@ public class SettingsService {
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
         target.setContentSource(FlowContentSource.GIT);
+        target.setForkedFrom(metadata.optional("forked_from"));
+        target.setForkedBy(metadata.optional("forked_by"));
         if (target.getVisibility() == null) {
             target.setVisibility(FlowVisibility.INTERNAL);
         }
@@ -915,6 +923,20 @@ public class SettingsService {
         return "sha256:" + checksumWithoutPrefix;
     }
 
+    private String parseCatalogScope(String rawScope, String entityId) {
+        String normalized = normalizeOptional(rawScope);
+        if (normalized != null) {
+            String value = normalized.toLowerCase(Locale.ROOT);
+            if ("team".equals(value) || "organization".equals(value)) {
+                return value;
+            }
+        }
+        if (entityId != null && entityId.startsWith("team-")) {
+            return "team";
+        }
+        return "organization";
+    }
+
     private Path resolveCatalogMirrorPath(String workspaceRoot, String repoUrl) {
         Path root = Paths.get(workspaceRoot).toAbsolutePath().normalize();
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
@@ -948,8 +970,11 @@ public class SettingsService {
         } else {
             runCommand(List.of("git", "-C", mirrorPath.toString(), "remote", "set-url", "origin", repoUrl), null, Duration.ofMinutes(1));
             runCommand(List.of("git", "-C", mirrorPath.toString(), "fetch", "--prune", "--tags", "origin"), null, Duration.ofMinutes(5));
-            runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", "-B", branch, "origin/" + branch), null, Duration.ofMinutes(1));
-            runCommand(List.of("git", "-C", mirrorPath.toString(), "reset", "--hard", "origin/" + branch), null, Duration.ofMinutes(1));
+            try {
+                runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", branch), null, Duration.ofMinutes(1));
+            } catch (ValidationException ex) {
+                runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", "-B", branch, "origin/" + branch), null, Duration.ofMinutes(1));
+            }
         }
     }
 
@@ -1018,6 +1043,14 @@ public class SettingsService {
             return value;
         }
         return value.substring(0, max) + "...";
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private String relativizeOrAbsolute(Path root, Path path) {

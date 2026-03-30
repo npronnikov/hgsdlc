@@ -16,6 +16,8 @@ public record RuleSaveRequest(
         @JsonProperty("environment") String environment,
         @JsonProperty("visibility") String visibility,
         @JsonProperty("lifecycle_status") String lifecycleStatus,
+        @JsonProperty("forked_from") String forkedFrom,
+        @JsonProperty("forked_by") String forkedBy,
         @JsonProperty("source_ref") String sourceRef,
         @JsonProperty("source_path") String sourcePath,
         @JsonProperty("rule_markdown") String ruleMarkdown,

@@ -54,6 +54,8 @@ import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 @Service
 public class PublicationService {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String TEAM_SCOPE = "team";
+    private static final String ORGANIZATION_SCOPE = "organization";
 
     private final PublicationRequestRepository publicationRequestRepository;
     private final PublicationApprovalRepository publicationApprovalRepository;
@@ -98,8 +100,8 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(skill.getCanonicalName());
-        request.setRequestedTarget(target);
-        request.setRequestedMode(normalizePublishMode(requestedMode));
+        request.setRequestedTarget(normalizeTargetForScope(target, skill.getScope()));
+        request.setRequestedMode(normalizePublishModeForScope(requestedMode, skill.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -123,8 +125,8 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(rule.getCanonicalName());
-        request.setRequestedTarget(target);
-        request.setRequestedMode(normalizePublishMode(requestedMode));
+        request.setRequestedTarget(normalizeTargetForScope(target, rule.getScope()));
+        request.setRequestedMode(normalizePublishModeForScope(requestedMode, rule.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -148,8 +150,8 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(flow.getCanonicalName());
-        request.setRequestedTarget(target);
-        request.setRequestedMode(normalizePublishMode(requestedMode));
+        request.setRequestedTarget(normalizeTargetForScope(target, flow.getScope()));
+        request.setRequestedMode(normalizePublishModeForScope(requestedMode, flow.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -479,7 +481,7 @@ public class PublicationService {
             skill.setPublishedCommitSha(publishResult.commitSha());
             skill.setPublishedPrUrl(publishResult.prUrl());
             skill.setLastPublishError(null);
-            skill.setContentSource(request.getRequestedTarget() == PublicationTarget.DB_ONLY ? SkillContentSource.DB : SkillContentSource.GIT);
+            skill.setContentSource(SkillContentSource.GIT);
             skill.setSourcePath("skills/" + skill.getSkillId() + "/" + skill.getVersion());
             skill.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -548,7 +550,7 @@ public class PublicationService {
             rule.setPublishedCommitSha(publishResult.commitSha());
             rule.setPublishedPrUrl(publishResult.prUrl());
             rule.setLastPublishError(null);
-            rule.setContentSource(request.getRequestedTarget() == PublicationTarget.DB_ONLY ? RuleContentSource.DB : RuleContentSource.GIT);
+            rule.setContentSource(RuleContentSource.GIT);
             rule.setSourcePath("rules/" + rule.getRuleId() + "/" + rule.getVersion());
             rule.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -617,7 +619,7 @@ public class PublicationService {
             flow.setPublishedCommitSha(publishResult.commitSha());
             flow.setPublishedPrUrl(publishResult.prUrl());
             flow.setLastPublishError(null);
-            flow.setContentSource(request.getRequestedTarget() == PublicationTarget.DB_ONLY ? FlowContentSource.DB : FlowContentSource.GIT);
+            flow.setContentSource(FlowContentSource.GIT);
             flow.setSourcePath("flows/" + flow.getFlowId() + "/" + flow.getVersion());
             flow.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -645,14 +647,29 @@ public class PublicationService {
     }
 
     private PublishResult publish(SkillVersion skill, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
-        if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
-            return new PublishResult(null, null, null, "db", false);
-        }
         CatalogGitSettings settings = loadCatalogGitSettings();
+        String sourceDir = "skills/" + skill.getSkillId() + "/" + skill.getVersion();
+        if (isTeamScope(skill.getScope())) {
+            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
+            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
+            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
+            configureGitIdentity(mirrorRepoPath);
+            job.setStep("git_prepare");
+            job.setBranchName(settings.defaultBranch());
+            publicationJobRepository.save(job);
+
+            writeSkillFiles(mirrorRepoPath, sourceDir, skill, settings.defaultBranch());
+            job.setStep("git_commit");
+            publicationJobRepository.save(job);
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(skill-team): " + skill.getCanonicalName()));
+            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
+            return new PublishResult(commitSha, null, null, commitSha, false);
+        }
+
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String sourceDir = "skills/" + skill.getSkillId() + "/" + skill.getVersion();
         String branchName;
         String mode = normalizePublishMode(request.getRequestedMode());
         if ("pr".equals(mode)) {
@@ -668,6 +685,7 @@ public class PublicationService {
         if (!branchName.equals(settings.defaultBranch())) {
             runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
         }
+        configureGitIdentity(repoPath);
 
         writeSkillFiles(repoPath, sourceDir, skill, settings.defaultBranch());
 
@@ -691,14 +709,29 @@ public class PublicationService {
     }
 
     private PublishResult publishRule(RuleVersion rule, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
-        if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
-            return new PublishResult(null, null, null, "db", false);
-        }
         CatalogGitSettings settings = loadCatalogGitSettings();
+        String sourceDir = "rules/" + rule.getRuleId() + "/" + rule.getVersion();
+        if (isTeamScope(rule.getScope())) {
+            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
+            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
+            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
+            configureGitIdentity(mirrorRepoPath);
+            job.setStep("git_prepare");
+            job.setBranchName(settings.defaultBranch());
+            publicationJobRepository.save(job);
+
+            writeRuleFiles(mirrorRepoPath, sourceDir, rule, settings.defaultBranch());
+            job.setStep("git_commit");
+            publicationJobRepository.save(job);
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(rule-team): " + rule.getCanonicalName()));
+            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
+            return new PublishResult(commitSha, null, null, commitSha, false);
+        }
+
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String sourceDir = "rules/" + rule.getRuleId() + "/" + rule.getVersion();
         String branchName;
         String mode = normalizePublishMode(request.getRequestedMode());
         if ("pr".equals(mode)) {
@@ -714,6 +747,7 @@ public class PublicationService {
         if (!branchName.equals(settings.defaultBranch())) {
             runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
         }
+        configureGitIdentity(repoPath);
 
         writeRuleFiles(repoPath, sourceDir, rule, settings.defaultBranch());
 
@@ -736,14 +770,29 @@ public class PublicationService {
     }
 
     private PublishResult publishFlow(FlowVersion flow, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
-        if (request.getRequestedTarget() == PublicationTarget.DB_ONLY) {
-            return new PublishResult(null, null, null, "db", false);
-        }
         CatalogGitSettings settings = loadCatalogGitSettings();
+        String sourceDir = "flows/" + flow.getFlowId() + "/" + flow.getVersion();
+        if (isTeamScope(flow.getScope())) {
+            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
+            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
+            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
+            configureGitIdentity(mirrorRepoPath);
+            job.setStep("git_prepare");
+            job.setBranchName(settings.defaultBranch());
+            publicationJobRepository.save(job);
+
+            writeFlowFiles(mirrorRepoPath, sourceDir, flow, settings.defaultBranch());
+            job.setStep("git_commit");
+            publicationJobRepository.save(job);
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
+            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(flow-team): " + flow.getCanonicalName()));
+            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
+            return new PublishResult(commitSha, null, null, commitSha, false);
+        }
+
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String sourceDir = "flows/" + flow.getFlowId() + "/" + flow.getVersion();
         String branchName;
         String mode = normalizePublishMode(request.getRequestedMode());
         if ("pr".equals(mode)) {
@@ -759,6 +808,7 @@ public class PublicationService {
         if (!branchName.equals(settings.defaultBranch())) {
             runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
         }
+        configureGitIdentity(repoPath);
 
         writeFlowFiles(repoPath, sourceDir, flow, settings.defaultBranch());
 
@@ -799,6 +849,7 @@ public class PublicationService {
                 "platform_code: " + toYamlString(skill.getPlatformCode()),
                 "tags: " + toYamlInlineList(skill.getTags()),
                 "skill_kind: " + toYamlString(skill.getSkillKind()),
+                "scope: " + toYamlString(skill.getScope()),
                 "environment: " + toYamlLowerName(skill.getEnvironment()),
                 "approval_status: " + toYamlLowerName(skill.getApprovalStatus()),
                 "approved_by: " + toYamlString(skill.getApprovedBy()),
@@ -809,6 +860,8 @@ public class PublicationService {
                 "content_source: git",
                 "visibility: " + toYamlLowerName(skill.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(skill.getLifecycleStatus()),
+                "forked_from: " + toYamlString(skill.getForkedFrom()),
+                "forked_by: " + toYamlString(skill.getForkedBy()),
                 "checksum: " + toYamlString(checksum),
                 "");
         Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
@@ -843,6 +896,8 @@ public class PublicationService {
                 "content_source: git",
                 "visibility: " + toYamlLowerName(rule.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(rule.getLifecycleStatus()),
+                "forked_from: " + toYamlString(rule.getForkedFrom()),
+                "forked_by: " + toYamlString(rule.getForkedBy()),
                 "checksum: " + toYamlString(checksum),
                 "");
         Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
@@ -867,6 +922,7 @@ public class PublicationService {
                 "tags: " + toYamlInlineList(flow.getTags()),
                 "flow_kind: " + toYamlString(flow.getFlowKind()),
                 "risk_level: " + toYamlString(flow.getRiskLevel()),
+                "scope: " + toYamlString(flow.getScope()),
                 "environment: " + toYamlLowerName(flow.getEnvironment()),
                 "approval_status: " + toYamlLowerName(flow.getApprovalStatus()),
                 "approved_by: " + toYamlString(flow.getApprovedBy()),
@@ -877,6 +933,8 @@ public class PublicationService {
                 "content_source: git",
                 "visibility: " + toYamlLowerName(flow.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(flow.getLifecycleStatus()),
+                "forked_from: " + toYamlString(flow.getForkedFrom()),
+                "forked_by: " + toYamlString(flow.getForkedBy()),
                 "checksum: " + toYamlString(checksum),
                 "");
         Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
@@ -1014,6 +1072,30 @@ public class PublicationService {
         return normalized;
     }
 
+    private String normalizePublishModeForScope(String mode, String scope) {
+        if (isTeamScope(scope)) {
+            return "local";
+        }
+        return normalizePublishMode(mode);
+    }
+
+    private PublicationTarget normalizeTargetForScope(PublicationTarget requestedTarget, String scope) {
+        if (isTeamScope(scope)) {
+            return PublicationTarget.GIT_ONLY;
+        }
+        if (requestedTarget == null || requestedTarget == PublicationTarget.DB_ONLY) {
+            return PublicationTarget.DB_AND_GIT;
+        }
+        return requestedTarget;
+    }
+
+    private boolean isTeamScope(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return false;
+        }
+        return TEAM_SCOPE.equals(scope.trim().toLowerCase(Locale.ROOT));
+    }
+
     private Path resolvePublishRepoPath(String workspaceRoot, String repoUrl) {
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
         return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-publish").resolve(suffix);
@@ -1032,6 +1114,21 @@ public class PublicationService {
         }
         runGit(List.of("git", "-C", mirrorPath.toString(), "remote", "set-url", "origin", repoUrl));
         runGit(List.of("git", "-C", mirrorPath.toString(), "fetch", "--prune", "--tags", "origin"));
+    }
+
+    private void checkoutOrCreateBranch(Path repoPath, String branch) throws IOException, InterruptedException {
+        try {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", branch));
+        } catch (ValidationException ex) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branch, "origin/" + branch));
+        }
+    }
+
+    private void configureGitIdentity(Path repoPath) throws IOException, InterruptedException {
+        String username = valueOrDefault(SettingsService.CATALOG_LOCAL_GIT_USERNAME_KEY, SettingsService.DEFAULT_LOCAL_GIT_USERNAME);
+        String email = valueOrDefault(SettingsService.CATALOG_LOCAL_GIT_EMAIL_KEY, SettingsService.DEFAULT_LOCAL_GIT_EMAIL);
+        runGit(List.of("git", "-C", repoPath.toString(), "config", "user.name", username));
+        runGit(List.of("git", "-C", repoPath.toString(), "config", "user.email", email));
     }
 
     private void syncRuntimeMirrorContent(String workspaceRoot, String repoUrl, Path publishRepoPath, String sourceDir) throws IOException {

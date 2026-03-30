@@ -71,6 +71,10 @@ const skillKindOptions = [
   { value: 'qa', label: 'qa' },
   { value: 'ops', label: 'ops' },
 ];
+const scopeOptions = [
+  { value: 'organization', label: 'organization' },
+  { value: 'team', label: 'team' },
+];
 
 const DEFAULT_VERSION = '0.1';
 const parseMajorMinor = (version) => {
@@ -164,6 +168,7 @@ export default function SkillEditor() {
   const [codingAgent, setCodingAgent] = useState('');
   const [frontmatterSummary, setFrontmatterSummary] = useState([]);
   const [teamCode, setTeamCode] = useState('');
+  const [scope, setScope] = useState('organization');
   const [platformCode, setPlatformCode] = useState('FRONT');
   const [tags, setTags] = useState([]);
   const [tagOptions, setTagOptions] = useState([]);
@@ -180,6 +185,7 @@ export default function SkillEditor() {
   const [publishVariant, setPublishVariant] = useState('minor');
   const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
   const [publishDialogMode, setPublishDialogMode] = useState('pr');
+  const [forkedFrom, setForkedFrom] = useState('');
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const editorRef = useRef(null);
@@ -201,6 +207,7 @@ export default function SkillEditor() {
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
       setTeamCode(data.team_code || '');
+      setScope(data.scope || 'organization');
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
@@ -211,6 +218,7 @@ export default function SkillEditor() {
       setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
       setPublicationTarget(data.publication_target || 'db_and_git');
+      setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(false);
       await loadVersions(skillId, data.version);
@@ -271,6 +279,7 @@ export default function SkillEditor() {
       setSkillId(data.skill_id || '');
       setCodingAgent(data.coding_agent || '');
       setTeamCode(data.team_code || '');
+      setScope(data.scope || 'organization');
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
@@ -281,6 +290,7 @@ export default function SkillEditor() {
       setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
       setPublicationTarget(data.publication_target || 'db_and_git');
+      setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(keepEditing);
       if (data.coding_agent) {
@@ -333,6 +343,31 @@ export default function SkillEditor() {
       return;
     }
     await applyChange(isNewSkill || !hasContent);
+  };
+
+  const handleSkillIdChange = (value) => {
+    if (scope === 'team') {
+      const trimmed = value.trim();
+      if (trimmed && !trimmed.startsWith('team-')) {
+        setSkillId(`team-${trimmed}`);
+        return;
+      }
+    }
+    setSkillId(value);
+  };
+
+  const handleScopeChange = (value) => {
+    setScope(value);
+    if (!isEditing) {
+      return;
+    }
+    if (value === 'team' && skillId && !skillId.startsWith('team-')) {
+      setSkillId(`team-${skillId.trim()}`);
+      return;
+    }
+    if (value === 'organization' && skillId && skillId.startsWith('team-')) {
+      setSkillId(skillId.replace(/^team-/, ''));
+    }
   };
 
   const saveSkill = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
@@ -391,12 +426,14 @@ export default function SkillEditor() {
           skill_id: normalizedSkillId,
           coding_agent: codingAgent,
           team_code: teamCode.trim(),
+          scope,
           platform_code: platformCode,
           tags,
           skill_kind: skillKind || undefined,
           environment,
           visibility,
           lifecycle_status: lifecycleStatus,
+          forked_from: forkedFrom || undefined,
           skill_markdown: editorValue,
           publish,
           publication_target: publicationTargetOverride || publicationTarget,
@@ -415,6 +452,8 @@ export default function SkillEditor() {
       setContentSource(response.content_source || contentSource);
       setPublicationStatus(response.publication_status || publicationStatus);
       setPublicationTarget(response.publication_target || publicationTarget);
+      setScope(response.scope || scope);
+      setForkedFrom(response.forked_from || forkedFrom);
       setSelectedSkillId(response.skill_id || normalizedSkillId);
       setIsNewSkill(false);
       setIsEditing(false);
@@ -438,7 +477,8 @@ export default function SkillEditor() {
     setSkillId('');
     setCodingAgent('');
     setTeamCode('');
-      setPlatformCode('FRONT');
+    setScope('organization');
+    setPlatformCode('FRONT');
     setTags([]);
     setSkillKind('');
     setEnvironment('dev');
@@ -449,6 +489,7 @@ export default function SkillEditor() {
     setPublicationStatus('draft');
     setPublicationTarget('db_and_git');
     setPublishMode('pr');
+    setForkedFrom('');
     setEditorValue('');
     setResourceVersion(0);
     setSkillVersion('');
@@ -494,6 +535,10 @@ export default function SkillEditor() {
 
   const startDraftFromPublished = () => {
     const sourceVersion = skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    const sourceId = selectedSkillId || skillId;
+    if (sourceId && sourceVersion) {
+      setForkedFrom(`${sourceId}@${sourceVersion}`);
+    }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
     setIsEditing(true);
@@ -508,8 +553,8 @@ export default function SkillEditor() {
 
   const openPublishDialog = () => {
     setPublishVariant('minor');
-    setPublishDialogTarget(publicationTarget || 'db_and_git');
-    setPublishDialogMode(publishMode || 'pr');
+    setPublishDialogTarget(scope === 'team' ? 'db_and_git' : (publicationTarget || 'db_and_git'));
+    setPublishDialogMode(scope === 'team' ? 'local' : (publishMode || 'pr'));
     setPublishDialogOpen(true);
   };
 
@@ -690,7 +735,7 @@ export default function SkillEditor() {
             <Text className="muted">{requiredLabel('ID Skill')}</Text>
             <Input
               value={skillId}
-              onChange={(event) => setSkillId(event.target.value)}
+              onChange={(event) => handleSkillIdChange(event.target.value)}
               placeholder="update-requirements"
               title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
               style={{ marginTop: 4 }}
@@ -717,6 +762,17 @@ export default function SkillEditor() {
               placeholder="platform-team"
               title="Код команды-владельца skill."
               style={{ marginTop: 4 }}
+              disabled={!isEditing}
+            />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Text className="muted">{requiredLabel('Scope')}</Text>
+            <Select
+              value={scope || undefined}
+              onChange={handleScopeChange}
+              options={scopeOptions}
+              placeholder="Select scope"
+              style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
           </div>
@@ -841,6 +897,7 @@ export default function SkillEditor() {
               value={publishDialogTarget}
               onChange={setPublishDialogTarget}
               options={publicationTargetOptions}
+              disabled={scope === 'team'}
             />
           </div>
           <div>
@@ -850,6 +907,7 @@ export default function SkillEditor() {
               value={publishDialogMode}
               onChange={setPublishDialogMode}
               options={publishModeOptions}
+              disabled={scope === 'team'}
             />
           </div>
         </div>

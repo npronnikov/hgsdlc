@@ -73,6 +73,9 @@ public class SkillVersion {
     @Column(name = "skill_kind", length = 64)
     private String skillKind;
 
+    @Column(name = "scope", length = 32)
+    private String scope;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "environment", length = 16)
     private SkillEnvironment environment;
@@ -124,6 +127,12 @@ public class SkillVersion {
 
     @Column(name = "last_publish_error", columnDefinition = "TEXT")
     private String lastPublishError;
+
+    @Column(name = "forked_from", length = 255)
+    private String forkedFrom;
+
+    @Column(name = "forked_by", length = 128)
+    private String forkedBy;
 
     @Column(name = "saved_by", nullable = false, length = 128)
     private String savedBy;

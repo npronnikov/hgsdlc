@@ -235,15 +235,24 @@ export default function HumanGate() {
   const viewFiles = useMemo(() => (changes || []).map((item) => item.path).filter(Boolean), [changes]);
   const treeData = useMemo(() => buildTree(viewFiles), [viewFiles]);
 
-  const selectedEditable = useMemo(
-    () => editableArtifacts.find((artifact) => matchesEditablePath(selectedPath, artifact.path) || matchesEditablePath(artifact.path, selectedPath)) || null,
-    [editableArtifacts, selectedPath]
-  );
+  const selectedEditable = useMemo(() => {
+    if (!isInput || !selectedPath) {
+      return null;
+    }
+    const selectedNormalized = normalizePath(selectedPath);
+    return editableArtifacts.find((artifact) => {
+      const workspacePath = artifact?.workspace_path;
+      if (!workspacePath) {
+        return false;
+      }
+      return normalizePath(workspacePath) === selectedNormalized;
+    }) || null;
+  }, [editableArtifacts, isInput, selectedPath]);
   const selectedGitChange = useMemo(() => {
     const selectedNormalized = normalizePath(selectedPath);
     return changes.find((item) => normalizePath(item.path) === selectedNormalized) || null;
   }, [changes, selectedPath]);
-  const selectedIsEditable = isInput && !!selectedEditable;
+  const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
   const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;

@@ -47,6 +47,7 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
               AND (:status IS NULL OR l.status = :status)
               AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
               AND (:teamCode IS NULL OR l.team_code = :teamCode)
+              AND (:scope IS NULL OR l.scope = :scope)
               AND (:environment IS NULL OR l.environment = :environment)
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:skillKind IS NULL OR l.skill_kind = :skillKind)
@@ -72,6 +73,7 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             @Param("status") String status,
             @Param("approvalStatus") String approvalStatus,
             @Param("teamCode") String teamCode,
+            @Param("scope") String scope,
             @Param("environment") String environment,
             @Param("platformCode") String platformCode,
             @Param("skillKind") String skillKind,

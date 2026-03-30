@@ -1,232 +1,376 @@
-# Механика построения prompt и переходов между node в runtime
+# Runtime: актуальная механика переходов и построения prompt
 
-Документ описывает фактическое поведение runtime по коду:
-- `backend/src/main/java/ru/hgd/sdlc/runtime/application/RuntimeService.java`
+Документ отражает текущее поведение после рефакторинга runtime (router + executors + publish pipeline).
+
+Ключевые классы:
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunStepService.java`
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/NodeExecutionRouter.java`
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/GateDecisionService.java`
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunLifecycleService.java`
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunPublishService.java`
 - `backend/src/main/java/ru/hgd/sdlc/runtime/application/AgentPromptBuilder.java`
-- `backend/src/main/java/ru/hgd/sdlc/runtime/application/QwenCodingAgentStrategy.java`
-- `backend/src/main/java/ru/hgd/sdlc/runtime/application/RuntimeStepTxService.java`
 - `backend/src/main/java/ru/hgd/sdlc/flow/application/FlowValidator.java`
 
-## 1) Какие переходы вообще поддерживаются
+---
 
-### 1.1 Переходы по типу node
+## 1. Архитектура исполнения (что поменялось)
+
+Сейчас `RuntimeService` — thin facade, а логика разделена:
+- `RunLifecycleService`: create/start/resume/cancel/recover, checkout workspace.
+- `RunStepService`: tick loop и исполнение текущей node.
+- `NodeExecutionRouter` + `NodeExecutor`: маршрутизация по `node_kind` (`ai`, `command`, `human_input`, `human_approval`, `terminal`).
+- `GateDecisionService`: `submit-input`, `approve`, `request-rework`.
+- `RunPublishService`: post-terminal публикация (`LOCAL`/`PR`) и retry.
+
+---
+
+## 2. Полный список статусов и переходов run
+
+Текущие `RunStatus`:
+- `CREATED`
+- `RUNNING`
+- `WAITING_GATE`
+- `WAITING_PUBLISH`
+- `PUBLISH_FAILED`
+- `COMPLETED`
+- `FAILED`
+- `CANCELLED`
+
+### 2.1 Жизненный цикл
+
+1. `createRun` -> `CREATED`
+2. `startRun` -> `RUNNING` (после `markRunStarted`)
+3. Во время исполнения node:
+- gate-node -> `WAITING_GATE`
+- executor-node -> остаётся `RUNNING` и двигается по transition
+4. На terminal:
+- если ветка пришла через `on_failure` -> `FAILED`
+- иначе -> `WAITING_PUBLISH` и запускается publish pipeline
+5. Publish:
+- успех -> `COMPLETED`
+- ошибка -> `PUBLISH_FAILED`
+- retry publish -> обратно в `WAITING_PUBLISH` -> снова pipeline
+6. В любой активной фазе user cancel -> `CANCELLED`
+
+---
+
+## 3. Переходы между node (все сценарии)
+
+## 3.1 Поддерживаемые маршруты по типу node
 
 - `ai`
-  - `on_success` -> обязательный переход (валидатор это требует)
-  - `on_failure` -> обязательный для AI по валидатору; runtime применяет, только если указан
+  - `on_success` (обязателен валидатором)
+  - `on_failure` (обязателен валидатором для ai)
 - `command`
-  - `on_success` -> обязательный
-  - `on_failure` -> не поддерживается (валидатор ругается)
+  - `on_success` (обязателен)
 - `human_input`
-  - `on_submit` -> обязательный
+  - `on_submit` (обязателен)
 - `human_approval`
-  - `on_approve` -> обязательный
-  - `on_rework.next_node` -> обязательный
+  - `on_approve` (обязателен)
+  - `on_rework.next_node` (обязателен)
 - `terminal`
-  - переходов быть не должно
+  - переходов нет
 
-Технически любой переход применяется через `applyTransition(...)`:
-- если target пустой -> `INVALID_TRANSITION`
-- если target node не существует в snapshot flow -> `INVALID_TRANSITION`
-- при успехе run переводится в `RUNNING`, `current_node_id` меняется, пишется audit `transition_applied`
+### 3.2 Что делает runtime на ошибке node
 
-### 1.2 Схема исполнения тика
+- Любая ошибка внутри node -> `markNodeExecutionFailed(...)`.
+- Спец-ветка для AI:
+  - если есть `on_failure`, runtime применяет `transition_applied` с `transition=on_failure`.
+  - иначе run падает в `FAILED`.
+- Для `command`/gate/terminal fallback-а на `on_failure` нет.
 
-`tick()` циклически вызывает `executeCurrentNode()` пока run в `RUNNING`.
+### 3.3 Валидация target перехода
 
-Для текущей node runtime делает:
-1. создаёт `NodeExecution` (новая попытка);
-2. при необходимости создаёт checkpoint (`checkpoint_before_run=true`, только для `ai/command`);
-3. исполняет логику по node_kind;
-4. на успехе применяет переход;
-5. на ошибке:
-   - для `ai` с заполненным `on_failure` -> переход `on_failure`;
-   - иначе `run_failed`.
+Любой transition проходит через проверку:
+- target пуст -> `INVALID_TRANSITION`
+- target не найден в snapshot flow -> `INVALID_TRANSITION`
 
-### 1.3 Переходы в gate-нодах
+---
 
-- `human_input`:
-  - при `submitInput` -> закрывается gate, node = succeeded, переход `on_submit`
-- `human_approval`:
-  - при `approveGate` -> закрывается gate, node = succeeded, переход `on_approve`
-  - при `requestRework` -> закрывается gate, node = succeeded, переход `on_rework`
+## 4. Сценарии по node_kind
 
-## 2) Артефакты и execution_context: как это влияет на переходы
+## 4.1 `ai`
 
-## 2.1 Без артефактов
+Поток:
+1. `resolveExecutionContext(...)`
+2. materialize агентского workspace (`QwenCodingAgentStrategy`)
+3. build prompt (`AgentPromptBuilder`)
+4. запуск агента (`qwen ...`)
+5. `validateNodeOutputs(...)`
+6. `node_execution_succeeded` + transition `on_success`
 
-Сценарий: `execution_context: []`, `produced_artifacts: []`, `expected_mutations: []`.
+Важные ошибки:
+- `CODING_AGENT_MISMATCH`
+- `UNSUPPORTED_CODING_AGENT`
+- `MISSING_EXECUTION_CONTEXT`
+- `EXECUTION_CONTEXT_TOO_LARGE`
+- `AGENT_EXECUTION_FAILED`
+- `NODE_VALIDATION_FAILED`
 
-Поведение:
-- prompt не получает секцию `Available inputs`;
-- в expected results остаётся только summary (см. раздел 3);
-- переход выполняется только по статусу node (`on_success/on_submit/on_approve/...`).
+## 4.2 `command`
 
-## 2.2 С артефактами (artifact_ref)
+Поток:
+1. `resolveExecutionContext(...)`
+2. запуск `zsh -lc <instruction>`
+3. materialize declared artifacts (markdown-заглушка для `produced_artifacts`)
+4. `validateNodeOutputs(...)`
+5. `node_execution_succeeded` + transition `on_success`
 
-Поддерживаемый runtime-контекст:
-- `type=user_request`
-- `type=artifact_ref`
+Важные ошибки:
+- `COMMAND_EXECUTION_FAILED`
+- `NODE_VALIDATION_FAILED`
 
-Для `artifact_ref`:
-- `scope=project` -> путь ищется в project root
-- `scope=run` -> нужен `node_id`, берётся последний `SUCCEEDED` execution source-node
+## 4.3 `human_input`
+
+Поток открытия gate:
+1. runtime копирует modifiable run-artifacts из `execution_context` в текущий `attempt-N` директории node
+2. открывает gate `AWAITING_INPUT`, run -> `WAITING_GATE`
+
+Поток submit:
+1. проверка версии gate и ролей
+2. проверка что отправлены только разрешённые артефакты
+3. запись контента, версия артефактов `kind=human_input`
+4. валидация required:
+- файл существует
+- не пустой
+- checksum изменился
+5. success -> `on_submit`
+6. fail -> gate `FAILED_VALIDATION`
+
+## 4.4 `human_approval`
+
+Поток approve:
+- `gate_approved` -> `on_approve`
+
+Поток rework:
+- вычисляется target = `on_rework.next_node`
+- параметр API: `keep_changes` (Boolean)
+- если `keep_changes=false` -> rollback к checkpoint + `git clean -fd`
+- если `keep_changes=true` -> откат не выполняется
+- если requested discard, но checkpoint фактически недоступен -> `ValidationException` (`REWORK_RESET_FAILED` / `CHECKPOINT_NOT_FOUND_FOR_REWORK`)
+- instruction:
+  - если rework target == `start_node_id`: instruction добавляется в `feature_request`
+  - иначе кладётся в `pending_rework_instruction`
+- затем `on_rework`
+
+## 4.5 `terminal`
+
+`terminal` больше не завершает run напрямую (в happy-path).
+
+Логика:
+- если последний transition = `on_failure` -> run становится `FAILED`
+- иначе:
+  - run -> `WAITING_PUBLISH`
+  - запускается `RunPublishService.dispatchPublish(...)`
+
+---
+
+## 5. Артефакты и execution_context (все текущие варианты)
+
+Поддерживаемые `execution_context.type` runtime-исполнением:
+- `user_request`
+- `artifact_ref`
+
+`artifact_ref`:
+- `scope=project` -> файл из project root
+- `scope=run` -> файл из последней `SUCCEEDED` попытки source node (`node_id` обязателен)
 
 `transfer_mode`:
-- `by_ref` (default): в prompt передаётся ссылка/путь
-- `by_value`: файл встраивается в prompt целиком (ограничение `<= 64KB`, иначе ошибка `EXECUTION_CONTEXT_TOO_LARGE`)
+- `by_ref` (default)
+- `by_value` (встраивание контента в context/prompt, лимит `64KB`)
 
-Если `required=true` и артефакт не найден -> ошибка `MISSING_EXECUTION_CONTEXT`.
+Поведение required:
+- required artifact отсутствует -> `MISSING_EXECUTION_CONTEXT`
 
-## 2.3 produced_artifacts / expected_mutations
+`produced_artifacts` и `expected_mutations`:
+- required produced missing -> `NODE_VALIDATION_FAILED`
+- required mutation not changed -> `NODE_VALIDATION_FAILED`
+- при изменениях/наличии пишутся версии артефактов (`produced` / `mutation` / `human_input`)
 
-После выполнения node runtime валидирует выходы:
-- `produced_artifacts.required=true` -> файл обязан существовать
-- `expected_mutations.required=true` -> checksum должен измениться
+---
 
-Нарушение даёт `NODE_VALIDATION_FAILED`.
+## 6. Gate payload (что реально отдаётся фронту)
 
-При наличии файлов runtime пишет версии артефактов в `artifact_versions`:
-- `kind=produced` для `produced_artifacts`
-- `kind=mutation` для `expected_mutations`
-- `kind=human_input` для артефактов, отредактированных на `human_input`
+При открытии gate payload включает:
+- `git_changes` + `git_summary`
+- для `human_input`: `human_input_artifacts`
+- для `human_approval`: execution context artifacts + данные rework-режима
 
-## 2.4 Особый поток `human_input`
+### 6.1 Rework payload поля (новое)
 
-`human_input` принимает только `execution_context` типа `artifact_ref` с `scope=run` и `transfer_mode=by_ref`.
+Для `human_approval` runtime отдаёт:
+- `rework_mode`
+- `rework_keep_changes`
+- `rework_keep_changes_selectable`
+- `rework_discard_available`
+- `rework_discard_unavailable_reason` (если есть)
 
-До открытия gate:
-- runtime копирует source run-artifacts в рабочую папку текущей попытки `human_input`;
-- эти копии становятся редактируемыми output данного node;
-- пишется версия `artifact_kind=human_input`.
+Коды причин недоступности discard:
+- `rework_target_missing`
+- `rework_target_kind_unsupported`
+- `rework_target_checkpoint_disabled`
+- `target_checkpoint_not_found`
 
-При submit:
-- пользователь присылает base64-контент только разрешённых артефактов;
-- required-артефакты проверяются на:
-  - существование
-  - непустое содержимое
-  - изменение checksum относительно pre-submit
-- при провале -> gate `FAILED_VALIDATION`.
+---
 
-## 3) Как строится prompt (AI node)
+## 7. Publish pipeline после terminal
 
-## 3.1 Где именно строится
+## 7.1 Режимы
 
-1. `RuntimeService.executeAiNode()` резолвит context.
-2. `QwenCodingAgentStrategy.materializeWorkspace()` вызывает `AgentPromptBuilder.build(...)`.
-3. Шаблон: `backend/src/main/resources/runtime/prompt-template.md`:
+- `publish_mode=local`
+- `publish_mode=pr`
 
-```md
-{{TASK_SECTION}}{{REQUEST_CLARIFICATION_SECTION}}{{NODE_INSTRUCTION_SECTION}}{{INPUTS_SECTION}}{{EXPECTED_RESULTS_SECTION}}{{FOOTER_SECTION}}
+## 7.2 Этапы
+
+1. `publish_started`
+2. final commit (`publish_commit_succeeded` / `publish_commit_skipped`)
+3. для PR режима:
+- push branch (`publish_push_succeeded`)
+- create/find PR (`publish_pr_succeeded`)
+4. финал:
+- успех -> `run_completed`, `COMPLETED`
+- ошибка -> `publish_failed`, `PUBLISH_FAILED`
+
+Retry доступен только из `PUBLISH_FAILED` или `WAITING_PUBLISH`.
+
+---
+
+## 8. Как строится prompt сейчас (фактический алгоритм)
+
+Шаблон:
+- `backend/src/main/resources/runtime/prompt-template.md`
+
+Секции:
+- `{{TASK_SECTION}}`
+- `{{REQUEST_CLARIFICATION_SECTION}}`
+- `{{NODE_INSTRUCTION_SECTION}}`
+- `{{INPUTS_SECTION}}`
+- `{{EXPECTED_RESULTS_SECTION}}`
+- `{{FOOTER_SECTION}}`
+
+Тексты секций:
+- `backend/src/main/resources/runtime/prompt-texts.ru.yaml`
+
+### 8.1 Источники полей
+
+`AgentInput`:
+- `task` <- `run.featureRequest`
+- `requestClarification` <- `run.pendingReworkInstruction`
+- `nodeInstruction` <- `node.instruction`
+- `inputs` <- `resolvedContext` (`artifact_ref`)
+- `expectedResults` <- required outputs/mutations + summary
+
+### 8.2 Включение секций
+
+- `Task` только если есть `featureRequest`
+- `Request clarification` только если есть pending rework instruction
+- `Instruction` только если есть `node.instruction`
+- `Available inputs` только если есть input items
+- `Expected result` только если есть expected items
+- Footer всегда
+
+### 8.3 Что попадает в `inputs`
+
+Только `artifact_ref`:
+- by_ref: инструкция использовать путь/ключ+путь
+- by_value: inline content с размером
+
+`user_request` не попадает в `inputs`, потому что уже представлен как `Task`.
+
+### 8.4 Что попадает в `expectedResults`
+
+- required artifacts (`output_artifact` + required `produced_artifacts`)
+- required run-scope paths (`.hgsdlc/nodes/<node>/attempt-<n>/...`)
+- required mutations
+- summary (всегда)
+
+### 8.5 Нормализация
+
+- `\r\n -> \n`
+- 3+ пустых строк -> 2
+
+---
+
+## 9. Матрица «событие -> результат»
+
+- AI успех -> `on_success`
+- AI ошибка -> `on_failure` (если задан), иначе `FAILED`
+- Command успех -> `on_success`
+- Command ошибка -> `FAILED`
+- Human input submit valid -> `on_submit`
+- Human input submit invalid -> gate `FAILED_VALIDATION`
+- Human approval approve -> `on_approve`
+- Human approval rework keep -> `on_rework`, без rollback
+- Human approval rework discard -> `on_rework`, с `git reset --hard` + `git clean -fd`
+- Human approval rework discard без checkpoint -> ошибка в API, gate не переводится дальше
+- Terminal после failure-ветки -> `FAILED`
+- Terminal после success-ветки -> `WAITING_PUBLISH` -> `COMPLETED` или `PUBLISH_FAILED`
+
+---
+
+## 10. Что покрыто тестами (ключевые сценарии)
+
+- `RuntimeRegressionFlowTest`:
+  - ai success/failure
+  - human_input submit
+  - human_approval rework+approve
+  - terminal + publish fail/retry
+- `RuntimeGateDecisionServiceTest`:
+  - version mismatch для submit/approve/rework
+  - required human_input artifact must be modified
+  - rework keep/discard фактически меняет/не меняет workspace
+
+---
+
+## 11. Улучшения (предлагаемые, приоритетно)
+
+1. Ввести базовый системный prompt (обязательный префикс)
+
+Сейчас prompt строится только из секций task/instruction/inputs/results + footer. Нет стабильной системной «рамы поведения». Рекомендуется добавить фиксированный системный блок в шаблон, например:
+
+```text
+Ты — система разработки ПО в runtime flow.
+Работай строго в рамках текущей node и её переходов.
+Считай execution_context единственным источником входных артефактов.
+Не придумывай отсутствующие данные; при нехватке используй минимально безопасное действие.
+Строго выполни expected results этой node.
+Не меняй файлы вне разрешённых scope/path.
+Верни краткий отчёт о результате и проверках.
 ```
 
-4. Тексты секций: `backend/src/main/resources/runtime/prompt-texts.ru.yaml`.
+2. Сделать prompt-builder детерминированным по режимам node
 
-## 3.2 Состав `AgentInput`
+Добавить явный policy слой: `PromptPolicy` по `node_kind` + сценарий (`start`, `rework`, `normal`) с жёсткими правилами секций. Сейчас структура формируется условно и может быть недостаточно контролируемой.
 
-`AgentPromptBuilder` собирает:
-- `startNode` — текущая node == `flow.start_node_id`
-- `task` — `run.featureRequest`
-- `requestClarification` — `run.pendingReworkInstruction`
-- `nodeInstruction` — `node.instruction`
-- `inputs` — summary из `resolvedContext`
-- `expectedResults` — summary из required outputs/mutations
+3. Явно сериализовать «контракт node» в prompt
 
-Потом рендерит секции + считает checksum (`sha256(prompt)`).
+Добавлять машинно-стабильный блок (например YAML/JSON) со структурой:
+- `node_id`, `node_kind`, `allowed_transitions`
+- `required_outputs`, `required_mutations`
+- `scope_policy`
+Это снизит неоднозначность поведения агента.
 
-## 3.3 Правила включения секций
+4. Разделить human-review instruction и AI instruction
 
-- `Task:` — если `task != null`
-- `Request clarification:` — если есть `pendingReworkInstruction`
-- `Instruction:` — если есть `node.instruction`
-- `Available inputs:` — если есть хотя бы один input
-- `Expected result:` — если есть хотя бы один expected result
-- Footer (`Use repository rules and available skills.`) — всегда
+Сейчас используется `node.instruction` в разных контекстах (prompt и gate payload). Рекомендуется завести отдельные поля:
+- `agent_instruction`
+- `reviewer_instruction`
+Чтобы не смешивать требования к агенту и человеку.
 
-После рендера выполняется нормализация:
-- `\r\n -> \n`
-- серии из 3+ переводов строки схлопываются в двойной `\n\n`
+5. Расширить тестовый flow под контролируемый prompt
 
-## 3.4 Как формируются `inputs`
+Сделать отдельный regression flow, где проверяется:
+- start-node prompt с базовым системным блоком
+- rework-переходы (target=start и target!=start)
+- `by_ref` и `by_value`
+- обязательные expected results
+- неизменность формата prompt по snapshot-тесту
 
-`inputs` строятся только из `resolvedContext` записей `type=artifact_ref`:
+6. Добавить snapshot-тесты prompt на уровне builder
 
-- `by_ref`, без `artifact_key`:
-  - `Use the input artifact by path '{path}'.`
-- `by_ref`, с `artifact_key`:
-  - `Use the input artifact '{artifact_key}' by full path '{path}'.`
-- `by_value`:
-  - в prompt вставляется блок с inline content и `size_bytes`
-
-Список `inputs` дедуплицируется (`distinct`).
-
-`type=user_request` в `resolvedContext` не превращается в `inputs` — исходный запрос идёт отдельной секцией `Task`.
-
-## 3.5 Как формируются `expectedResults`
-
-`expectedResults` включает:
-1. `required_artifacts` — если есть обязательные артефакты:
-   - `node.output_artifact` (если задан)
-   - все `produced_artifacts` с `required=true` (ключ выводится из имени файла)
-2. `required_run_paths` — если обязательные `produced_artifacts` со scope != `project`:
-   - путь формата `.hgsdlc/nodes/{nodeId}/attempt-{n}/{artifactPath}`
-3. `required_mutations` — если есть хотя бы один `expected_mutations.required=true`
-4. `summary` — всегда
-
-Списки артефактов и путей также дедуплицируются.
-
-## 3.6 Что дополнительно материализуется рядом с prompt
-
-Перед запуском агента runtime создаёт:
-- `.qwen/QWEN.md` — flow-level rules
-- `.qwen/skills/<skillCanonical>/SKILL.md` — node-level skills
-- `prompt.md` в папке attempt node
-
-И пишет audit:
-- `rules_materialized`
-- `skills_materialized`
-- `prompt_package_built` (в payload полный rendered prompt + checksum + resolved_context)
-- `agent_invocation_started/finished`
-
-## 4) Реворк: полная механика
-
-Реворк доступен только на `human_approval` gate через `requestRework(...)`.
-
-Шаги:
-1. Проверка gate статуса/версии/роли.
-2. Берётся `transitionTarget = node.on_rework.next_node`.
-3. Выбор режима изменений:
-   - явный `mode=keep` -> сохраняем изменения
-   - явный `mode=discard` -> делаем rollback
-   - иначе берётся `on_rework.keep_changes` из flow
-4. Если rollback нужен:
-   - runtime ищет последнюю execution target-node
-   - берёт её `checkpoint_commit_sha`
-   - выполняет `git reset --hard <checkpoint>`
-5. Сохраняется rework instruction:
-   - если target == `start_node_id`: instruction добавляется в `feature_request` (append), `pending_rework_instruction` очищается
-   - иначе instruction кладётся в `pending_rework_instruction`
-6. Node gate помечается succeeded, применяется `on_rework` transition.
-
-Влияние на prompt следующего AI:
-- если instruction лежит в `pending_rework_instruction`, появится секция `Request clarification:`
-- после успешного AI выполнения instruction consumption очищает pending (`rework_instruction_consumed`)
-- если реворк вернул на start-node, instruction уже в `Task`, а не в `Request clarification`
-
-## 5) Таблица переходов (быстрый справочник)
-
-| node_kind | Событие | Переход | Что влияет на prompt |
-|---|---|---|---|
-| `ai` | успешный exit + прошла валидация outputs | `on_success` | формируется новый prompt следующего AI
-| `ai` | ошибка выполнения/валидации | `on_failure` (если указан), иначе `run_failed` | при переходе на AI prompt будет строиться для target node
-| `command` | успешный exit + прошла валидация outputs | `on_success` | prompt только на следующих AI
-| `human_input` | submit валиден | `on_submit` | изменённые run-артефакты могут попасть в следующий AI как `artifact_ref`
-| `human_approval` | approve | `on_approve` | без спец-изменений prompt, кроме новых артефактов/мутаций по цепочке
-| `human_approval` | rework | `on_rework.next_node` | может добавить `Request clarification` или расширить `Task` (если target=start)
-| `terminal` | вход в node | переходов нет, run завершается | prompt не строится |
-
-## 6) Практический вывод
-
-- Переходы в runtime полностью event-driven по полям `on_*` и типу node.
-- Prompt не хранит отдельную "логику графа"; он собирается из текущего run state (`featureRequest`, `pendingReworkInstruction`), текущей node и resolved execution context.
-- Наличие/отсутствие артефактов меняет prompt через секции `Available inputs` и `Expected result`, а реворк меняет prompt через `Task`/`Request clarification`.
+Тестировать `AgentPromptBuilder` таблицей кейсов:
+- без контекста
+- с `pending_rework_instruction`
+- с `artifact_ref by_value`
+- с required run-paths/mutations
+и фиксировать финальный prompt текстом (golden files).

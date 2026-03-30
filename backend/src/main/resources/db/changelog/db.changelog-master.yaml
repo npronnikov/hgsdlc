@@ -59,3 +59,5 @@ databaseChangeLog:
       file: db/changelog/034-runtime-publish-rename.sql
   - include:
       file: db/changelog/035-runtime-publish-cleanup.sql
+  - include:
+      file: db/changelog/036-catalog-scope-and-fork.sql

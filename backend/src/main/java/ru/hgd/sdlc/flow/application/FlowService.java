@@ -38,6 +38,9 @@ import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 public class FlowService {
     private static final String INITIAL_VERSION = "0.1";
     private static final Pattern FLOW_ID_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-_]*$");
+    private static final String TEAM_SCOPE = "team";
+    private static final String ORGANIZATION_SCOPE = "organization";
+    private static final String TEAM_ID_PREFIX = "team-";
 
     private final FlowVersionRepository repository;
     private final RuleVersionRepository ruleRepository;
@@ -93,6 +96,7 @@ public class FlowService {
                 normalizeFilter(query.search()),
                 normalizeAgentFilter(query.codingAgent()),
                 normalizeFilter(query.teamCode()),
+                normalizeFilter(query.scope()),
                 normalizeFilter(query.platformCode()),
                 normalizeFilter(query.flowKind()),
                 normalizeFilter(query.riskLevel()),
@@ -161,6 +165,8 @@ public class FlowService {
         if (!flowId.equals(request.flowId())) {
             throw new ValidationException("Path flowId does not match request flow_id");
         }
+        String scope = parseScope(request.scope());
+        validateIdForScope(flowId, scope, "flow_id");
 
         FlowModel model = flowYamlParser.parse(request.flowYaml());
         if (model.getId() == null || model.getId().isBlank()) {
@@ -271,7 +277,15 @@ public class FlowService {
         entity.setTags(normalizeTags(request.tags()));
         entity.setFlowKind(normalizeOptional(request.flowKind()));
         entity.setRiskLevel(normalizeOptional(request.riskLevel()));
+        entity.setScope(scope);
         entity.setEnvironment(parseEnvironment(request.environment()));
+        if (TEAM_SCOPE.equals(scope)) {
+            entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
+            entity.setForkedBy(resolveForkedBy(user, request.forkedBy()));
+        } else {
+            entity.setForkedFrom(null);
+            entity.setForkedBy(null);
+        }
         entity.setApprovedBy(publishNow ? entity.getApprovedBy() : null);
         entity.setApprovedAt(publishNow ? entity.getApprovedAt() : null);
         entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
@@ -352,6 +366,35 @@ public class FlowService {
             return FlowContentSource.GIT;
         }
         return FlowContentSource.DB;
+    }
+
+    private String parseScope(String scope) {
+        String normalized = normalizeOptional(scope);
+        if (normalized == null) {
+            throw new ValidationException("scope is required");
+        }
+        String value = normalized.toLowerCase();
+        if (!TEAM_SCOPE.equals(value) && !ORGANIZATION_SCOPE.equals(value)) {
+            throw new ValidationException("Unsupported scope: " + scope);
+        }
+        return value;
+    }
+
+    private void validateIdForScope(String id, String scope, String fieldName) {
+        if (TEAM_SCOPE.equals(scope) && !id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for team scope must start with '" + TEAM_ID_PREFIX + "'");
+        }
+        if (ORGANIZATION_SCOPE.equals(scope) && id.startsWith(TEAM_ID_PREFIX)) {
+            throw new ValidationException(fieldName + " for organization scope must not start with '" + TEAM_ID_PREFIX + "'");
+        }
+    }
+
+    private String resolveForkedBy(User user, String requestedForkedBy) {
+        String normalized = normalizeOptional(requestedForkedBy);
+        if (normalized != null) {
+            return normalized;
+        }
+        return user == null ? null : normalizeOptional(user.getUsername());
     }
 
     private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
@@ -618,6 +661,7 @@ public class FlowService {
             String search,
             String codingAgent,
             String teamCode,
+            String scope,
             String platformCode,
             String flowKind,
             String riskLevel,
