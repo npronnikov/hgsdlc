@@ -18,10 +18,16 @@ public record SkillSaveRequest(
         @JsonProperty("forked_by") String forkedBy,
         @JsonProperty("source_ref") String sourceRef,
         @JsonProperty("source_path") String sourcePath,
-        @JsonProperty("skill_markdown") String skillMarkdown,
+        @JsonProperty("files") List<SkillFileSaveRequest> files,
         @JsonProperty("publish") Boolean publish,
         @JsonProperty("release") Boolean release,
         @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion
 ) {
+    public record SkillFileSaveRequest(
+            @JsonProperty("path") String path,
+            @JsonProperty("text_content") String textContent,
+            @JsonProperty("is_executable") Boolean executable
+    ) {
+    }
 }

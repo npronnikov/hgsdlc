@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
-import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.InstantUuidCursor;
 import ru.hgd.sdlc.common.MarkdownFrontmatterParser;
@@ -27,8 +27,11 @@ import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
+import ru.hgd.sdlc.skill.domain.SkillFileEntity;
+import ru.hgd.sdlc.skill.domain.SkillFileRole;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 import ru.hgd.sdlc.skill.domain.TagEntity;
+import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
 import ru.hgd.sdlc.skill.infrastructure.TagRepository;
 
 @Service
@@ -41,22 +44,28 @@ public class SkillService {
     private static final List<String> ALLOWED_SKILL_KINDS = List.of("analysis", "code", "review", "refactor", "qa", "ops");
 
     private final SkillVersionRepository repository;
+    private final SkillFileRepository skillFileRepository;
     private final TagRepository tagRepository;
     private final MarkdownFrontmatterParser frontmatterParser;
     private final SkillTemplateService templateService;
     private final PublicationService publicationService;
+    private final SkillPackageService skillPackageService;
 
     public SkillService(
             SkillVersionRepository repository,
+            SkillFileRepository skillFileRepository,
             TagRepository tagRepository,
             SkillTemplateService templateService,
-            PublicationService publicationService
+            PublicationService publicationService,
+            SkillPackageService skillPackageService
     ) {
         this.repository = repository;
+        this.skillFileRepository = skillFileRepository;
         this.tagRepository = tagRepository;
         this.frontmatterParser = new MarkdownFrontmatterParser();
         this.templateService = templateService;
         this.publicationService = publicationService;
+        this.skillPackageService = skillPackageService;
     }
 
     @Transactional(readOnly = true)
@@ -140,7 +149,8 @@ public class SkillService {
         entity.setApprovedBy(resolveSavedBy(user));
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
-        entity.setChecksum(ChecksumUtil.sha256(entity.getSkillMarkdown()));
+        String packageChecksum = computePackageChecksumForVersion(entity);
+        entity.setChecksum(packageChecksum);
         entity.setSavedAt(now);
         entity.setSavedBy(resolveSavedBy(user));
         repository.save(entity);
@@ -186,13 +196,30 @@ public class SkillService {
                 .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
     }
 
+    @Transactional(readOnly = true)
+    public List<SkillFileEntity> listFiles(String skillId, String version) {
+        SkillVersion skillVersion = getVersion(skillId, version);
+        List<SkillFileEntity> files = skillFileRepository.findBySkillVersionIdOrderByPathAsc(skillVersion.getId());
+        if (!files.isEmpty()) {
+            return files;
+        }
+        return List.of(legacySkillMarkdownFile(skillVersion));
+    }
+
+    @Transactional(readOnly = true)
+    public String getFileContent(String skillId, String version, String path) {
+        String normalizedPath = skillPackageService.normalizePath(path);
+        return listFiles(skillId, version).stream()
+                .filter(file -> normalizedPath.equals(file.getPath()))
+                .findFirst()
+                .map(SkillFileEntity::getTextContent)
+                .orElseThrow(() -> new NotFoundException("Skill file not found: " + normalizedPath));
+    }
+
     @Transactional
     public SkillVersion save(String skillId, SkillSaveRequest request, User user) {
         if (request == null) {
             throw new ValidationException("Request body is required");
-        }
-        if (request.skillMarkdown() == null || request.skillMarkdown().isBlank()) {
-            throw new ValidationException("skill_markdown is required");
         }
         if (request.resourceVersion() == null) {
             throw new ValidationException("resource_version is required");
@@ -231,9 +258,11 @@ public class SkillService {
         if (codingAgent == null) {
             throw new ValidationException("coding_agent is required");
         }
+        SkillPackageService.PreparedPackage preparedPackage = skillPackageService.prepareForSave(request.files());
+        String skillMarkdown = extractSkillMarkdown(preparedPackage.files());
         MarkdownFrontmatterParser.ParsedMarkdown parsed = null;
         if (publish) {
-            parsed = frontmatterParser.parse(request.skillMarkdown());
+            parsed = frontmatterParser.parse(skillMarkdown);
             validateCodingAgentFrontmatter(codingAgent, parsed.frontmatter());
         }
 
@@ -260,7 +289,6 @@ public class SkillService {
                 ? resolvePublishVersion(existingDraft, maxMinorForMajor, maxPublishedMajor, release, baseMajor)
                 : resolveDraftVersion(existingDraft, maxMinorForMajor, baseMajor, publishedVersions.isEmpty());
         String canonicalName = skillId + "@" + version;
-        String updatedMarkdown = request.skillMarkdown();
 
         boolean bumpDraftBeforeInsert = publishNow
                 && existingDraft != null
@@ -318,8 +346,8 @@ public class SkillService {
         }
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
-        entity.setSkillMarkdown(updatedMarkdown);
-        entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
+        entity.setSkillMarkdown(skillMarkdown);
+        entity.setChecksum(preparedPackage.packageChecksum());
         entity.setSavedBy(resolveSavedBy(user));
         entity.setSavedAt(now);
         if (requestPublish) {
@@ -332,6 +360,7 @@ public class SkillService {
         }
 
         SkillVersion saved = repository.save(entity);
+        replaceSkillFiles(saved, preparedPackage.files());
         ensureTagsExist(normalizedTags);
         if (requestPublish) {
             publicationService.upsertSkillRequest(saved, resolveSavedBy(user));
@@ -342,6 +371,52 @@ public class SkillService {
         }
 
         return saved;
+    }
+
+    private String extractSkillMarkdown(List<SkillPackageService.PreparedSkillFile> files) {
+        return files.stream()
+                .filter(file -> "SKILL.md".equals(file.path()))
+                .findFirst()
+                .map(SkillPackageService.PreparedSkillFile::textContent)
+                .orElseThrow(() -> new ValidationException("package must contain SKILL.md"));
+    }
+
+    private void replaceSkillFiles(SkillVersion saved, List<SkillPackageService.PreparedSkillFile> files) {
+        skillFileRepository.deleteBySkillVersionId(saved.getId());
+        skillFileRepository.flush();
+        Instant now = Instant.now();
+        List<SkillFileEntity> entities = files.stream()
+                .sorted(Comparator.comparing(SkillPackageService.PreparedSkillFile::path))
+                .map(file -> SkillFileEntity.builder()
+                        .id(UUID.randomUUID())
+                        .skillVersionId(saved.getId())
+                        .path(file.path())
+                        .role(file.role())
+                        .mediaType(file.mediaType())
+                        .executable(file.executable())
+                        .textContent(file.textContent())
+                        .sizeBytes(file.sizeBytes())
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build())
+                .toList();
+        skillFileRepository.saveAll(entities);
+    }
+
+    private SkillFileEntity legacySkillMarkdownFile(SkillVersion version) {
+        String text = skillPackageService.normalizeText(version.getSkillMarkdown());
+        return SkillFileEntity.builder()
+                .id(version.getId())
+                .skillVersionId(version.getId())
+                .path("SKILL.md")
+                .role(SkillFileRole.INSTRUCTION)
+                .mediaType("text/markdown")
+                .executable(false)
+                .textContent(text)
+                .sizeBytes(text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .createdAt(version.getSavedAt())
+                .updatedAt(version.getSavedAt())
+                .build();
     }
 
     private String resolveDraftVersion(
@@ -391,6 +466,34 @@ public class SkillService {
         draft.setCanonicalName(draft.getSkillId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
         repository.saveAndFlush(draft);
+    }
+
+    private String computePackageChecksumForVersion(SkillVersion version) {
+        List<SkillFileEntity> files = skillFileRepository.findBySkillVersionIdOrderByPathAsc(version.getId());
+        if (files.isEmpty()) {
+            List<SkillPackageService.PreparedSkillFile> fallbackFiles = List.of(
+                    new SkillPackageService.PreparedSkillFile(
+                            "SKILL.md",
+                            SkillFileRole.INSTRUCTION,
+                            "text/markdown",
+                            false,
+                            skillPackageService.normalizeText(version.getSkillMarkdown()),
+                            version.getSkillMarkdown() == null ? 0L : version.getSkillMarkdown().getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                    )
+            );
+            return skillPackageService.computePackageChecksum(fallbackFiles);
+        }
+        List<SkillPackageService.PreparedSkillFile> preparedFiles = files.stream()
+                .map(file -> new SkillPackageService.PreparedSkillFile(
+                        file.getPath(),
+                        file.getRole(),
+                        file.getMediaType(),
+                        file.isExecutable(),
+                        skillPackageService.normalizeText(file.getTextContent()),
+                        file.getSizeBytes()
+                ))
+                .toList();
+        return skillPackageService.computePackageChecksum(preparedFiles);
     }
 
     private int resolveBaseMajor(String baseVersion, List<SkillVersion> publishedVersions) {
@@ -641,7 +744,7 @@ public class SkillService {
     }
 
     private int[] parseVersion(String version) {
-        if (version == null || !version.matches("\\d+\\.\\d+(\\.\\d+)?")) {
+        if (version == null || !version.matches("\\d+\\.\\d+")) {
             throw new ValidationException("Invalid version: " + version);
         }
         String[] parts = version.split("\\.");

@@ -61,7 +61,7 @@ public class CatalogContentResolver {
             candidate = mirrorRoot.resolve(candidate).normalize();
         }
         if (!candidate.startsWith(mirrorRoot)) {
-            throw new ValidationException("source_path points outside catalog mirror: " + sourcePath);
+            throw new ValidationException("source_path points outside local catalog repo: " + sourcePath);
         }
         if (!workspacePort.exists(candidate)) {
             throw new ValidationException("Git content file not found: " + candidate);
@@ -86,6 +86,6 @@ public class CatalogContentResolver {
     private Path resolveCatalogMirrorPath(String workspaceRoot, String repoUrl) {
         Path root = Paths.get(workspaceRoot).toAbsolutePath().normalize();
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
-        return root.resolve(".catalog-mirror").resolve(suffix);
+        return root.resolve(".catalog-repo").resolve(suffix);
     }
 }

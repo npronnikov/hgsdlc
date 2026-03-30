@@ -1886,6 +1886,14 @@ body {
   height: 100%;
 }
 
+.rule-editor-layout .skill-side-stack {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .editor-panel .ant-card-body {
   height: 100%;
   display: flex;
@@ -1933,6 +1941,40 @@ body {
 
 .rule-version-select {
   min-width: 160px;
+}
+
+.skill-files-panel .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-fields-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.skill-fields-panel .ant-card-body {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.skill-files-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.skill-files-tree {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  min-height: 160px;
+  max-height: 280px;
+  overflow: auto;
 }
 
 .editor-pane-body {

@@ -16,13 +16,16 @@ import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.skill.domain.SkillFileEntity;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
+import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Component
 class QwenCodingAgentStrategy implements CodingAgentStrategy {
     private final RuleVersionRepository ruleVersionRepository;
     private final SkillVersionRepository skillVersionRepository;
+    private final SkillFileRepository skillFileRepository;
     private final RuntimeStepTxService runtimeStepTxService;
     private final AgentPromptBuilder agentPromptBuilder;
     private final CatalogContentResolver catalogContentResolver;
@@ -31,6 +34,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     QwenCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
             SkillVersionRepository skillVersionRepository,
+            SkillFileRepository skillFileRepository,
             RuntimeStepTxService runtimeStepTxService,
             AgentPromptBuilder agentPromptBuilder,
             CatalogContentResolver catalogContentResolver,
@@ -38,6 +42,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
+        this.skillFileRepository = skillFileRepository;
         this.runtimeStepTxService = runtimeStepTxService;
         this.agentPromptBuilder = agentPromptBuilder;
         this.catalogContentResolver = catalogContentResolver;
@@ -87,9 +92,24 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
 
         for (SkillVersion skill : skills) {
             Path skillDir = skillsRoot.resolve(skill.getCanonicalName());
-            Path skillFile = skillDir.resolve("SKILL.md");
             createDirectories(skillDir);
-            writeFile(skillFile, catalogContentResolver.resolveSkillMarkdown(skill).getBytes(StandardCharsets.UTF_8));
+            List<SkillFileEntity> files = skillFileRepository.findBySkillVersionIdOrderByPathAsc(skill.getId());
+            if (files.isEmpty()) {
+                Path skillFile = skillDir.resolve("SKILL.md");
+                writeFile(skillFile, catalogContentResolver.resolveSkillMarkdown(skill).getBytes(StandardCharsets.UTF_8));
+                continue;
+            }
+            for (SkillFileEntity file : files) {
+                Path filePath = skillDir.resolve(file.getPath()).normalize();
+                if (!filePath.startsWith(skillDir)) {
+                    throw new CodingAgentException("SKILL_PACKAGE_PATH_INVALID", "Skill file path escapes package root: " + file.getPath());
+                }
+                createDirectories(filePath.getParent());
+                writeFile(filePath, file.getTextContent().getBytes(StandardCharsets.UTF_8));
+                if (file.isExecutable()) {
+                    setExecutable(filePath);
+                }
+            }
         }
         runtimeStepTxService.appendAudit(
                 run.getId(),
@@ -238,6 +258,17 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             workspacePort.write(path, content == null ? new byte[0] : content);
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to write file: " + path);
+        }
+    }
+
+    private void setExecutable(Path path) throws CodingAgentException {
+        if (path == null) {
+            return;
+        }
+        try {
+            path.toFile().setExecutable(true, true);
+        } catch (RuntimeException ex) {
+            throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to set executable bit: " + path);
         }
     }
 

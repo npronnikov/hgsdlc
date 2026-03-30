@@ -122,6 +122,26 @@ public class SkillController {
         return SkillResponse.from(skillService.getVersion(skillId, version));
     }
 
+    @GetMapping("/{skillId}/versions/{version}/files")
+    public List<SkillFileMetadataResponse> listFiles(@PathVariable String skillId, @PathVariable String version) {
+        return skillService.listFiles(skillId, version).stream()
+                .map(SkillFileMetadataResponse::from)
+                .toList();
+    }
+
+    @PostMapping("/{skillId}/versions/{version}/files/content")
+    public SkillFileContentResponse fileContent(
+            @PathVariable String skillId,
+            @PathVariable String version,
+            @RequestBody SkillFileContentRequest request
+    ) {
+        if (request == null || request.path() == null || request.path().isBlank()) {
+            throw new ValidationException("path is required");
+        }
+        String content = skillService.getFileContent(skillId, version, request.path());
+        return new SkillFileContentResponse(request.path(), content);
+    }
+
     @PostMapping("/{skillId}/save")
     public SkillResponse save(
             @PathVariable String skillId,
@@ -163,6 +183,17 @@ public class SkillController {
             @JsonProperty("items") List<SkillSummaryResponse> items,
             @JsonProperty("next_cursor") String nextCursor,
             @JsonProperty("has_more") boolean hasMore
+    ) {
+    }
+
+    public record SkillFileContentRequest(
+            @JsonProperty("path") String path
+    ) {
+    }
+
+    public record SkillFileContentResponse(
+            @JsonProperty("path") String path,
+            @JsonProperty("text_content") String textContent
     ) {
     }
 }

@@ -44,10 +44,14 @@ import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
 import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
+import ru.hgd.sdlc.skill.domain.SkillFileEntity;
+import ru.hgd.sdlc.skill.domain.SkillFileRole;
 import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
+import ru.hgd.sdlc.skill.application.SkillPackageService;
+import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Service
@@ -85,29 +89,35 @@ public class SettingsService {
     private final SystemSettingRepository repository;
     private final RuleVersionRepository ruleVersionRepository;
     private final SkillVersionRepository skillVersionRepository;
+    private final SkillFileRepository skillFileRepository;
     private final FlowVersionRepository flowVersionRepository;
     private final FlowYamlParser flowYamlParser;
     private final JsonSchemaValidator schemaValidator;
     private final MarkdownFrontmatterParser frontmatterParser;
     private final JdbcTemplate jdbcTemplate;
+    private final SkillPackageService skillPackageService;
     private final ReentrantLock repairLock = new ReentrantLock();
 
     public SettingsService(
             SystemSettingRepository repository,
             RuleVersionRepository ruleVersionRepository,
             SkillVersionRepository skillVersionRepository,
+            SkillFileRepository skillFileRepository,
             FlowVersionRepository flowVersionRepository,
             FlowYamlParser flowYamlParser,
             JsonSchemaValidator schemaValidator,
+            SkillPackageService skillPackageService,
             JdbcTemplate jdbcTemplate
     ) {
         this.repository = repository;
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
+        this.skillFileRepository = skillFileRepository;
         this.flowVersionRepository = flowVersionRepository;
         this.flowYamlParser = flowYamlParser;
         this.schemaValidator = schemaValidator;
         this.frontmatterParser = new MarkdownFrontmatterParser();
+        this.skillPackageService = skillPackageService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -497,21 +507,25 @@ public class SettingsService {
         if (existingOptional.isPresent()) {
             SkillVersion existing = existingOptional.get();
             if (existing.getStatus() == SkillStatus.PUBLISHED || existing.getApprovalStatus() == SkillApprovalStatus.PUBLISHED) {
-                String incomingChecksum = withShaPrefix(metadata.checksum());
-                if (incomingChecksum.equals(existing.getChecksum())) {
+                String incomingChecksum = metadata.checksum();
+                String existingChecksum = normalizeChecksum(existing.getChecksum());
+                if (incomingChecksum.equals(existingChecksum)) {
+                    replaceSkillFilesFromCatalog(existing, metadata.skillPackageFiles());
                     return UpsertOutcome.skippedOne();
                 }
                 throw new ValidationException("Published skill already exists with different checksum: " + metadata.canonicalName());
             }
             applySkillFields(existing, metadata, provider, actorId);
-            skillVersionRepository.save(existing);
+            SkillVersion saved = skillVersionRepository.save(existing);
+            replaceSkillFilesFromCatalog(saved, metadata.skillPackageFiles());
             return UpsertOutcome.updatedOne();
         }
         SkillVersion created = SkillVersion.builder()
                 .id(UUID.randomUUID())
                 .build();
         applySkillFields(created, metadata, provider, actorId);
-        skillVersionRepository.save(created);
+        SkillVersion saved = skillVersionRepository.save(created);
+        replaceSkillFilesFromCatalog(saved, metadata.skillPackageFiles());
         return UpsertOutcome.insertedOne();
     }
 
@@ -524,7 +538,7 @@ public class SettingsService {
         target.setDescription(metadata.optional("description") == null ? "" : metadata.optional("description"));
         target.setCodingAgent(provider);
         target.setSkillMarkdown(metadata.content());
-        target.setChecksum(withShaPrefix(metadata.checksum()));
+        target.setChecksum(metadata.checksum());
         target.setTeamCode(metadata.optional("team_code"));
         target.setPlatformCode(parsePlatformCode(metadata.require("platform_code")));
         target.setTags(metadata.tags());
@@ -541,6 +555,39 @@ public class SettingsService {
         target.setLifecycleStatus(parseLifecycle(metadata.optional("lifecycle_status")));
         target.setSavedBy(actorId);
         target.setSavedAt(Instant.now());
+    }
+
+    private void replaceSkillFilesFromCatalog(SkillVersion skillVersion, List<ParsedSkillPackageFile> files) {
+        List<ParsedSkillPackageFile> effectiveFiles = files == null ? List.of() : files;
+        if (effectiveFiles.isEmpty()) {
+            String markdown = skillPackageService.normalizeText(skillVersion.getSkillMarkdown());
+            effectiveFiles = List.of(new ParsedSkillPackageFile(
+                    "SKILL.md",
+                    SkillFileRole.INSTRUCTION,
+                    "text/markdown",
+                    false,
+                    markdown,
+                    markdown.getBytes(StandardCharsets.UTF_8).length
+            ));
+        }
+        skillFileRepository.deleteBySkillVersionId(skillVersion.getId());
+        skillFileRepository.flush();
+        Instant now = Instant.now();
+        List<SkillFileEntity> entities = effectiveFiles.stream()
+                .map(file -> SkillFileEntity.builder()
+                        .id(UUID.randomUUID())
+                        .skillVersionId(skillVersion.getId())
+                        .path(file.path())
+                        .role(file.role())
+                        .mediaType(file.mediaType())
+                        .executable(file.executable())
+                        .textContent(skillPackageService.normalizeText(file.content()))
+                        .sizeBytes(file.sizeBytes())
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build())
+                .toList();
+        skillFileRepository.saveAll(entities);
     }
 
     private UpsertOutcome upsertFlow(ParsedMetadata metadata, String actorId) {
@@ -772,24 +819,62 @@ public class SettingsService {
             throw new ValidationException("entity_type does not match path: " + entityType + " vs " + folderEntity);
         }
 
-        String contentFileName = switch (entityType.toLowerCase(Locale.ROOT)) {
-            case "rule" -> "RULE.md";
-            case "skill" -> "SKILL.md";
-            case "flow" -> "FLOW.yaml";
-            default -> throw new ValidationException("Unsupported entity_type: " + entityType);
-        };
-        Path contentPath = versionDir.resolve(contentFileName);
-        if (!Files.exists(contentPath)) {
-            throw new ValidationException("Missing content file: " + contentFileName);
-        }
-        String content = readText(contentPath);
-        String metadataChecksum = normalizeChecksum(stringValue(metadata.get("checksum")));
-        if (metadataChecksum == null) {
-            throw new ValidationException("metadata checksum is required");
-        }
-        String actualChecksum = ChecksumUtil.sha256(content);
-        if (!metadataChecksum.equals(actualChecksum)) {
-            throw new ValidationException("checksum mismatch for " + contentFileName);
+        String normalizedEntityType = entityType.toLowerCase(Locale.ROOT);
+        String content;
+        String metadataChecksum;
+        List<ParsedSkillPackageFile> packageFiles = List.of();
+        if ("skill".equals(normalizedEntityType)) {
+            packageFiles = parseSkillPackageFiles(versionDir);
+            String metadataChecksumRaw = normalizeChecksum(stringValue(metadata.get("checksum")));
+            if (metadataChecksumRaw == null) {
+                throw new ValidationException("metadata checksum is required");
+            }
+            List<SkillPackageService.PreparedSkillFile> preparedFiles = packageFiles.stream()
+                    .map(file -> new SkillPackageService.PreparedSkillFile(
+                            file.path(),
+                            file.role(),
+                            file.mediaType(),
+                            file.executable(),
+                            file.content(),
+                            file.sizeBytes()
+                    ))
+                    .toList();
+            String actualChecksum = skillPackageService.computePackageChecksum(preparedFiles);
+            String legacySkillMdChecksum = packageFiles.stream()
+                    .filter(file -> "SKILL.md".equals(file.path()))
+                    .findFirst()
+                    .map(file -> ChecksumUtil.sha256(skillPackageService.normalizeText(file.content())))
+                    .orElse(null);
+            boolean packageChecksumMatches = metadataChecksumRaw.equals(actualChecksum);
+            boolean legacyChecksumMatches = legacySkillMdChecksum != null && metadataChecksumRaw.equals(legacySkillMdChecksum);
+            if (!packageChecksumMatches && !legacyChecksumMatches) {
+                throw new ValidationException("checksum mismatch for package " + canonicalName);
+            }
+            metadataChecksum = actualChecksum;
+            content = packageFiles.stream()
+                    .filter(file -> "SKILL.md".equals(file.path()))
+                    .findFirst()
+                    .map(ParsedSkillPackageFile::content)
+                    .orElseThrow(() -> new ValidationException("SKILL.md is required in skill package"));
+        } else {
+            String contentFileName = switch (normalizedEntityType) {
+                case "rule" -> "RULE.md";
+                case "flow" -> "FLOW.yaml";
+                default -> throw new ValidationException("Unsupported entity_type: " + entityType);
+            };
+            Path contentPath = versionDir.resolve(contentFileName);
+            if (!Files.exists(contentPath)) {
+                throw new ValidationException("Missing content file: " + contentFileName);
+            }
+            content = readText(contentPath);
+            metadataChecksum = normalizeChecksum(stringValue(metadata.get("checksum")));
+            if (metadataChecksum == null) {
+                throw new ValidationException("metadata checksum is required");
+            }
+            String actualChecksum = ChecksumUtil.sha256(content);
+            if (!metadataChecksum.equals(actualChecksum)) {
+                throw new ValidationException("checksum mismatch for " + contentFileName);
+            }
         }
 
         String displayName = stringValue(metadata.get("display_name"));
@@ -812,8 +897,46 @@ public class SettingsService {
                 sourcePath,
                 content,
                 metadataChecksum,
+                packageFiles,
                 metadata
         );
+    }
+
+    private List<ParsedSkillPackageFile> parseSkillPackageFiles(Path versionDir) {
+        List<ParsedSkillPackageFile> out = new ArrayList<>();
+        List<String> paths = new ArrayList<>();
+
+        try (var stream = Files.walk(versionDir)) {
+            List<Path> filePaths = stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> !"metadata.yaml".equals(path.getFileName().toString()))
+                    .sorted()
+                    .toList();
+            for (Path filePath : filePaths) {
+                String path = skillPackageService.normalizePath(versionDir.relativize(filePath).toString().replace('\\', '/'));
+                if (paths.contains(path)) {
+                    throw new ValidationException("duplicate skill package path: " + path);
+                }
+                paths.add(path);
+                SkillFileRole role = skillPackageService.inferRole(path);
+                boolean executable = path.startsWith("scripts/") && Files.isExecutable(filePath);
+                String mediaType = skillPackageService.inferMediaType(path);
+                String content = readText(filePath);
+                long sizeBytes;
+                try {
+                    sizeBytes = Files.size(filePath);
+                } catch (IOException ex) {
+                    throw new ValidationException("Failed to stat skill package file: " + path);
+                }
+                out.add(new ParsedSkillPackageFile(path, role, mediaType, executable, content, sizeBytes));
+            }
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to scan skill package files: " + ex.getMessage());
+        }
+        if (out.isEmpty()) {
+            throw new ValidationException("skill package must contain files");
+        }
+        return out;
     }
 
     private boolean entityTypeMatchesFolder(String entityType, String folderEntity) {
@@ -914,7 +1037,7 @@ public class SettingsService {
     private Path resolveCatalogMirrorPath(String workspaceRoot, String repoUrl) {
         Path root = Paths.get(workspaceRoot).toAbsolutePath().normalize();
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
-        return root.resolve(".catalog-mirror").resolve(suffix);
+        return root.resolve(".catalog-repo").resolve(suffix);
     }
 
     private void syncMirror(String repoUrl, String branch, Path mirrorPath) throws IOException, InterruptedException {
@@ -1241,6 +1364,7 @@ public class SettingsService {
             String sourcePath,
             String content,
             String checksum,
+            List<ParsedSkillPackageFile> skillPackageFiles,
             Map<String, Object> raw
     ) {
         String require(String key) {
@@ -1278,6 +1402,16 @@ public class SettingsService {
             }
             return List.of();
         }
+    }
+
+    private record ParsedSkillPackageFile(
+            String path,
+            SkillFileRole role,
+            String mediaType,
+            boolean executable,
+            String content,
+            long sizeBytes
+    ) {
     }
 
     private record UpsertOutcome(int inserted, int updated, int skipped) {

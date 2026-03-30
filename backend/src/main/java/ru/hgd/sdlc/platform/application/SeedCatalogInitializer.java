@@ -435,7 +435,8 @@ nodes:
         entity.setDescription(description);
         entity.setCodingAgent(provider);
         entity.setSkillMarkdown(markdown.trim());
-        entity.setChecksum(status == SkillStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null);
+        String packageChecksum = status == SkillStatus.PUBLISHED ? ChecksumUtil.sha256(markdown) : null;
+        entity.setChecksum(packageChecksum);
         entity.setTeamCode("platform-runtime");
         entity.setPlatformCode("FRONT");
         entity.setTags(List.of("analysis", "architecture", "seed"));

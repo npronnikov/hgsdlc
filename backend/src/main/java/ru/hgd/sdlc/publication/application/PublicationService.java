@@ -44,7 +44,10 @@ import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
+import ru.hgd.sdlc.skill.application.SkillPackageService;
+import ru.hgd.sdlc.skill.domain.SkillFileEntity;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
+import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Service
@@ -57,26 +60,32 @@ public class PublicationService {
     private final PublicationApprovalRepository publicationApprovalRepository;
     private final PublicationJobRepository publicationJobRepository;
     private final SkillVersionRepository skillVersionRepository;
+    private final SkillFileRepository skillFileRepository;
     private final RuleVersionRepository ruleVersionRepository;
     private final FlowVersionRepository flowVersionRepository;
     private final SystemSettingRepository systemSettingRepository;
+    private final SkillPackageService skillPackageService;
 
     public PublicationService(
             PublicationRequestRepository publicationRequestRepository,
             PublicationApprovalRepository publicationApprovalRepository,
             PublicationJobRepository publicationJobRepository,
             SkillVersionRepository skillVersionRepository,
+            SkillFileRepository skillFileRepository,
             RuleVersionRepository ruleVersionRepository,
             FlowVersionRepository flowVersionRepository,
-            SystemSettingRepository systemSettingRepository
+            SystemSettingRepository systemSettingRepository,
+            SkillPackageService skillPackageService
     ) {
         this.publicationRequestRepository = publicationRequestRepository;
         this.publicationApprovalRepository = publicationApprovalRepository;
         this.publicationJobRepository = publicationJobRepository;
         this.skillVersionRepository = skillVersionRepository;
+        this.skillFileRepository = skillFileRepository;
         this.ruleVersionRepository = ruleVersionRepository;
         this.flowVersionRepository = flowVersionRepository;
         this.systemSettingRepository = systemSettingRepository;
+        this.skillPackageService = skillPackageService;
     }
 
     @Transactional
@@ -477,6 +486,14 @@ public class PublicationService {
             skill.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
                 skill.setPublicationStatus(PublicationStatus.PUBLISHED);
+                skill.setStatus(ru.hgd.sdlc.skill.domain.SkillStatus.PUBLISHED);
+                skill.setApprovalStatus(ru.hgd.sdlc.skill.domain.SkillApprovalStatus.PUBLISHED);
+                if (skill.getApprovedAt() == null) {
+                    skill.setApprovedAt(Instant.now());
+                }
+                if (skill.getPublishedAt() == null) {
+                    skill.setPublishedAt(Instant.now());
+                }
             }
             return skillVersionRepository.save(skill);
         } catch (Exception ex) {
@@ -544,6 +561,14 @@ public class PublicationService {
             rule.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
                 rule.setPublicationStatus(PublicationStatus.PUBLISHED);
+                rule.setStatus(ru.hgd.sdlc.rule.domain.RuleStatus.PUBLISHED);
+                rule.setApprovalStatus(ru.hgd.sdlc.rule.domain.RuleApprovalStatus.PUBLISHED);
+                if (rule.getApprovedAt() == null) {
+                    rule.setApprovedAt(Instant.now());
+                }
+                if (rule.getPublishedAt() == null) {
+                    rule.setPublishedAt(Instant.now());
+                }
             }
             return ruleVersionRepository.save(rule);
         } catch (Exception ex) {
@@ -611,6 +636,14 @@ public class PublicationService {
             flow.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
                 flow.setPublicationStatus(PublicationStatus.PUBLISHED);
+                flow.setStatus(ru.hgd.sdlc.flow.domain.FlowStatus.PUBLISHED);
+                flow.setApprovalStatus(ru.hgd.sdlc.flow.domain.FlowApprovalStatus.PUBLISHED);
+                if (flow.getApprovedAt() == null) {
+                    flow.setApprovedAt(Instant.now());
+                }
+                if (flow.getPublishedAt() == null) {
+                    flow.setPublishedAt(Instant.now());
+                }
             }
             return flowVersionRepository.save(flow);
         } catch (Exception ex) {
@@ -668,9 +701,13 @@ public class PublicationService {
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-        if (!branchName.equals(settings.defaultBranch())) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+        if ("pr".equals(mode)) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
+        } else {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
+            if (!branchName.equals(settings.defaultBranch())) {
+                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+            }
         }
         configureGitIdentity(repoPath);
 
@@ -689,6 +726,7 @@ public class PublicationService {
             job.setStep("create_pr");
             publicationJobRepository.save(job);
             PrResult prResult = createPullRequest(settings, branchName, skill.getCanonicalName());
+            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
         syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
@@ -730,9 +768,13 @@ public class PublicationService {
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-        if (!branchName.equals(settings.defaultBranch())) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+        if ("pr".equals(mode)) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
+        } else {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
+            if (!branchName.equals(settings.defaultBranch())) {
+                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+            }
         }
         configureGitIdentity(repoPath);
 
@@ -750,6 +792,7 @@ public class PublicationService {
             job.setStep("create_pr");
             publicationJobRepository.save(job);
             PrResult prResult = createPullRequest(settings, branchName, rule.getCanonicalName());
+            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
         syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
@@ -791,9 +834,13 @@ public class PublicationService {
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-        if (!branchName.equals(settings.defaultBranch())) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+        if ("pr".equals(mode)) {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
+        } else {
+            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
+            if (!branchName.equals(settings.defaultBranch())) {
+                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
+            }
         }
         configureGitIdentity(repoPath);
 
@@ -811,6 +858,7 @@ public class PublicationService {
             job.setStep("create_pr");
             publicationJobRepository.save(job);
             PrResult prResult = createPullRequest(settings, branchName, flow.getCanonicalName());
+            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
             return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
         }
         syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
@@ -820,35 +868,71 @@ public class PublicationService {
     private void writeSkillFiles(Path repoPath, String sourceDir, SkillVersion skill, String baseBranch) throws IOException {
         Path dir = repoPath.resolve(sourceDir);
         Files.createDirectories(dir);
-        Path markdownPath = dir.resolve("SKILL.md");
-        Files.writeString(markdownPath, skill.getSkillMarkdown(), StandardCharsets.UTF_8);
+        List<SkillFileEntity> files = skillFileRepository.findBySkillVersionIdOrderByPathAsc(skill.getId());
+        if (files.isEmpty()) {
+            String markdown = skillPackageService.normalizeText(skill.getSkillMarkdown());
+            files = List.of(SkillFileEntity.builder()
+                    .id(skill.getId())
+                    .skillVersionId(skill.getId())
+                    .path("SKILL.md")
+                    .role(ru.hgd.sdlc.skill.domain.SkillFileRole.INSTRUCTION)
+                    .mediaType("text/markdown")
+                    .executable(false)
+                    .textContent(markdown)
+                    .sizeBytes(markdown.getBytes(StandardCharsets.UTF_8).length)
+                    .createdAt(skill.getSavedAt())
+                    .updatedAt(skill.getSavedAt())
+                    .build());
+        }
 
-        String checksum = ChecksumUtil.sha256(skill.getSkillMarkdown());
-        String metadata = String.join("\n",
-                "entity_type: skill",
-                "id: " + skill.getSkillId(),
-                "version: " + toYamlString(skill.getVersion()),
-                "canonical_name: " + skill.getCanonicalName(),
-                "display_name: " + toYamlString(skill.getName()),
-                "description: " + toYamlString(skill.getDescription()),
-                "coding_agent: " + (skill.getCodingAgent() == null ? "qwen" : skill.getCodingAgent().name().toLowerCase(Locale.ROOT)),
-                "team_code: " + toYamlString(skill.getTeamCode()),
-                "platform_code: " + toYamlString(skill.getPlatformCode()),
-                "tags: " + toYamlInlineList(skill.getTags()),
-                "skill_kind: " + toYamlString(skill.getSkillKind()),
-                "scope: " + toYamlString(skill.getScope()),
-                "approval_status: " + toYamlLowerName(skill.getApprovalStatus()),
-                "approved_by: " + toYamlString(skill.getApprovedBy()),
-                "approved_at: " + toYamlInstant(skill.getApprovedAt()),
-                "published_at: " + toYamlInstant(skill.getPublishedAt()),
-                "source_ref: " + toYamlString(baseBranch),
-                "source_path: " + toYamlString(sourceDir),
-                "lifecycle_status: " + toYamlLowerName(skill.getLifecycleStatus()),
-                "forked_from: " + toYamlString(skill.getForkedFrom()),
-                "forked_by: " + toYamlString(skill.getForkedBy()),
-                "checksum: " + toYamlString(checksum),
-                "");
-        Files.writeString(dir.resolve("metadata.yaml"), metadata, StandardCharsets.UTF_8);
+        for (SkillFileEntity file : files) {
+            Path filePath = dir.resolve(file.getPath()).normalize();
+            if (!filePath.startsWith(dir)) {
+                throw new ValidationException("Skill package path escapes source directory: " + file.getPath());
+            }
+            Files.createDirectories(filePath.getParent());
+            Files.writeString(filePath, skillPackageService.normalizeText(file.getTextContent()), StandardCharsets.UTF_8);
+        }
+
+        List<SkillPackageService.PreparedSkillFile> preparedFiles = files.stream()
+                .map(file -> new SkillPackageService.PreparedSkillFile(
+                        file.getPath(),
+                        file.getRole(),
+                        file.getMediaType(),
+                        file.isExecutable(),
+                        skillPackageService.normalizeText(file.getTextContent()),
+                        file.getSizeBytes()
+                ))
+                .toList();
+        String checksum = skill.getChecksum();
+        if (checksum == null || checksum.isBlank()) {
+            checksum = skillPackageService.computePackageChecksum(preparedFiles);
+        }
+
+        StringBuilder metadata = new StringBuilder();
+        metadata.append("entity_type: skill\n");
+        metadata.append("id: ").append(skill.getSkillId()).append('\n');
+        metadata.append("version: ").append(toYamlString(skill.getVersion())).append('\n');
+        metadata.append("canonical_name: ").append(skill.getCanonicalName()).append('\n');
+        metadata.append("display_name: ").append(toYamlString(skill.getName())).append('\n');
+        metadata.append("description: ").append(toYamlString(skill.getDescription())).append('\n');
+        metadata.append("coding_agent: ").append(skill.getCodingAgent() == null ? "qwen" : skill.getCodingAgent().name().toLowerCase(Locale.ROOT)).append('\n');
+        metadata.append("team_code: ").append(toYamlString(skill.getTeamCode())).append('\n');
+        metadata.append("platform_code: ").append(toYamlString(skill.getPlatformCode())).append('\n');
+        metadata.append("tags: ").append(toYamlInlineList(skill.getTags())).append('\n');
+        metadata.append("skill_kind: ").append(toYamlString(skill.getSkillKind())).append('\n');
+        metadata.append("scope: ").append(toYamlString(skill.getScope())).append('\n');
+        metadata.append("approval_status: ").append(toYamlLowerName(skill.getApprovalStatus())).append('\n');
+        metadata.append("approved_by: ").append(toYamlString(skill.getApprovedBy())).append('\n');
+        metadata.append("approved_at: ").append(toYamlInstant(skill.getApprovedAt())).append('\n');
+        metadata.append("published_at: ").append(toYamlInstant(skill.getPublishedAt())).append('\n');
+        metadata.append("source_ref: ").append(toYamlString(baseBranch)).append('\n');
+        metadata.append("source_path: ").append(toYamlString(sourceDir)).append('\n');
+        metadata.append("lifecycle_status: ").append(toYamlLowerName(skill.getLifecycleStatus())).append('\n');
+        metadata.append("forked_from: ").append(toYamlString(skill.getForkedFrom())).append('\n');
+        metadata.append("forked_by: ").append(toYamlString(skill.getForkedBy())).append('\n');
+        metadata.append("checksum: ").append(toYamlString(checksum)).append('\n');
+        Files.writeString(dir.resolve("metadata.yaml"), metadata.toString(), StandardCharsets.UTF_8);
     }
 
     private void writeRuleFiles(Path repoPath, String sourceDir, RuleVersion rule, String baseBranch) throws IOException {
@@ -1053,13 +1137,16 @@ public class PublicationService {
     }
 
     private Path resolvePublishRepoPath(String workspaceRoot, String repoUrl) {
-        String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
-        return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-publish").resolve(suffix);
+        return resolveCatalogRepoPath(workspaceRoot, repoUrl);
     }
 
     private Path resolveRuntimeMirrorPath(String workspaceRoot, String repoUrl) {
+        return resolveCatalogRepoPath(workspaceRoot, repoUrl);
+    }
+
+    private Path resolveCatalogRepoPath(String workspaceRoot, String repoUrl) {
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
-        return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-mirror").resolve(suffix);
+        return Path.of(workspaceRoot).toAbsolutePath().normalize().resolve(".catalog-repo").resolve(suffix);
     }
 
     private void syncMirror(String repoUrl, String branch, Path mirrorPath) throws IOException, InterruptedException {
@@ -1091,6 +1178,9 @@ public class PublicationService {
         Path mirrorRoot = resolveRuntimeMirrorPath(workspaceRoot, repoUrl);
         Path sourcePath = publishRepoPath.resolve(sourceDir).normalize();
         Path targetPath = mirrorRoot.resolve(sourceDir).normalize();
+        if (sourcePath.equals(targetPath)) {
+            return;
+        }
         if (!Files.exists(sourcePath)) {
             throw new ValidationException("Published source directory not found: " + sourcePath);
         }

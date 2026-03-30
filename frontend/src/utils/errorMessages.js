@@ -23,7 +23,9 @@ const RULES = [
   { re: /Rule not found: (.+)/i, msg: (_, id) => `Rule not found: ${id}` },
   { re: /Rule version not found: (.+)/i, msg: (_, id) => `Rule version not found: ${id}` },
 
-  { re: /skill_markdown is required/i, msg: 'Skill markdown is required' },
+  { re: /files are required/i, msg: 'Skill files are required' },
+  { re: /package must contain exactly one SKILL\.md/i, msg: 'Package must contain exactly one SKILL.md' },
+  { re: /duplicate file path: (.+)/i, msg: (_, path) => `Duplicate file path: ${path}` },
   { re: /name is required/i, msg: 'Name is required' },
   { re: /description is required/i, msg: 'Description is required' },
   { re: /skill_id is required/i, msg: 'Skill ID is required' },

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { Button, Card, Input, Modal, Select, Space, Tree, Typography, message } from 'antd';
 import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DeleteOutlined, FileAddOutlined, FileOutlined, FolderAddOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
@@ -58,7 +59,7 @@ const scopeOptions = [
 const DEFAULT_VERSION = '0.1';
 const parseMajorMinor = (version) => {
   const normalized = (version || '').trim() || DEFAULT_VERSION;
-  const match = normalized.match(/^(\d+)\.(\d+)(?:\.\d+)?$/);
+  const match = normalized.match(/^(\d+)\.(\d+)$/);
   if (!match) {
     return { major: 0, minor: 0, valid: false };
   }
@@ -126,6 +127,47 @@ const getDraftForMajor = (versions, major) => (
   })
 );
 const requiredLabel = (label) => `${label} *`;
+const DEFAULT_SKILL_FILE = { path: 'SKILL.md', text_content: '', is_executable: false };
+const MAX_FILES = 6;
+const ROOT_DIRS = ['scripts', 'templates', 'assets'];
+const normalizePath = (raw = '') => raw.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '');
+const getParentPath = (path) => {
+  const index = path.lastIndexOf('/');
+  return index > 0 ? path.slice(0, index) : '';
+};
+const getBaseName = (path) => {
+  const index = path.lastIndexOf('/');
+  return index >= 0 ? path.slice(index + 1) : path;
+};
+const pathSegments = (path) => path.split('/').filter(Boolean);
+const hasForbiddenSegment = (path) => {
+  const segments = pathSegments(path);
+  return segments.some((segment) => segment === '.' || segment === '..' || segment === '.git' || segment === '.svn');
+};
+const isAllowedFilePath = (path) => (
+  path === 'SKILL.md'
+  || path.startsWith('scripts/')
+  || path.startsWith('templates/')
+  || path.startsWith('assets/')
+);
+const isAllowedFolderPath = (path) => ROOT_DIRS.some((root) => path === root || path.startsWith(`${root}/`));
+const isValidPath = (path) => (
+  !!path
+  && !path.startsWith('/')
+  && !path.includes('\\')
+  && !hasForbiddenSegment(path)
+);
+const collectFoldersFromFiles = (files) => {
+  const folders = new Set();
+  files.forEach((item) => {
+    let parent = getParentPath(item.path);
+    while (parent) {
+      folders.add(parent);
+      parent = getParentPath(parent);
+    }
+  });
+  return Array.from(folders).sort((a, b) => a.localeCompare(b));
+};
 
 export default function SkillEditor() {
   const { isDark } = useThemeMode();
@@ -135,6 +177,10 @@ export default function SkillEditor() {
   const isCreateRoute = location.pathname.endsWith('/skills/create');
   const [selectedSkillId, setSelectedSkillId] = useState(null);
   const [editorValue, setEditorValue] = useState('');
+  const [packageFiles, setPackageFiles] = useState([DEFAULT_SKILL_FILE]);
+  const [folderPaths, setFolderPaths] = useState([]);
+  const [selectedFilePath, setSelectedFilePath] = useState('SKILL.md');
+  const [selectedTreeKey, setSelectedTreeKey] = useState('file:SKILL.md');
   const [resourceVersion, setResourceVersion] = useState(0);
   const [skillVersion, setSkillVersion] = useState('');
   const [baseVersion, setBaseVersion] = useState('');
@@ -157,6 +203,10 @@ export default function SkillEditor() {
   const [publicationStatus, setPublicationStatus] = useState('');
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishVariant, setPublishVariant] = useState('minor');
+  const [createFolderModalOpen, setCreateFolderModalOpen] = useState(false);
+  const [createFileModalOpen, setCreateFileModalOpen] = useState(false);
+  const [newFolderPath, setNewFolderPath] = useState('');
+  const [newFilePath, setNewFilePath] = useState('');
   const [forkedFrom, setForkedFrom] = useState('');
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -165,11 +215,50 @@ export default function SkillEditor() {
   const isSyncingScroll = useRef(false);
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
 
+  const syncEditorWithSelectedFile = (files, preferredPath = null) => {
+    const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
+    const selected = preferredPath
+      || (sorted.find((item) => item.path === 'SKILL.md')?.path)
+      || sorted[0]?.path
+      || 'SKILL.md';
+    const selectedFile = sorted.find((item) => item.path === selected);
+    setPackageFiles(sorted);
+    setSelectedFilePath(selected);
+    setSelectedTreeKey(`file:${selected}`);
+    setEditorValue(selectedFile?.text_content || '');
+  };
+
+  const loadPackageFiles = async (skillIdValue, versionValue, fallbackMarkdown = '') => {
+    try {
+      const meta = await apiRequest(`/skills/${skillIdValue}/versions/${versionValue}/files`);
+      const files = await Promise.all((meta || []).map(async (item) => {
+        const contentResponse = await apiRequest(`/skills/${skillIdValue}/versions/${versionValue}/files/content`, {
+          method: 'POST',
+          body: JSON.stringify({ path: item.path }),
+        });
+        return {
+          path: item.path,
+          text_content: contentResponse?.text_content || '',
+          is_executable: !!item.is_executable,
+        };
+      }));
+      if (files.length > 0) {
+        setFolderPaths(collectFoldersFromFiles(files));
+        syncEditorWithSelectedFile(files);
+        return;
+      }
+    } catch (err) {
+      // fallback below
+    }
+    setFolderPaths([]);
+    syncEditorWithSelectedFile([{ path: 'SKILL.md', text_content: fallbackMarkdown || '', is_executable: false }]);
+  };
+
   const loadSkill = async (skillId) => {
     try {
       const data = await apiRequest(`/skills/${skillId}`);
       setSelectedSkillId(skillId);
-      setEditorValue(data.skill_markdown || '');
+      await loadPackageFiles(skillId, data.version, data.skill_markdown || '');
       setResourceVersion(data.resource_version ?? 0);
       setSkillVersion(data.version || '');
       setBaseVersion(data.version || '');
@@ -196,6 +285,15 @@ export default function SkillEditor() {
         setFrontmatterSummary([]);
       }
     } catch (err) {
+      const rawMessage = String(err?.message || '');
+      if (rawMessage.includes('Skill not found:')) {
+        startNewSkill();
+        setSkillId(skillId);
+        if (skillId.startsWith('team-')) {
+          setScope('team');
+        }
+        return;
+      }
       message.error(err.message || 'Failed to load Skill');
     }
   };
@@ -237,7 +335,7 @@ export default function SkillEditor() {
     try {
       const data = await apiRequest(`/skills/${selected.skillId}/versions/${value}`);
       setSelectedSkillId(selected.skillId);
-      setEditorValue(data.skill_markdown || '');
+      await loadPackageFiles(selected.skillId, value, data.skill_markdown || '');
       setResourceVersion(data.resource_version ?? 0);
       setSkillVersion(data.version || value);
       setBaseVersion(data.version || value);
@@ -280,7 +378,11 @@ export default function SkillEditor() {
       const template = await apiRequest(`/skill-templates/${codingAgentValue}`);
       setFrontmatterSummary(template.frontmatterSummary || []);
       if (replaceMarkdown) {
-        setEditorValue(template.template || '');
+        const templateText = template.template || '';
+        const nextFiles = packageFiles.some((item) => item.path === 'SKILL.md')
+          ? packageFiles.map((item) => (item.path === 'SKILL.md' ? { ...item, text_content: templateText } : item))
+          : [{ path: 'SKILL.md', text_content: templateText, is_executable: false }, ...packageFiles];
+        syncEditorWithSelectedFile(nextFiles, 'SKILL.md');
       }
     } catch (err) {
       message.error(err.message || 'Failed to load Skill template');
@@ -334,6 +436,130 @@ export default function SkillEditor() {
     }
   };
 
+  const updateSelectedFileContent = (value) => {
+    const nextText = value ?? '';
+    setEditorValue(nextText);
+    setPackageFiles((prev) => prev.map((item) => (
+      item.path === selectedFilePath
+        ? { ...item, text_content: nextText }
+        : item
+    )));
+  };
+
+  const handleSelectFile = (path) => {
+    const file = packageFiles.find((item) => item.path === path);
+    setSelectedFilePath(path);
+    setSelectedTreeKey(`file:${path}`);
+    setEditorValue(file?.text_content || '');
+  };
+
+  const resolveSelectedBaseFolder = () => (
+    selectedTreeKey.startsWith('folder:')
+      ? selectedTreeKey.slice('folder:'.length)
+      : getParentPath(selectedFilePath)
+  );
+
+  const openCreateFolderDialog = () => {
+    if (!isEditing) return;
+    const baseFolder = resolveSelectedBaseFolder();
+    setNewFolderPath(baseFolder || 'scripts');
+    setCreateFolderModalOpen(true);
+  };
+
+  const confirmCreateFolder = () => {
+    const folderPath = normalizePath(newFolderPath);
+    if (!isValidPath(folderPath) || !isAllowedFolderPath(folderPath)) {
+      message.error('Некорректный путь папки');
+      return;
+    }
+    if (packageFiles.some((item) => item.path === folderPath)) {
+      message.error('Папка конфликтует с файлом');
+      return;
+    }
+    const next = new Set(folderPaths);
+    let current = folderPath;
+    while (current) {
+      next.add(current);
+      current = getParentPath(current);
+    }
+    setFolderPaths(Array.from(next).sort((a, b) => a.localeCompare(b)));
+    setSelectedTreeKey(`folder:${folderPath}`);
+    setCreateFolderModalOpen(false);
+    setNewFolderPath('');
+  };
+
+  const openCreateFileDialog = () => {
+    if (!isEditing) return;
+    const baseFolder = resolveSelectedBaseFolder();
+    const suggestion = baseFolder ? `${baseFolder}/new-file.md` : 'scripts/new-file.md';
+    setNewFilePath(suggestion);
+    setCreateFileModalOpen(true);
+  };
+
+  const confirmCreateFile = () => {
+    const path = normalizePath(newFilePath);
+    if (!isValidPath(path) || !isAllowedFilePath(path)) {
+      message.error('Некорректный путь файла');
+      return;
+    }
+    if (path === 'SKILL.md') {
+      message.error('SKILL.md уже существует и находится в корне');
+      return;
+    }
+    if (packageFiles.some((item) => item.path === path)) {
+      message.error('Файл уже существует');
+      return;
+    }
+    if (folderPaths.includes(path)) {
+      message.error('Файл конфликтует с папкой');
+      return;
+    }
+    if (packageFiles.length >= MAX_FILES) {
+      message.error(`Лимит файлов превышен (макс ${MAX_FILES})`);
+      return;
+    }
+    const parent = getParentPath(path);
+    if (parent) {
+      const nextFolders = new Set(folderPaths);
+      let current = parent;
+      while (current) {
+        nextFolders.add(current);
+        current = getParentPath(current);
+      }
+      setFolderPaths(Array.from(nextFolders).sort((a, b) => a.localeCompare(b)));
+    }
+    const nextFile = { path, text_content: '', is_executable: path.startsWith('scripts/') };
+    syncEditorWithSelectedFile([...packageFiles, nextFile], path);
+    setCreateFileModalOpen(false);
+    setNewFilePath('');
+  };
+
+  const removeSelectedNode = () => {
+    if (!isEditing || !selectedTreeKey) return;
+    if (selectedTreeKey.startsWith('file:')) {
+      const filePath = selectedTreeKey.slice('file:'.length);
+      if (filePath === 'SKILL.md') {
+        message.error('SKILL.md нельзя удалять');
+        return;
+      }
+      const nextFiles = packageFiles.filter((item) => item.path !== filePath);
+      setFolderPaths((prev) => {
+        const merged = new Set([...prev, ...collectFoldersFromFiles(nextFiles)]);
+        return Array.from(merged).sort((a, b) => a.localeCompare(b));
+      });
+      syncEditorWithSelectedFile(nextFiles, 'SKILL.md');
+      return;
+    }
+    if (selectedTreeKey.startsWith('folder:')) {
+      const folderPath = selectedTreeKey.slice('folder:'.length);
+      const prefix = `${folderPath}/`;
+      const nextFiles = packageFiles.filter((item) => !item.path.startsWith(prefix));
+      const nextFolders = folderPaths.filter((item) => item !== folderPath && !item.startsWith(prefix));
+      setFolderPaths(nextFolders);
+      syncEditorWithSelectedFile(nextFiles, 'SKILL.md');
+    }
+  };
+
   const saveSkill = async ({ publish, release = false }) => {
     if (!skillId) {
       message.error('Skill ID is required');
@@ -359,10 +585,15 @@ export default function SkillEditor() {
       message.error('Platform is required');
       return;
     }
+    if (!packageFiles.some((item) => item.path === 'SKILL.md')) {
+      message.error('SKILL.md is required');
+      return;
+    }
     const normalizedSkillId = skillId.trim();
     const normalizedSelectedSkillId = (selectedSkillId || '').trim();
     let effectiveVersion = normalizedSkillId === normalizedSelectedSkillId ? (resourceVersion ?? 0) : 0;
-    if (effectiveVersion === 0 && normalizedSkillId) {
+    const canLookupExistingDraft = !!normalizedSelectedSkillId && normalizedSkillId === normalizedSelectedSkillId;
+    if (effectiveVersion === 0 && normalizedSkillId && canLookupExistingDraft) {
       try {
         const versions = await apiRequest(`/skills/${normalizedSkillId}/versions`);
         const baseMajor = parseMajorMinor(baseVersion || skillVersion || DEFAULT_VERSION).major;
@@ -396,14 +627,18 @@ export default function SkillEditor() {
           skill_kind: skillKind || undefined,
           lifecycle_status: lifecycleStatus,
           forked_from: forkedFrom || undefined,
-          skill_markdown: editorValue,
+          files: packageFiles.map((item) => ({
+            path: item.path,
+            text_content: item.text_content ?? '',
+            is_executable: !!item.is_executable,
+          })),
           publish,
           release,
           base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
         }),
       });
-      setEditorValue(response.skill_markdown || editorValue);
+      await loadPackageFiles(response.skill_id || normalizedSkillId, response.version || skillVersion, response.skill_markdown || editorValue);
       setResourceVersion(response.resource_version ?? resourceVersion);
       setSkillVersion(response.version || skillVersion);
       setBaseVersion(response.version || baseVersion);
@@ -442,7 +677,15 @@ export default function SkillEditor() {
     setLifecycleStatus('active');
     setApprovalStatus('');
     setPublicationStatus('draft');
+    setCreateFolderModalOpen(false);
+    setCreateFileModalOpen(false);
+    setNewFolderPath('');
+    setNewFilePath('');
     setForkedFrom('');
+    setPackageFiles([{ ...DEFAULT_SKILL_FILE }]);
+    setFolderPaths([]);
+    setSelectedFilePath('SKILL.md');
+    setSelectedTreeKey('file:SKILL.md');
     setEditorValue('');
     setResourceVersion(0);
     setSkillVersion('');
@@ -468,6 +711,65 @@ export default function SkillEditor() {
   useEffect(() => {
     loadTags();
   }, []);
+
+  const fileTreeData = useMemo(() => {
+    const folderMap = new Map();
+    const roots = [];
+
+    const ensureFolderNode = (path) => {
+      if (!path) return null;
+      if (folderMap.has(path)) return folderMap.get(path);
+      const node = {
+        key: `folder:${path}`,
+        title: getBaseName(path),
+        isLeaf: false,
+        icon: <FolderOpenOutlined />,
+        children: [],
+      };
+      folderMap.set(path, node);
+      const parent = getParentPath(path);
+      if (parent) {
+        ensureFolderNode(parent)?.children.push(node);
+      } else {
+        roots.push(node);
+      }
+      return node;
+    };
+
+    folderPaths.forEach((path) => ensureFolderNode(path));
+
+    packageFiles.forEach((item) => {
+      const node = {
+        key: `file:${item.path}`,
+        title: getBaseName(item.path),
+        isLeaf: true,
+        icon: <FileOutlined />,
+      };
+      const parent = getParentPath(item.path);
+      if (parent) {
+        ensureFolderNode(parent)?.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    const sortNodes = (nodes) => {
+      nodes.sort((a, b) => {
+        if (!!a.isLeaf !== !!b.isLeaf) {
+          return a.isLeaf ? 1 : -1;
+        }
+        return String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
+      });
+      nodes.forEach((node) => {
+        if (Array.isArray(node.children)) {
+          sortNodes(node.children);
+        }
+      });
+    };
+
+    sortNodes(roots);
+    return roots;
+  }, [folderPaths, packageFiles]);
 
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
   const currentParsed = parseMajorMinor(skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
@@ -549,13 +851,13 @@ export default function SkillEditor() {
           {isEditing ? (
             <div className="editor-split">
               <div className="editor-pane">
-                <Text className="muted">Markdown</Text>
+                <Text className="muted">{selectedFilePath}</Text>
                 <div className="editor-pane-body">
                   <Editor
                     height="100%"
                     defaultLanguage="markdown"
                     value={editorValue}
-                    onChange={(value) => setEditorValue(value ?? '')}
+                    onChange={updateSelectedFileContent}
                     onMount={(editor, monaco) => {
                       editorRef.current = editor;
                       if (monaco) {
@@ -618,12 +920,16 @@ export default function SkillEditor() {
                     });
                   }}
                 >
-                  {previewContent.frontmatter && (
+                  {selectedFilePath === 'SKILL.md' && previewContent.frontmatter && (
                     <pre className="frontmatter-block">{`---\n${previewContent.frontmatter}\n---`}</pre>
                   )}
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {previewContent.body || ''}
-                  </ReactMarkdown>
+                  {selectedFilePath === 'SKILL.md' ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {previewContent.body || ''}
+                    </ReactMarkdown>
+                  ) : (
+                    <pre className="frontmatter-block">{editorValue || ''}</pre>
+                  )}
                 </div>
               </div>
             </div>
@@ -631,151 +937,242 @@ export default function SkillEditor() {
             <div className="editor-pane">
               <Text className="muted">Preview</Text>
               <div className="editor-pane-body markdown-preview">
-                {previewContent.frontmatter && (
+                {selectedFilePath === 'SKILL.md' && previewContent.frontmatter && (
                   <pre className="frontmatter-block">{`---\n${previewContent.frontmatter}\n---`}</pre>
                 )}
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {previewContent.body || ''}
-                </ReactMarkdown>
+                {selectedFilePath === 'SKILL.md' ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {previewContent.body || ''}
+                  </ReactMarkdown>
+                ) : (
+                  <pre className="frontmatter-block">{editorValue || ''}</pre>
+                )}
               </div>
             </div>
           )}
         </Card>
-        <Card>
-          <div className="rule-fields-header">
-            <Title level={5} style={{ margin: 0 }}>Skill fields</Title>
-            {selectedSkillId ? (
-              <Select
-                value={skillVersion || undefined}
-                options={versionOptions}
-                onChange={(value) => handleVersionSelect(value)}
-                className="rule-version-select"
-                placeholder="Version"
-                disabled={isEditing}
+        <div className="side-panel skill-side-stack">
+          <Card className="skill-files-panel">
+            <div className="skill-files-card-header">
+              <Title level={5} style={{ margin: 0 }}>Files</Title>
+              <Space size={6}>
+                <Button
+                  size="small"
+                  icon={<FolderAddOutlined />}
+                  onClick={openCreateFolderDialog}
+                  disabled={!isEditing}
+                  title="Создать папку"
+                />
+                <Button
+                  size="small"
+                  icon={<FileAddOutlined />}
+                  onClick={openCreateFileDialog}
+                  disabled={!isEditing}
+                  title="Создать файл"
+                />
+                <Button
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  onClick={removeSelectedNode}
+                  disabled={!isEditing || selectedTreeKey === 'file:SKILL.md'}
+                  title="Удалить выбранный файл или папку"
+                />
+              </Space>
+            </div>
+            <div className="skill-files-tree">
+              <Tree
+                showIcon
+                blockNode
+                defaultExpandAll
+                treeData={fileTreeData}
+                selectedKeys={selectedTreeKey ? [selectedTreeKey] : []}
+                onSelect={(keys, info) => {
+                  const key = String(keys?.[0] || info?.node?.key || '');
+                  if (!key) return;
+                  setSelectedTreeKey(key);
+                  if (key.startsWith('file:')) {
+                    handleSelectFile(key.slice('file:'.length));
+                  }
+                }}
               />
-            ) : (
-              <span className="rule-version-pill">new</span>
+            </div>
+          </Card>
+          <Card className="skill-fields-panel">
+            <div className="rule-fields-header">
+              <Title level={5} style={{ margin: 0 }}>Skill fields</Title>
+              {selectedSkillId ? (
+                <Select
+                  value={skillVersion || undefined}
+                  options={versionOptions}
+                  onChange={(value) => handleVersionSelect(value)}
+                  className="rule-version-select"
+                  placeholder="Version"
+                  disabled={isEditing}
+                />
+              ) : (
+                <span className="rule-version-pill">new</span>
+              )}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Text className="muted">{requiredLabel('Coding agent')}</Text>
+              <Select
+                value={codingAgent || undefined}
+                onChange={handleCodingAgentChange}
+                options={codingAgentOptions}
+                placeholder="Select coding agent"
+                title="Для какого coding-agent будет выполняться skill."
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('Name')}</Text>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Update requirements"
+                title="Короткое отображаемое имя skill в каталоге."
+                style={{ marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('ID Skill')}</Text>
+              <Input
+                value={skillId}
+                onChange={(event) => handleSkillIdChange(event.target.value)}
+                placeholder="update-requirements"
+                title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
+                style={{ marginTop: 4 }}
+                disabled={!isEditing || !!selectedSkillId}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('Description')}</Text>
+              <Input.TextArea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={4}
+                placeholder="Brief description of the Skill purpose"
+                title="Краткое описание назначения skill для поиска и карточки."
+                style={{ marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('Team code')}</Text>
+              <Input
+                value={teamCode}
+                onChange={(event) => setTeamCode(event.target.value)}
+                placeholder="platform-team"
+                title="Код команды-владельца skill."
+                style={{ marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('Scope')}</Text>
+              <Select
+                value={scope || undefined}
+                onChange={handleScopeChange}
+                options={scopeOptions}
+                placeholder="Select scope"
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">{requiredLabel('Platform')}</Text>
+              <Select
+                value={platformCode || undefined}
+                onChange={setPlatformCode}
+                options={platformOptions}
+                placeholder="Select platform"
+                title="Платформа применения skill: FRONT, BACK или DATA."
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Tags</Text>
+              <Select
+                mode="tags"
+                value={tags}
+                onChange={(nextTags) => setTags(nextTags)}
+                options={tagOptions}
+                placeholder="Add tags"
+                title="Теги для фильтрации и поиска."
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Text className="muted">Skill kind</Text>
+              <Select
+                value={skillKind || undefined}
+                onChange={setSkillKind}
+                options={skillKindOptions}
+                placeholder="Select skill kind"
+                title="Тип skill (analysis/code/review/refactor/qa/ops)."
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={!isEditing}
+              />
+            </div>
+            {!isCreateRoute && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Approval status</Text>
+                <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
+              </div>
             )}
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <Text className="muted">{requiredLabel('Coding agent')}</Text>
-            <Select
-              value={codingAgent || undefined}
-              onChange={handleCodingAgentChange}
-              options={codingAgentOptions}
-              placeholder="Select coding agent"
-              title="Для какого coding-agent будет выполняться skill."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('Name')}</Text>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Update requirements"
-              title="Короткое отображаемое имя skill в каталоге."
-              style={{ marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('ID Skill')}</Text>
-            <Input
-              value={skillId}
-              onChange={(event) => handleSkillIdChange(event.target.value)}
-              placeholder="update-requirements"
-              title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
-              style={{ marginTop: 4 }}
-              disabled={!isEditing || !!selectedSkillId}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('Description')}</Text>
-            <Input.TextArea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={4}
-              placeholder="Brief description of the Skill purpose"
-              title="Краткое описание назначения skill для поиска и карточки."
-              style={{ marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('Team code')}</Text>
-            <Input
-              value={teamCode}
-              onChange={(event) => setTeamCode(event.target.value)}
-              placeholder="platform-team"
-              title="Код команды-владельца skill."
-              style={{ marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('Scope')}</Text>
-            <Select
-              value={scope || undefined}
-              onChange={handleScopeChange}
-              options={scopeOptions}
-              placeholder="Select scope"
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">{requiredLabel('Platform')}</Text>
-            <Select
-              value={platformCode || undefined}
-              onChange={setPlatformCode}
-              options={platformOptions}
-              placeholder="Select platform"
-              title="Платформа применения skill: FRONT, BACK или DATA."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Tags</Text>
-            <Select
-              mode="tags"
-              value={tags}
-              onChange={(nextTags) => setTags(nextTags)}
-              options={tagOptions}
-              placeholder="Add tags"
-              title="Теги для фильтрации и поиска."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Skill kind</Text>
-            <Select
-              value={skillKind || undefined}
-              onChange={setSkillKind}
-              options={skillKindOptions}
-              placeholder="Select skill kind"
-              title="Тип skill (analysis/code/review/refactor/qa/ops)."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          {!isCreateRoute && (
-            <div style={{ marginTop: 12 }}>
-              <Text className="muted">Approval status</Text>
-              <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
-            </div>
-          )}
-          {!isCreateRoute && (
-            <div style={{ marginTop: 12 }}>
-              <Text className="muted">Publication status</Text>
-              <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
-            </div>
-          )}
-        </Card>
+            {!isCreateRoute && (
+              <div style={{ marginTop: 12 }}>
+                <Text className="muted">Publication status</Text>
+                <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
+      <Modal
+        title="Создать папку"
+        open={createFolderModalOpen}
+        onCancel={() => {
+          setCreateFolderModalOpen(false);
+          setNewFolderPath('');
+        }}
+        onOk={confirmCreateFolder}
+        okText="Создать"
+        cancelText="Отмена"
+      >
+        <Text className="muted">Путь папки (только `scripts/*`, `templates/*`, `assets/*`)</Text>
+        <Input
+          value={newFolderPath}
+          onChange={(event) => setNewFolderPath(event.target.value)}
+          placeholder="scripts/helpers"
+          style={{ marginTop: 8 }}
+          autoFocus
+        />
+      </Modal>
+      <Modal
+        title="Создать файл"
+        open={createFileModalOpen}
+        onCancel={() => {
+          setCreateFileModalOpen(false);
+          setNewFilePath('');
+        }}
+        onOk={confirmCreateFile}
+        okText="Создать"
+        cancelText="Отмена"
+      >
+        <Text className="muted">Путь файла (`SKILL.md` в корне уже существует)</Text>
+        <Input
+          value={newFilePath}
+          onChange={(event) => setNewFilePath(event.target.value)}
+          placeholder="scripts/my-script.sh"
+          style={{ marginTop: 8 }}
+          autoFocus
+        />
+      </Modal>
       <Modal
         title="Request publication"
         open={publishDialogOpen}

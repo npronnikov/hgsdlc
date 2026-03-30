@@ -6,8 +6,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -153,7 +158,11 @@ public class PublicationPrPollService {
                 if (mergeCommitSha != null && !mergeCommitSha.isBlank()) {
                     skill.setPublishedCommitSha(mergeCommitSha);
                 }
-                skill.setChecksum(ChecksumUtil.sha256(skill.getSkillMarkdown()));
+                String checksum = skill.getChecksum();
+                if (checksum == null || checksum.isBlank()) {
+                    checksum = ChecksumUtil.sha256(skill.getSkillMarkdown());
+                }
+                skill.setChecksum(checksum);
                 skillVersionRepository.save(skill);
             }
             case RULE -> {
@@ -191,6 +200,7 @@ public class PublicationPrPollService {
                 flowVersionRepository.save(flow);
             }
         }
+        syncLocalCatalogRepo(defaultBranch);
     }
 
     private void markFailed(PublicationRequest request, String error) {
@@ -245,6 +255,52 @@ public class PublicationPrPollService {
             return fallback;
         }
         return value.trim();
+    }
+
+    private void syncLocalCatalogRepo(String defaultBranch) {
+        String repoUrl = valueOrDefault(SettingsService.CATALOG_REPO_URL_KEY, "");
+        if (repoUrl.isBlank()) {
+            return;
+        }
+        String workspaceRoot = valueOrDefault(SettingsService.WORKSPACE_ROOT_KEY, "/tmp/workspace");
+        Path repoPath = resolveCatalogRepoPath(workspaceRoot, repoUrl);
+        if (!Files.isDirectory(repoPath.resolve(".git"))) {
+            return;
+        }
+        try {
+            runGit(List.of("git", "-C", repoPath.toString(), "remote", "set-url", "origin", repoUrl));
+            runGit(List.of("git", "-C", repoPath.toString(), "fetch", "--prune", "--tags", "origin"));
+            try {
+                runGit(List.of("git", "-C", repoPath.toString(), "checkout", defaultBranch));
+            } catch (Exception ex) {
+                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", defaultBranch, "origin/" + defaultBranch));
+            }
+            runGit(List.of("git", "-C", repoPath.toString(), "pull", "--ff-only", "origin", defaultBranch));
+        } catch (Exception ex) {
+            log.warn("Failed to sync local catalog clone after PR merge: {}", ex.getMessage());
+        }
+    }
+
+    private Path resolveCatalogRepoPath(String workspaceRoot, String repoUrl) {
+        Path root = Paths.get(workspaceRoot).toAbsolutePath().normalize();
+        String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
+        return root.resolve(".catalog-repo").resolve(suffix);
+    }
+
+    private void runGit(List<String> command) throws IOException, InterruptedException {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        byte[] outputBytes = process.getInputStream().readAllBytes();
+        boolean finished = process.waitFor(2, java.util.concurrent.TimeUnit.MINUTES);
+        String output = new String(outputBytes, StandardCharsets.UTF_8);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new IOException("Git command timed out");
+        }
+        if (process.exitValue() != 0) {
+            throw new IOException("Git command failed: " + truncate(output, 500));
+        }
     }
 
     private String truncate(String value, int max) {
