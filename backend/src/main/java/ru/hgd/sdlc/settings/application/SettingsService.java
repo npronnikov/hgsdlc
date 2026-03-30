@@ -32,31 +32,22 @@ import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.application.FlowYamlParser;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
-import ru.hgd.sdlc.flow.domain.FlowEnvironment;
 import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
-import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
-import ru.hgd.sdlc.rule.domain.RuleContentSource;
-import ru.hgd.sdlc.rule.domain.RuleEnvironment;
 import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
-import ru.hgd.sdlc.rule.domain.RuleVisibility;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
 import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
-import ru.hgd.sdlc.skill.domain.SkillContentSource;
-import ru.hgd.sdlc.skill.domain.SkillEnvironment;
 import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
-import ru.hgd.sdlc.skill.domain.SkillVisibility;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Service
@@ -86,6 +77,10 @@ public class SettingsService {
     private static final String DEFAULT_CATALOG_PUBLISH_MODE = "pr";
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final List<String> ALLOWED_PLATFORM_CODES = List.of("FRONT", "BACK", "DATA");
+    private static final List<String> ALLOWED_SKILL_KINDS = List.of("analysis", "code", "review", "refactor", "qa", "ops");
+    private static final List<String> ALLOWED_RULE_KINDS = List.of("architecture", "coding-style", "security");
+    private static final List<String> ALLOWED_FLOW_KINDS = List.of("analysis", "code", "delivery", "full-cycle");
 
     private final SystemSettingRepository repository;
     private final RuleVersionRepository ruleVersionRepository;
@@ -478,23 +473,18 @@ public class SettingsService {
         target.setRuleMarkdown(metadata.content());
         target.setChecksum(withShaPrefix(metadata.checksum()));
         target.setTeamCode(metadata.optional("team_code"));
-        target.setPlatformCode(metadata.optional("platform_code"));
+        target.setPlatformCode(parsePlatformCode(metadata.require("platform_code")));
         target.setTags(metadata.tags());
-        target.setRuleKind(metadata.optional("rule_kind"));
+        target.setRuleKind(parseRuleKind(metadata.optional("rule_kind")));
         target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
-        target.setEnvironment(parseRuleEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(RuleApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
         target.setApprovedAt(parseInstant(metadata.optional("approved_at")));
         target.setPublishedAt(parseInstant(metadata.optional("published_at")));
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
-        target.setContentSource(RuleContentSource.GIT);
         target.setForkedFrom(metadata.optional("forked_from"));
         target.setForkedBy(metadata.optional("forked_by"));
-        if (target.getVisibility() == null) {
-            target.setVisibility(RuleVisibility.INTERNAL);
-        }
         target.setLifecycleStatus(parseRuleLifecycle(metadata.optional("lifecycle_status")));
         target.setSavedBy(actorId);
         target.setSavedAt(Instant.now());
@@ -536,23 +526,18 @@ public class SettingsService {
         target.setSkillMarkdown(metadata.content());
         target.setChecksum(withShaPrefix(metadata.checksum()));
         target.setTeamCode(metadata.optional("team_code"));
-        target.setPlatformCode(metadata.optional("platform_code"));
+        target.setPlatformCode(parsePlatformCode(metadata.require("platform_code")));
         target.setTags(metadata.tags());
-        target.setSkillKind(metadata.optional("skill_kind"));
+        target.setSkillKind(parseSkillKind(metadata.optional("skill_kind")));
         target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
-        target.setEnvironment(parseSkillEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
         target.setApprovedAt(parseInstant(metadata.optional("approved_at")));
         target.setPublishedAt(parseInstant(metadata.optional("published_at")));
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
-        target.setContentSource(SkillContentSource.GIT);
         target.setForkedFrom(metadata.optional("forked_from"));
         target.setForkedBy(metadata.optional("forked_by"));
-        if (target.getVisibility() == null) {
-            target.setVisibility(SkillVisibility.INTERNAL);
-        }
         target.setLifecycleStatus(parseLifecycle(metadata.optional("lifecycle_status")));
         target.setSavedBy(actorId);
         target.setSavedAt(Instant.now());
@@ -599,24 +584,19 @@ public class SettingsService {
         target.setFlowYaml(metadata.content());
         target.setChecksum(withShaPrefix(metadata.checksum()));
         target.setTeamCode(metadata.optional("team_code"));
-        target.setPlatformCode(metadata.optional("platform_code"));
+        target.setPlatformCode(parsePlatformCode(metadata.require("platform_code")));
         target.setTags(metadata.tags());
-        target.setFlowKind(metadata.optional("flow_kind"));
+        target.setFlowKind(parseFlowKind(metadata.optional("flow_kind")));
         target.setRiskLevel(metadata.optional("risk_level"));
         target.setScope(parseCatalogScope(metadata.optional("scope"), metadata.id()));
-        target.setEnvironment(parseFlowEnvironment(metadata.optional("environment")));
         target.setApprovalStatus(FlowApprovalStatus.PUBLISHED);
         target.setApprovedBy(metadata.optional("approved_by"));
         target.setApprovedAt(parseInstant(metadata.optional("approved_at")));
         target.setPublishedAt(parseInstant(metadata.optional("published_at")));
         target.setSourceRef(metadata.optional("source_ref"));
         target.setSourcePath(metadata.sourcePath());
-        target.setContentSource(FlowContentSource.GIT);
         target.setForkedFrom(metadata.optional("forked_from"));
         target.setForkedBy(metadata.optional("forked_by"));
-        if (target.getVisibility() == null) {
-            target.setVisibility(FlowVisibility.INTERNAL);
-        }
         target.setLifecycleStatus(parseFlowLifecycle(metadata.optional("lifecycle_status")));
         target.setSavedBy(actorId);
         target.setSavedAt(Instant.now());
@@ -691,39 +671,11 @@ public class SettingsService {
         }
     }
 
-    private SkillEnvironment parseSkillEnvironment(String value) {
-        if (value == null || value.isBlank()) {
-            return SkillEnvironment.DEV;
-        }
-        return SkillEnvironment.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
-    private SkillVisibility parseSkillVisibility(String value) {
-        if (value == null || value.isBlank()) {
-            return SkillVisibility.INTERNAL;
-        }
-        return SkillVisibility.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
     private SkillLifecycleStatus parseLifecycle(String value) {
         if (value == null || value.isBlank()) {
             return SkillLifecycleStatus.ACTIVE;
         }
         return SkillLifecycleStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
-    private RuleEnvironment parseRuleEnvironment(String value) {
-        if (value == null || value.isBlank()) {
-            return RuleEnvironment.DEV;
-        }
-        return RuleEnvironment.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
-    private RuleVisibility parseRuleVisibility(String value) {
-        if (value == null || value.isBlank()) {
-            return RuleVisibility.INTERNAL;
-        }
-        return RuleVisibility.valueOf(value.trim().toUpperCase(Locale.ROOT));
     }
 
     private RuleLifecycleStatus parseRuleLifecycle(String value) {
@@ -733,25 +685,47 @@ public class SettingsService {
         return RuleLifecycleStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
     }
 
-    private FlowEnvironment parseFlowEnvironment(String value) {
-        if (value == null || value.isBlank()) {
-            return FlowEnvironment.DEV;
-        }
-        return FlowEnvironment.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
-    private FlowVisibility parseFlowVisibility(String value) {
-        if (value == null || value.isBlank()) {
-            return FlowVisibility.INTERNAL;
-        }
-        return FlowVisibility.valueOf(value.trim().toUpperCase(Locale.ROOT));
-    }
-
     private FlowLifecycleStatus parseFlowLifecycle(String value) {
         if (value == null || value.isBlank()) {
             return FlowLifecycleStatus.ACTIVE;
         }
         return FlowLifecycleStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private String parsePlatformCode(String value) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            throw new ValidationException("metadata field is required: platform_code");
+        }
+        String platformCode = normalized.toUpperCase(Locale.ROOT);
+        if (!ALLOWED_PLATFORM_CODES.contains(platformCode)) {
+            throw new ValidationException("Unsupported platform_code: " + value);
+        }
+        return platformCode;
+    }
+
+    private String parseSkillKind(String value) {
+        return parseKind(value, ALLOWED_SKILL_KINDS, "skill_kind");
+    }
+
+    private String parseRuleKind(String value) {
+        return parseKind(value, ALLOWED_RULE_KINDS, "rule_kind");
+    }
+
+    private String parseFlowKind(String value) {
+        return parseKind(value, ALLOWED_FLOW_KINDS, "flow_kind");
+    }
+
+    private String parseKind(String value, List<String> allowed, String fieldName) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            return null;
+        }
+        String kind = normalized.toLowerCase(Locale.ROOT).replace(' ', '-');
+        if (!allowed.contains(kind)) {
+            throw new ValidationException("Unsupported " + fieldName + ": " + value);
+        }
+        return kind;
     }
 
     private Instant parseInstant(String value) {
@@ -970,12 +944,12 @@ public class SettingsService {
         } else {
             runCommand(List.of("git", "-C", mirrorPath.toString(), "remote", "set-url", "origin", repoUrl), null, Duration.ofMinutes(1));
             runCommand(List.of("git", "-C", mirrorPath.toString(), "fetch", "--prune", "--tags", "origin"), null, Duration.ofMinutes(5));
-            try {
-                runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", branch), null, Duration.ofMinutes(1));
-            } catch (ValidationException ex) {
-                runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", "-B", branch, "origin/" + branch), null, Duration.ofMinutes(1));
-            }
         }
+        runCommand(List.of("git", "-C", mirrorPath.toString(), "reset", "--hard"), null, Duration.ofMinutes(1));
+        runCommand(List.of("git", "-C", mirrorPath.toString(), "clean", "-fd"), null, Duration.ofMinutes(1));
+        runCommand(List.of("git", "-C", mirrorPath.toString(), "checkout", "-B", branch, "origin/" + branch), null, Duration.ofMinutes(1));
+        runCommand(List.of("git", "-C", mirrorPath.toString(), "reset", "--hard", "origin/" + branch), null, Duration.ofMinutes(1));
+        runCommand(List.of("git", "-C", mirrorPath.toString(), "clean", "-fd"), null, Duration.ofMinutes(1));
     }
 
     private boolean isGitAuthorizationError(String message) {

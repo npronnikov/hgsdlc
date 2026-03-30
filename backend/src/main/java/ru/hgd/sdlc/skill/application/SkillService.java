@@ -21,17 +21,13 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.publication.application.PublicationService;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.skill.api.SkillSaveRequest;
 import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
-import ru.hgd.sdlc.skill.domain.SkillContentSource;
-import ru.hgd.sdlc.skill.domain.SkillEnvironment;
 import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillProvider;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
-import ru.hgd.sdlc.skill.domain.SkillVisibility;
 import ru.hgd.sdlc.skill.domain.TagEntity;
 import ru.hgd.sdlc.skill.infrastructure.TagRepository;
 
@@ -42,6 +38,7 @@ public class SkillService {
     private static final String TEAM_SCOPE = "team";
     private static final String ORGANIZATION_SCOPE = "organization";
     private static final String TEAM_ID_PREFIX = "team-";
+    private static final List<String> ALLOWED_SKILL_KINDS = List.of("analysis", "code", "review", "refactor", "qa", "ops");
 
     private final SkillVersionRepository repository;
     private final TagRepository tagRepository;
@@ -96,11 +93,8 @@ public class SkillService {
                 normalizeEnumFilter(query.approvalStatus()),
                 normalizeFilter(query.teamCode()),
                 normalizeFilter(query.scope()),
-                normalizeEnumFilter(query.environment()),
                 normalizeFilter(query.platformCode()),
-                normalizeFilter(query.skillKind()),
-                normalizeEnumFilter(query.contentSource()),
-                normalizeEnumFilter(query.visibility()),
+                normalizeKindFilter(query.skillKind()),
                 normalizeFilter(query.version()),
                 normalizeFilter(query.tag()),
                 query.hasDescription(),
@@ -231,13 +225,9 @@ public class SkillService {
         boolean release = Boolean.TRUE.equals(request.release());
         boolean publishNow = false;
         boolean requestPublish = publish;
-        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
-        String publishMode = request.publishMode();
-        SkillEnvironment environment = parseEnvironment(request.environment());
-        SkillVisibility visibility = parseVisibility(request.visibility());
         SkillLifecycleStatus lifecycleStatus = parseLifecycleStatus(request.lifecycleStatus());
-        SkillContentSource contentSource = parseContentSource(request.sourceRef(), request.sourcePath(), publishNow);
         List<String> normalizedTags = normalizeTags(request.tags());
+        String skillKind = parseSkillKind(request.skillKind());
         if (codingAgent == null) {
             throw new ValidationException("coding_agent is required");
         }
@@ -316,10 +306,8 @@ public class SkillService {
         entity.setTeamCode(request.teamCode().trim());
         entity.setPlatformCode(normalizePlatformCode(request.platformCode()));
         entity.setTags(normalizedTags);
-        entity.setSkillKind(normalizeOptional(request.skillKind()));
+        entity.setSkillKind(skillKind);
         entity.setScope(scope);
-        entity.setEnvironment(environment);
-        entity.setVisibility(visibility);
         entity.setLifecycleStatus(lifecycleStatus);
         if (TEAM_SCOPE.equals(scope)) {
             entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
@@ -330,8 +318,6 @@ public class SkillService {
         }
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
-        entity.setContentSource(contentSource);
-        entity.setPublicationTarget(publicationTarget);
         entity.setSkillMarkdown(updatedMarkdown);
         entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setSavedBy(resolveSavedBy(user));
@@ -348,7 +334,7 @@ public class SkillService {
         SkillVersion saved = repository.save(entity);
         ensureTagsExist(normalizedTags);
         if (requestPublish) {
-            publicationService.upsertSkillRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+            publicationService.upsertSkillRequest(saved, resolveSavedBy(user));
         }
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
@@ -491,6 +477,14 @@ public class SkillService {
         return trimmed.isBlank() ? null : trimmed;
     }
 
+    private String normalizeKindFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.toLowerCase().replace(' ', '-');
+    }
+
     private String normalizeEnumFilter(String value) {
         String normalized = normalizeFilter(value);
         if (normalized == null) {
@@ -510,38 +504,12 @@ public class SkillService {
         }
     }
 
-    private SkillEnvironment parseEnvironment(String environment) {
-        try {
-            return SkillEnvironment.from(environment == null ? "dev" : environment);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported environment: " + environment);
-        }
-    }
-
-    private SkillVisibility parseVisibility(String visibility) {
-        try {
-            return SkillVisibility.from(visibility == null ? "internal" : visibility);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported visibility: " + visibility);
-        }
-    }
-
     private SkillLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
         try {
             return SkillLifecycleStatus.from(lifecycleStatus == null ? "active" : lifecycleStatus);
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
         }
-    }
-
-    private SkillContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
-        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
-            return SkillContentSource.GIT;
-        }
-        if (publishNow) {
-            return SkillContentSource.GIT;
-        }
-        return SkillContentSource.DB;
     }
 
     private String parseScope(String scope) {
@@ -573,15 +541,16 @@ public class SkillService {
         return user == null ? null : normalizeOptional(user.getUsername());
     }
 
-    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
-        if (!publishRequested) {
-            return PublicationTarget.DB_ONLY;
+    private String parseSkillKind(String skillKind) {
+        String normalized = normalizeOptional(skillKind);
+        if (normalized == null) {
+            return null;
         }
-        try {
-            return PublicationTarget.from(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported publication_target: " + raw);
+        String value = normalized.toLowerCase().replace(' ', '-');
+        if (!ALLOWED_SKILL_KINDS.contains(value)) {
+            throw new ValidationException("Unsupported skill_kind: " + skillKind);
         }
+        return value;
     }
 
     private String normalizePlatformCode(String platformCode) {
@@ -701,11 +670,8 @@ public class SkillService {
             String approvalStatus,
             String teamCode,
             String scope,
-            String environment,
             String platformCode,
             String skillKind,
-            String contentSource,
-            String visibility,
             String version,
             String tag,
             Boolean hasDescription

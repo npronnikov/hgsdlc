@@ -22,10 +22,7 @@ export default function Flows() {
     platformCode: null,
     flowKind: null,
     riskLevel: null,
-    environment: null,
     approvalStatus: null,
-    contentSource: null,
-    visibility: null,
     lifecycleStatus: null,
     tag: null,
     status: null,
@@ -58,10 +55,7 @@ export default function Flows() {
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.flowKind) params.set('flowKind', filters.flowKind);
       if (filters.riskLevel) params.set('riskLevel', filters.riskLevel);
-      if (filters.environment) params.set('environment', filters.environment);
       if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
-      if (filters.contentSource) params.set('contentSource', filters.contentSource);
-      if (filters.visibility) params.set('visibility', filters.visibility);
       if (filters.lifecycleStatus) params.set('lifecycleStatus', filters.lifecycleStatus);
       if (filters.tag) params.set('tag', filters.tag);
       if (filters.status) params.set('status', filters.status);
@@ -81,12 +75,9 @@ export default function Flows() {
         tags: flow.tags || [],
         flowKind: flow.flow_kind,
         riskLevel: flow.risk_level,
-        environment: flow.environment,
-        contentSource: flow.content_source,
         lifecycleStatus: flow.lifecycle_status,
         nodeCount: flow.node_count,
         approvalStatus: flow.approval_status,
-        visibility: flow.visibility,
         status: flow.status,
         version: flow.version,
         canonical: flow.canonical_name,
@@ -122,10 +113,7 @@ export default function Flows() {
     filters.platformCode,
     filters.flowKind,
     filters.riskLevel,
-    filters.environment,
     filters.approvalStatus,
-    filters.contentSource,
-    filters.visibility,
     filters.lifecycleStatus,
     filters.tag,
     filters.status,
@@ -140,10 +128,7 @@ export default function Flows() {
   const platformCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.platformCode).filter(Boolean))), [flows]);
   const flowKinds = useMemo(() => Array.from(new Set(flows.map((flow) => flow.flowKind).filter(Boolean))), [flows]);
   const riskLevels = useMemo(() => Array.from(new Set(flows.map((flow) => flow.riskLevel).filter(Boolean))), [flows]);
-  const environments = useMemo(() => Array.from(new Set(flows.map((flow) => flow.environment).filter(Boolean))), [flows]);
   const approvalStatuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.approvalStatus).filter(Boolean))), [flows]);
-  const contentSources = useMemo(() => Array.from(new Set(flows.map((flow) => flow.contentSource).filter(Boolean))), [flows]);
-  const visibilityOptions = useMemo(() => Array.from(new Set(flows.map((flow) => flow.visibility).filter(Boolean))), [flows]);
   const lifecycleStatuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.lifecycleStatus).filter(Boolean))), [flows]);
   const tags = useMemo(() => Array.from(new Set(flows.flatMap((flow) => flow.tags || []).filter(Boolean))), [flows]);
   const activeFilters = useMemo(() => {
@@ -157,9 +142,6 @@ export default function Flows() {
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.flowKind) items.push({ key: 'flowKind', label: `Type: ${filters.flowKind}` });
     if (filters.riskLevel) items.push({ key: 'riskLevel', label: `Risk: ${filters.riskLevel}` });
-    if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
-    if (filters.contentSource) items.push({ key: 'contentSource', label: `Source: ${filters.contentSource}` });
-    if (filters.visibility) items.push({ key: 'visibility', label: `Visibility: ${filters.visibility}` });
     if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
     if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
     if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
@@ -281,9 +263,6 @@ export default function Flows() {
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.flowKind} onChange={(value) => setFilters((prev) => ({ ...prev, flowKind: value || null }))} options={flowKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Risk</Text><Select allowClear value={filters.riskLevel} onChange={(value) => setFilters((prev) => ({ ...prev, riskLevel: value || null }))} options={riskLevels.map((value) => ({ value, label: value }))} placeholder="Select risk" /></div>
-          <div className="filter-row"><Text className="muted">Environment</Text><Select allowClear value={filters.environment} onChange={(value) => setFilters((prev) => ({ ...prev, environment: value || null }))} options={environments.map((value) => ({ value, label: value }))} placeholder="Select environment" /></div>
-          <div className="filter-row"><Text className="muted">Content source</Text><Select allowClear value={filters.contentSource} onChange={(value) => setFilters((prev) => ({ ...prev, contentSource: value || null }))} options={contentSources.map((value) => ({ value, label: value }))} placeholder="Select content source" /></div>
-          <div className="filter-row"><Text className="muted">Visibility</Text><Select allowClear value={filters.visibility} onChange={(value) => setFilters((prev) => ({ ...prev, visibility: value || null }))} options={visibilityOptions.map((value) => ({ value, label: value }))} placeholder="Select visibility" /></div>
           <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
           <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear showSearch value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row">

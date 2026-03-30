@@ -12,8 +12,6 @@ public record FlowSaveRequest(
         @JsonProperty("flow_kind") String flowKind,
         @JsonProperty("risk_level") String riskLevel,
         @JsonProperty("scope") String scope,
-        @JsonProperty("environment") String environment,
-        @JsonProperty("visibility") String visibility,
         @JsonProperty("lifecycle_status") String lifecycleStatus,
         @JsonProperty("forked_from") String forkedFrom,
         @JsonProperty("forked_by") String forkedBy,
@@ -21,8 +19,6 @@ public record FlowSaveRequest(
         @JsonProperty("source_path") String sourcePath,
         @JsonProperty("flow_yaml") String flowYaml,
         @JsonProperty("publish") Boolean publish,
-        @JsonProperty("publication_target") String publicationTarget,
-        @JsonProperty("publish_mode") String publishMode,
         @JsonProperty("release") Boolean release,
         @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion

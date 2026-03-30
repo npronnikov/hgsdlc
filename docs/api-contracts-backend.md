@@ -28,7 +28,7 @@
 | `POST` | `/api/flows/{flowId}/save` | Сохранить/обновить flow. Требует `Idempotency-Key` |
 
 ### Query-параметры `/api/flows/query`
-`cursor`, `limit`, `search`, `codingAgent`, `teamCode`, `platformCode`, `flowKind`, `riskLevel`, `environment`, `approvalStatus`, `contentSource`, `visibility`, `lifecycleStatus`, `tag`, `status`, `version`, `hasDescription`
+`cursor`, `limit`, `search`, `codingAgent`, `teamCode`, `scope`, `platformCode`, `flowKind`, `riskLevel`, `approvalStatus`, `lifecycleStatus`, `tag`, `status`, `version`, `hasDescription`
 
 ### Тело FlowSaveRequest
 ```json

@@ -48,10 +48,7 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:ruleKind IS NULL OR l.rule_kind = :ruleKind)
               AND (:scope IS NULL OR l.scope = :scope)
-              AND (:environment IS NULL OR l.environment = :environment)
               AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
-              AND (:contentSource IS NULL OR l.content_source = :contentSource)
-              AND (:visibility IS NULL OR l.visibility = :visibility)
               AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:version IS NULL OR l.version = :version)
               AND (:tag IS NULL OR LOWER(COALESCE(l.tags_json, '')) LIKE CONCAT('%', LOWER(:tag), '%'))
@@ -75,10 +72,7 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
             @Param("platformCode") String platformCode,
             @Param("ruleKind") String ruleKind,
             @Param("scope") String scope,
-            @Param("environment") String environment,
             @Param("approvalStatus") String approvalStatus,
-            @Param("contentSource") String contentSource,
-            @Param("visibility") String visibility,
             @Param("lifecycleStatus") String lifecycleStatus,
             @Param("tag") String tag,
             @Param("version") String version,

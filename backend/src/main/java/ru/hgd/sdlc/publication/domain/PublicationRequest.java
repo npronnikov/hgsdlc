@@ -42,10 +42,6 @@ public class PublicationRequest {
     @Column(nullable = false, length = 128)
     private String author;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "requested_target", nullable = false, length = 32)
-    private PublicationTarget requestedTarget;
-
     @Column(name = "requested_mode", nullable = false, length = 32)
     private String requestedMode;
 

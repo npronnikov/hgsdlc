@@ -61,3 +61,5 @@ databaseChangeLog:
       file: db/changelog/035-runtime-publish-cleanup.sql
   - include:
       file: db/changelog/036-catalog-scope-and-fork.sql
+  - include:
+      file: db/changelog/037-catalog-remove-obsolete-attributes.sql

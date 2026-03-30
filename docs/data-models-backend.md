@@ -51,20 +51,22 @@
 | `team_code` | VARCHAR(128) | Команда-владелец |
 | `platform_code` | VARCHAR(32) | Платформа |
 | `tags_json` | TEXT (JSON array) | Теги |
-| `flow_kind` | VARCHAR(64) | Вид flow |
+| `flow_kind` | VARCHAR(64) | Вид flow: `analysis`, `code`, `delivery`, `full-cycle` |
 | `risk_level` | VARCHAR(32) | Уровень риска |
-| `environment` | VARCHAR(16) | `LOCAL`, `DEV`, `PROD` |
-| `approval_status` | VARCHAR(32) | `pending_review`, `approved`, `rejected` |
+| `scope` | VARCHAR(32) | `team`, `organization` |
+| `approval_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `rejected`, `published` |
 | `approved_by` | VARCHAR(128) | |
 | `approved_at` | TIMESTAMPTZ | |
-| `content_source` | VARCHAR(16) | `DB`, `CATALOG` |
-| `visibility` | VARCHAR(32) | `PUBLIC`, `PRIVATE`, `TEAM` |
-| `lifecycle_status` | VARCHAR(32) | `active`, `deprecated`, `archived` |
-| `publication_status` | VARCHAR(32) | `pending`, `in_progress`, `published`, `failed` |
-| `publication_target` | VARCHAR(32) | Целевое окружение публикации |
+| `published_at` | TIMESTAMPTZ | |
+| `source_ref` | VARCHAR(128) | |
+| `source_path` | VARCHAR(512) | |
+| `lifecycle_status` | VARCHAR(32) | `active`, `deprecated`, `retired` |
+| `publication_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `publishing`, `published`, `failed`, `rejected` |
 | `published_commit_sha` | VARCHAR(64) | SHA коммита в catalog-repo |
 | `published_pr_url` | VARCHAR(1024) | URL pull request |
 | `last_publish_error` | TEXT | |
+| `forked_from` | VARCHAR(255) | Источник форка (`id@version`) для team-сущностей |
+| `forked_by` | VARCHAR(128) | Инициатор форка |
 | `saved_by` | VARCHAR(128) | |
 | `saved_at` | TIMESTAMPTZ | |
 | `resource_version` | BIGINT | Оптимистичная блокировка (`@Version`) |
@@ -82,15 +84,28 @@
 | `canonical_name` | VARCHAR(255) UNIQUE | `rule_id@version` |
 | `status` | VARCHAR(32) | `draft`, `published` |
 | `title` | VARCHAR(255) | |
-| `description` | TEXT | |
-| `content` | TEXT | Markdown-контент правила |
-| `provider` | VARCHAR(64) | `CLAUDE`, `CURSOR`, `QWEN` |
-| `environment` | VARCHAR(16) | |
-| `approval_status` | VARCHAR(32) | |
-| `content_source` | VARCHAR(16) | |
-| `visibility` | VARCHAR(32) | |
-| `lifecycle_status` | VARCHAR(32) | |
-| `publication_status` | VARCHAR(32) | |
+| `description` | VARCHAR(1024) | |
+| `coding_agent` | VARCHAR(64) | `claude`, `cursor`, `qwen` |
+| `rule_markdown` | TEXT | Markdown-контент правила |
+| `checksum` | VARCHAR(128) | SHA-хэш content |
+| `team_code` | VARCHAR(128) | Команда-владелец |
+| `platform_code` | VARCHAR(32) | `FRONT`, `BACK`, `DATA` |
+| `tags_json` | TEXT (JSON array) | Теги |
+| `rule_kind` | VARCHAR(64) | `architecture`, `coding-style`, `security` |
+| `scope` | VARCHAR(32) | `team`, `organization` |
+| `approval_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `rejected`, `published` |
+| `approved_by` | VARCHAR(128) | |
+| `approved_at` | TIMESTAMPTZ | |
+| `published_at` | TIMESTAMPTZ | |
+| `source_ref` | VARCHAR(128) | |
+| `source_path` | VARCHAR(512) | |
+| `lifecycle_status` | VARCHAR(32) | `active`, `deprecated`, `retired` |
+| `publication_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `publishing`, `published`, `failed`, `rejected` |
+| `published_commit_sha` | VARCHAR(64) | |
+| `published_pr_url` | VARCHAR(1024) | |
+| `last_publish_error` | TEXT | |
+| `forked_from` | VARCHAR(255) | Источник форка (`id@version`) |
+| `forked_by` | VARCHAR(128) | Инициатор форка |
 | `saved_by` | VARCHAR(128) | |
 | `saved_at` | TIMESTAMPTZ | |
 | `resource_version` | BIGINT | |
@@ -107,16 +122,29 @@
 | `version` | VARCHAR(32) | |
 | `canonical_name` | VARCHAR(255) UNIQUE | `skill_id@version` |
 | `status` | VARCHAR(32) | `draft`, `published` |
-| `title` | VARCHAR(255) | |
-| `description` | TEXT | |
-| `content` | TEXT | Markdown-контент скилла |
-| `provider` | VARCHAR(64) | `CLAUDE`, `CURSOR`, `QWEN` |
-| `environment` | VARCHAR(16) | |
-| `approval_status` | VARCHAR(32) | |
-| `content_source` | VARCHAR(16) | |
-| `visibility` | VARCHAR(32) | |
-| `lifecycle_status` | VARCHAR(32) | |
-| `publication_status` | VARCHAR(32) | |
+| `name` | VARCHAR(255) | |
+| `description` | VARCHAR(512) | |
+| `coding_agent` | VARCHAR(64) | `claude`, `cursor`, `qwen` |
+| `skill_markdown` | TEXT | Markdown-контент скилла |
+| `checksum` | VARCHAR(128) | SHA-хэш content |
+| `team_code` | VARCHAR(128) | Команда-владелец |
+| `platform_code` | VARCHAR(32) | `FRONT`, `BACK`, `DATA` |
+| `tags_json` | TEXT (JSON array) | Теги |
+| `skill_kind` | VARCHAR(64) | `analysis`, `code`, `review`, `refactor`, `qa`, `ops` |
+| `scope` | VARCHAR(32) | `team`, `organization` |
+| `approval_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `rejected`, `published` |
+| `approved_by` | VARCHAR(128) | |
+| `approved_at` | TIMESTAMPTZ | |
+| `published_at` | TIMESTAMPTZ | |
+| `source_ref` | VARCHAR(128) | |
+| `source_path` | VARCHAR(512) | |
+| `lifecycle_status` | VARCHAR(32) | `active`, `deprecated`, `retired` |
+| `publication_status` | VARCHAR(32) | `draft`, `pending_approval`, `approved`, `publishing`, `published`, `failed`, `rejected` |
+| `published_commit_sha` | VARCHAR(64) | |
+| `published_pr_url` | VARCHAR(1024) | |
+| `last_publish_error` | TEXT | |
+| `forked_from` | VARCHAR(255) | Источник форка (`id@version`) |
+| `forked_by` | VARCHAR(128) | Инициатор форка |
 | `saved_by` | VARCHAR(128) | |
 | `saved_at` | TIMESTAMPTZ | |
 | `resource_version` | BIGINT | |
@@ -264,8 +292,7 @@
 | `version` | VARCHAR(32) | |
 | `canonical_name` | VARCHAR(255) | `id@version` |
 | `author` | VARCHAR(128) | |
-| `requested_target` | VARCHAR(32) | Целевое окружение |
-| `requested_mode` | VARCHAR(32) | Режим публикации |
+| `requested_mode` | VARCHAR(32) | Вычисляется по `scope`: `team -> local`, `organization -> pr` |
 | `status` | VARCHAR(32) | `pending_approval`, `approved`, `rejected`, `in_progress`, `published`, `failed` |
 | `approval_count` | INT | Число полученных утверждений |
 | `required_approvals` | INT | Требуемое число утверждений |

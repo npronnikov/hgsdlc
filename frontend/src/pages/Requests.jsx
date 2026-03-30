@@ -128,7 +128,6 @@ export default function Requests() {
     { title: 'Version', dataIndex: 'version', key: 'version', width: 100, fixed: 'left' },
     { title: 'Author', dataIndex: 'author', key: 'author', width: 150 },
     { title: 'Status', dataIndex: 'status', key: 'status', width: 160 },
-    { title: 'Target', dataIndex: 'requested_target', key: 'requested_target', width: 130 },
     { title: 'Mode', dataIndex: 'requested_mode', key: 'requested_mode', width: 100 },
     {
       title: 'Approvals',
@@ -246,7 +245,7 @@ export default function Requests() {
           columns={columns}
           dataSource={rows}
           pagination={{ pageSize: 20 }}
-          scroll={{ x: 2600 }}
+          scroll={{ x: 2470 }}
         />
       </Card>
     </div>

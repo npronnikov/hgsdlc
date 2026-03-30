@@ -13,8 +13,6 @@ public record RuleSaveRequest(
         @JsonProperty("tags") List<String> tags,
         @JsonProperty("rule_kind") String ruleKind,
         @JsonProperty("scope") String scope,
-        @JsonProperty("environment") String environment,
-        @JsonProperty("visibility") String visibility,
         @JsonProperty("lifecycle_status") String lifecycleStatus,
         @JsonProperty("forked_from") String forkedFrom,
         @JsonProperty("forked_by") String forkedBy,
@@ -22,8 +20,6 @@ public record RuleSaveRequest(
         @JsonProperty("source_path") String sourcePath,
         @JsonProperty("rule_markdown") String ruleMarkdown,
         @JsonProperty("publish") Boolean publish,
-        @JsonProperty("publication_target") String publicationTarget,
-        @JsonProperty("publish_mode") String publishMode,
         @JsonProperty("release") Boolean release,
         @JsonProperty("base_version") String baseVersion,
         @JsonProperty("resource_version") Long resourceVersion

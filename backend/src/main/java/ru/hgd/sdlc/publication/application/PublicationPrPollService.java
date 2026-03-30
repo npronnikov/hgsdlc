@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
@@ -27,7 +26,6 @@ import ru.hgd.sdlc.publication.domain.PublicationStatus;
 import ru.hgd.sdlc.publication.infrastructure.PublicationJobRepository;
 import ru.hgd.sdlc.publication.infrastructure.PublicationRequestRepository;
 import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
-import ru.hgd.sdlc.rule.domain.RuleContentSource;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
@@ -35,7 +33,6 @@ import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
 import ru.hgd.sdlc.skill.domain.SkillApprovalStatus;
-import ru.hgd.sdlc.skill.domain.SkillContentSource;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
@@ -151,7 +148,6 @@ public class PublicationPrPollService {
                 skill.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
                 skill.setPublicationStatus(PublicationStatus.PUBLISHED);
                 skill.setPublishedAt(skill.getPublishedAt() == null ? Instant.now() : skill.getPublishedAt());
-                skill.setContentSource(SkillContentSource.GIT);
                 skill.setSourceRef(defaultBranch);
                 skill.setSourcePath("skills/" + skill.getSkillId() + "/" + skill.getVersion());
                 if (mergeCommitSha != null && !mergeCommitSha.isBlank()) {
@@ -169,7 +165,6 @@ public class PublicationPrPollService {
                 rule.setApprovalStatus(RuleApprovalStatus.PUBLISHED);
                 rule.setPublicationStatus(PublicationStatus.PUBLISHED);
                 rule.setPublishedAt(rule.getPublishedAt() == null ? Instant.now() : rule.getPublishedAt());
-                rule.setContentSource(RuleContentSource.GIT);
                 rule.setSourceRef(defaultBranch);
                 rule.setSourcePath("rules/" + rule.getRuleId() + "/" + rule.getVersion());
                 if (mergeCommitSha != null && !mergeCommitSha.isBlank()) {
@@ -187,7 +182,6 @@ public class PublicationPrPollService {
                 flow.setApprovalStatus(FlowApprovalStatus.PUBLISHED);
                 flow.setPublicationStatus(PublicationStatus.PUBLISHED);
                 flow.setPublishedAt(flow.getPublishedAt() == null ? Instant.now() : flow.getPublishedAt());
-                flow.setContentSource(FlowContentSource.GIT);
                 flow.setSourceRef(defaultBranch);
                 flow.setSourcePath("flows/" + flow.getFlowId() + "/" + flow.getVersion());
                 if (mergeCommitSha != null && !mergeCommitSha.isBlank()) {

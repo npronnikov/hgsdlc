@@ -178,37 +178,15 @@ function FlowNode({ data, selected }) {
 
 const nodeTypes = { flowNode: FlowNode };
 const platformOptions = [
-  { value: 'FRONT', label: 'FRONT' },
-  { value: 'BACK', label: 'BACK' },
-  { value: 'DATA', label: 'DATA' },
-];
-const environmentOptions = [
-  { value: 'dev', label: 'dev' },
-  { value: 'prod', label: 'prod' },
-];
-const visibilityOptions = [
-  { value: 'internal', label: 'internal' },
-  { value: 'restricted', label: 'restricted' },
-  { value: 'public', label: 'public' },
-];
-const lifecycleOptions = [
-  { value: 'active', label: 'active' },
-  { value: 'deprecated', label: 'deprecated' },
-  { value: 'retired', label: 'retired' },
-];
-const publicationTargetOptions = [
-  { value: 'db_only', label: 'DB' },
-  { value: 'db_and_git', label: 'DB + Git' },
-];
-const publishModeOptions = [
-  { value: 'local', label: 'local' },
-  { value: 'pr', label: 'pr (create Pull Request)' },
+  { value: 'FRONT', label: 'Frontend' },
+  { value: 'BACK', label: 'Backend' },
+  { value: 'DATA', label: 'Data' },
 ];
 const flowKindOptions = [
-  { value: 'orchestration', label: 'orchestration' },
-  { value: 'governance', label: 'governance' },
-  { value: 'analysis', label: 'analysis' },
-  { value: 'delivery', label: 'delivery' },
+  { value: 'analysis', label: 'Analysis' },
+  { value: 'code', label: 'Code' },
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'full-cycle', label: 'Full Cycle' },
 ];
 const riskLevelOptions = [
   { value: 'low', label: 'low' },
@@ -217,8 +195,8 @@ const riskLevelOptions = [
   { value: 'critical', label: 'critical' },
 ];
 const scopeOptions = [
-  { value: 'organization', label: 'organization' },
-  { value: 'team', label: 'team' },
+  { value: 'organization', label: 'Organization' },
+  { value: 'team', label: 'Team' },
 ];
 const requiredLabel = (label) => `${label} *`;
 
@@ -236,14 +214,9 @@ const emptyFlow = {
   riskLevel: '',
   scope: 'organization',
   forkedFrom: '',
-  environment: 'dev',
-  visibility: 'internal',
   lifecycleStatus: 'active',
   approvalStatus: '',
-  contentSource: '',
   publicationStatus: 'draft',
-  publicationTarget: 'db_and_git',
-  publishMode: 'pr',
   failOnMissingDeclaredOutput: false,
   failOnMissingExpectedMutation: false,
   responseSchema: '',
@@ -677,8 +650,6 @@ export default function FlowEditor() {
   const [isEditing, setIsEditing] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishVariant, setPublishVariant] = useState('minor');
-  const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
-  const [publishDialogMode, setPublishDialogMode] = useState('pr');
   const latestPublishedVersion = getLatestVersion(versionOptions, 'published');
   const currentParsed = parseMajorMinor(flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION);
   const currentMajor = currentParsed.valid ? currentParsed.major : parseMajorMinor(DEFAULT_VERSION).major;
@@ -1104,13 +1075,9 @@ export default function FlowEditor() {
         riskLevel: data.risk_level || '',
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
-        environment: data.environment || 'dev',
-        visibility: data.visibility || 'internal',
         lifecycleStatus: data.lifecycle_status || 'active',
         approvalStatus: data.approval_status || '',
-        contentSource: data.content_source || '',
         publicationStatus: data.publication_status || 'draft',
-        publicationTarget: data.publication_target || 'db_and_git',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -1151,13 +1118,9 @@ export default function FlowEditor() {
         riskLevel: data.risk_level || '',
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
-        environment: data.environment || 'dev',
-        visibility: data.visibility || 'internal',
         lifecycleStatus: data.lifecycle_status || 'active',
         approvalStatus: data.approval_status || '',
-        contentSource: data.content_source || '',
         publicationStatus: data.publication_status || 'draft',
-        publicationTarget: data.publication_target || 'db_and_git',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -1297,7 +1260,7 @@ export default function FlowEditor() {
     return lines.join('\n');
   };
 
-  const saveFlow = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
+  const saveFlow = async ({ publish, release = false }) => {
     if (!flowMeta.flowId) {
       message.error('Flow ID is required');
       return false;
@@ -1349,14 +1312,10 @@ export default function FlowEditor() {
           flow_kind: flowMeta.flowKind,
           risk_level: flowMeta.riskLevel,
           scope: flowMeta.scope,
-          environment: flowMeta.environment,
-          visibility: flowMeta.visibility,
           lifecycle_status: flowMeta.lifecycleStatus,
           forked_from: flowMeta.forkedFrom || undefined,
           flow_yaml: flowYaml,
           publish,
-          publication_target: publicationTargetOverride || flowMeta.publicationTarget,
-          publish_mode: publishModeOverride || flowMeta.publishMode,
           release,
           base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
@@ -1378,14 +1337,9 @@ export default function FlowEditor() {
         riskLevel: response.risk_level || prev.riskLevel,
         scope: response.scope || prev.scope,
         forkedFrom: response.forked_from || prev.forkedFrom,
-        environment: response.environment || prev.environment,
-        visibility: response.visibility || prev.visibility,
         lifecycleStatus: response.lifecycle_status || prev.lifecycleStatus,
         approvalStatus: response.approval_status || prev.approvalStatus,
-        contentSource: response.content_source || prev.contentSource,
         publicationStatus: response.publication_status || prev.publicationStatus,
-        publicationTarget: response.publication_target || prev.publicationTarget,
-        publishMode: publishModeOverride || prev.publishMode,
         failOnMissingDeclaredOutput: response.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: response.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: response.response_schema
@@ -1500,8 +1454,6 @@ export default function FlowEditor() {
 
   const openPublishDialog = () => {
     setPublishVariant('minor');
-    setPublishDialogTarget(flowMeta.scope === 'team' ? 'db_and_git' : (flowMeta.publicationTarget || 'db_and_git'));
-    setPublishDialogMode(flowMeta.scope === 'team' ? 'local' : (flowMeta.publishMode || 'pr'));
     setPublishDialogOpen(true);
   };
 
@@ -1509,8 +1461,6 @@ export default function FlowEditor() {
     const ok = await saveFlow({
       publish: true,
       release: publishVariant === 'major',
-      publicationTargetOverride: publishDialogTarget,
-      publishModeOverride: publishDialogMode,
     });
     if (ok) {
       setPublishDialogOpen(false);
@@ -1829,7 +1779,7 @@ export default function FlowEditor() {
                     onChange={(value) => updateFlowMeta({ flowKind: value })}
                     options={flowKindOptions}
                     placeholder="Select flow kind"
-                    title="Тип flow (orchestration/governance/analysis/delivery)."
+                    title="Тип flow: analysis, code, delivery, full-cycle."
                   />
                 </div>
               </div>
@@ -1846,55 +1796,10 @@ export default function FlowEditor() {
                   />
                 </div>
               </div>
-              <div>
-                <Text className="muted">Environment</Text>
-                <div className="field-control">
-                  <Select
-                    value={flowMeta.environment || undefined}
-                    disabled={isReadOnly}
-                    onChange={(value) => updateFlowMeta({ environment: value })}
-                    options={environmentOptions}
-                    placeholder="Select environment"
-                    title="Среда использования версии: dev или prod."
-                  />
-                </div>
-              </div>
-              <div>
-                <Text className="muted">Visibility</Text>
-                <div className="field-control">
-                  <Select
-                    value={flowMeta.visibility || undefined}
-                    disabled={isReadOnly}
-                    onChange={(value) => updateFlowMeta({ visibility: value })}
-                    options={visibilityOptions}
-                    placeholder="Select visibility"
-                    title="Видимость версии flow внутри платформы."
-                  />
-                </div>
-              </div>
-              <div>
-                <Text className="muted">Lifecycle status</Text>
-                <div className="field-control">
-                  <Select
-                    value={flowMeta.lifecycleStatus || undefined}
-                    disabled={isReadOnly}
-                    onChange={(value) => updateFlowMeta({ lifecycleStatus: value })}
-                    options={lifecycleOptions}
-                    placeholder="Select lifecycle status"
-                    title="Состояние жизненного цикла версии."
-                  />
-                </div>
-              </div>
               {!isCreateMode && (
                 <div>
                   <Text className="muted">Approval status</Text>
                   <div className="mono">{flowMeta.approvalStatus || 'draft'}</div>
-                </div>
-              )}
-              {!isCreateMode && (
-                <div>
-                  <Text className="muted">Content source</Text>
-                  <div className="mono">{flowMeta.contentSource || 'db'}</div>
                 </div>
               )}
               {!isCreateMode && (
@@ -2585,26 +2490,6 @@ export default function FlowEditor() {
                 { value: 'minor', label: publishLabel },
                 { value: 'major', label: releaseLabel },
               ]}
-            />
-          </div>
-          <div>
-            <Text className="muted">Publication target</Text>
-            <Select
-              style={{ width: '100%', marginTop: 4 }}
-              value={publishDialogTarget}
-              onChange={setPublishDialogTarget}
-              options={publicationTargetOptions}
-              disabled={flowMeta.scope === 'team'}
-            />
-          </div>
-          <div>
-            <Text className="muted">Publish mode</Text>
-            <Select
-              style={{ width: '100%', marginTop: 4 }}
-              value={publishDialogMode}
-              onChange={setPublishDialogMode}
-              options={publishModeOptions}
-              disabled={flowMeta.scope === 'team'}
             />
           </div>
         </div>

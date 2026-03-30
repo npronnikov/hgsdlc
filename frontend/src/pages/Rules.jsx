@@ -21,10 +21,7 @@ export default function Rules() {
     platformCode: null,
     ruleKind: null,
     scope: null,
-    environment: null,
     approvalStatus: null,
-    contentSource: null,
-    visibility: null,
     lifecycleStatus: null,
     tag: null,
     status: null,
@@ -56,10 +53,7 @@ export default function Rules() {
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.ruleKind) params.set('ruleKind', filters.ruleKind);
       if (filters.scope) params.set('scope', filters.scope);
-      if (filters.environment) params.set('environment', filters.environment);
       if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
-      if (filters.contentSource) params.set('contentSource', filters.contentSource);
-      if (filters.visibility) params.set('visibility', filters.visibility);
       if (filters.lifecycleStatus) params.set('lifecycleStatus', filters.lifecycleStatus);
       if (filters.tag) params.set('tag', filters.tag);
       if (filters.status) params.set('status', filters.status);
@@ -78,10 +72,7 @@ export default function Rules() {
         tags: rule.tags || [],
         ruleKind: rule.rule_kind,
         scope: rule.scope,
-        environment: rule.environment,
         approvalStatus: rule.approval_status,
-        contentSource: rule.content_source,
-        visibility: rule.visibility,
         lifecycleStatus: rule.lifecycle_status,
         status: rule.status,
         version: rule.version,
@@ -117,10 +108,7 @@ export default function Rules() {
     filters.platformCode,
     filters.ruleKind,
     filters.scope,
-    filters.environment,
     filters.approvalStatus,
-    filters.contentSource,
-    filters.visibility,
     filters.lifecycleStatus,
     filters.tag,
     filters.status,
@@ -134,10 +122,7 @@ export default function Rules() {
   const platformCodes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.platformCode).filter(Boolean))), [rules]);
   const ruleKinds = useMemo(() => Array.from(new Set(rules.map((rule) => rule.ruleKind).filter(Boolean))), [rules]);
   const scopes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.scope).filter(Boolean))), [rules]);
-  const environments = useMemo(() => Array.from(new Set(rules.map((rule) => rule.environment).filter(Boolean))), [rules]);
   const approvalStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.approvalStatus).filter(Boolean))), [rules]);
-  const contentSources = useMemo(() => Array.from(new Set(rules.map((rule) => rule.contentSource).filter(Boolean))), [rules]);
-  const visibilityOptions = useMemo(() => Array.from(new Set(rules.map((rule) => rule.visibility).filter(Boolean))), [rules]);
   const lifecycleStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.lifecycleStatus).filter(Boolean))), [rules]);
   const tags = useMemo(() => Array.from(new Set(rules.flatMap((rule) => rule.tags || []).filter(Boolean))), [rules]);
   const activeFilters = useMemo(() => {
@@ -150,9 +135,6 @@ export default function Rules() {
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.ruleKind) items.push({ key: 'ruleKind', label: `Type: ${filters.ruleKind}` });
     if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
-    if (filters.environment) items.push({ key: 'environment', label: `Environment: ${filters.environment}` });
-    if (filters.contentSource) items.push({ key: 'contentSource', label: `Source: ${filters.contentSource}` });
-    if (filters.visibility) items.push({ key: 'visibility', label: `Visibility: ${filters.visibility}` });
     if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
     if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
     if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
@@ -213,7 +195,6 @@ export default function Rules() {
                   <span>{rule.ruleKind || 'type: —'}</span>
                   <span>{rule.scope || 'scope: —'}</span>
                   <span>{rule.platformCode || 'platform: —'}</span>
-                  <span>{rule.visibility || 'visibility: —'}</span>
                 </div>
                 {(rule.tags || []).length > 0 && (
                   <div className="resource-tags-row minimal-card-tags-row">
@@ -265,9 +246,6 @@ export default function Rules() {
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.ruleKind} onChange={(value) => setFilters((prev) => ({ ...prev, ruleKind: value || null }))} options={ruleKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
-          <div className="filter-row"><Text className="muted">Environment</Text><Select allowClear value={filters.environment} onChange={(value) => setFilters((prev) => ({ ...prev, environment: value || null }))} options={environments.map((value) => ({ value, label: value }))} placeholder="Select environment" /></div>
-          <div className="filter-row"><Text className="muted">Content source</Text><Select allowClear value={filters.contentSource} onChange={(value) => setFilters((prev) => ({ ...prev, contentSource: value || null }))} options={contentSources.map((value) => ({ value, label: value }))} placeholder="Select content source" /></div>
-          <div className="filter-row"><Text className="muted">Visibility</Text><Select allowClear value={filters.visibility} onChange={(value) => setFilters((prev) => ({ ...prev, visibility: value || null }))} options={visibilityOptions.map((value) => ({ value, label: value }))} placeholder="Select visibility" /></div>
           <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
           <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row"><Text className="muted">Version</Text><Input value={filters.version} onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))} placeholder="For example 1.0.0" /></div>

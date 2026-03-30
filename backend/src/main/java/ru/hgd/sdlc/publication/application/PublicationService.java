@@ -34,8 +34,6 @@ import ru.hgd.sdlc.publication.domain.PublicationJob;
 import ru.hgd.sdlc.publication.domain.PublicationJobStatus;
 import ru.hgd.sdlc.publication.domain.PublicationRequest;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
-import ru.hgd.sdlc.rule.domain.RuleContentSource;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.publication.infrastructure.PublicationApprovalRepository;
@@ -44,10 +42,8 @@ import ru.hgd.sdlc.publication.infrastructure.PublicationRequestRepository;
 import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.settings.domain.SystemSetting;
 import ru.hgd.sdlc.settings.infrastructure.SystemSettingRepository;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
-import ru.hgd.sdlc.skill.domain.SkillContentSource;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
@@ -84,7 +80,7 @@ public class PublicationService {
     }
 
     @Transactional
-    public void upsertSkillRequest(SkillVersion skill, String actorId, PublicationTarget target, String requestedMode) {
+    public void upsertSkillRequest(SkillVersion skill, String actorId) {
         Instant now = Instant.now();
         PublicationRequest request = publicationRequestRepository
                 .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.SKILL, skill.getSkillId(), skill.getVersion())
@@ -100,8 +96,7 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(skill.getCanonicalName());
-        request.setRequestedTarget(normalizeTargetForScope(target, skill.getScope()));
-        request.setRequestedMode(normalizePublishModeForScope(requestedMode, skill.getScope()));
+        request.setRequestedMode(resolvePublishModeForScope(skill.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -109,7 +104,7 @@ public class PublicationService {
     }
 
     @Transactional
-    public void upsertRuleRequest(RuleVersion rule, String actorId, PublicationTarget target, String requestedMode) {
+    public void upsertRuleRequest(RuleVersion rule, String actorId) {
         Instant now = Instant.now();
         PublicationRequest request = publicationRequestRepository
                 .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.RULE, rule.getRuleId(), rule.getVersion())
@@ -125,8 +120,7 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(rule.getCanonicalName());
-        request.setRequestedTarget(normalizeTargetForScope(target, rule.getScope()));
-        request.setRequestedMode(normalizePublishModeForScope(requestedMode, rule.getScope()));
+        request.setRequestedMode(resolvePublishModeForScope(rule.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -134,7 +128,7 @@ public class PublicationService {
     }
 
     @Transactional
-    public void upsertFlowRequest(FlowVersion flow, String actorId, PublicationTarget target, String requestedMode) {
+    public void upsertFlowRequest(FlowVersion flow, String actorId) {
         Instant now = Instant.now();
         PublicationRequest request = publicationRequestRepository
                 .findByEntityTypeAndEntityIdAndVersion(PublicationEntityType.FLOW, flow.getFlowId(), flow.getVersion())
@@ -150,8 +144,7 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(flow.getCanonicalName());
-        request.setRequestedTarget(normalizeTargetForScope(target, flow.getScope()));
-        request.setRequestedMode(normalizePublishModeForScope(requestedMode, flow.getScope()));
+        request.setRequestedMode(resolvePublishModeForScope(flow.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -456,7 +449,6 @@ public class PublicationService {
                 .build();
         publicationJobRepository.save(job);
 
-        skill.setPublicationTarget(request.getRequestedTarget());
         skill.setPublicationStatus(PublicationStatus.PUBLISHING);
         skill.setLastPublishError(null);
         skill.setSavedAt(now);
@@ -481,7 +473,6 @@ public class PublicationService {
             skill.setPublishedCommitSha(publishResult.commitSha());
             skill.setPublishedPrUrl(publishResult.prUrl());
             skill.setLastPublishError(null);
-            skill.setContentSource(SkillContentSource.GIT);
             skill.setSourcePath("skills/" + skill.getSkillId() + "/" + skill.getVersion());
             skill.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -525,7 +516,6 @@ public class PublicationService {
                 .build();
         publicationJobRepository.save(job);
 
-        rule.setPublicationTarget(request.getRequestedTarget());
         rule.setPublicationStatus(PublicationStatus.PUBLISHING);
         rule.setLastPublishError(null);
         rule.setSavedAt(now);
@@ -550,7 +540,6 @@ public class PublicationService {
             rule.setPublishedCommitSha(publishResult.commitSha());
             rule.setPublishedPrUrl(publishResult.prUrl());
             rule.setLastPublishError(null);
-            rule.setContentSource(RuleContentSource.GIT);
             rule.setSourcePath("rules/" + rule.getRuleId() + "/" + rule.getVersion());
             rule.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -594,7 +583,6 @@ public class PublicationService {
                 .build();
         publicationJobRepository.save(job);
 
-        flow.setPublicationTarget(request.getRequestedTarget());
         flow.setPublicationStatus(PublicationStatus.PUBLISHING);
         flow.setLastPublishError(null);
         flow.setSavedAt(now);
@@ -619,7 +607,6 @@ public class PublicationService {
             flow.setPublishedCommitSha(publishResult.commitSha());
             flow.setPublishedPrUrl(publishResult.prUrl());
             flow.setLastPublishError(null);
-            flow.setContentSource(FlowContentSource.GIT);
             flow.setSourcePath("flows/" + flow.getFlowId() + "/" + flow.getVersion());
             flow.setSourceRef(publishResult.sourceRef());
             if (!publishResult.awaitingMerge()) {
@@ -671,7 +658,7 @@ public class PublicationService {
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
         String branchName;
-        String mode = normalizePublishMode(request.getRequestedMode());
+        String mode = resolvePublishModeForScope(skill.getScope());
         if ("pr".equals(mode)) {
             branchName = "publish/skill/" + skill.getSkillId() + "/" + skill.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         } else {
@@ -733,7 +720,7 @@ public class PublicationService {
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
         String branchName;
-        String mode = normalizePublishMode(request.getRequestedMode());
+        String mode = resolvePublishModeForScope(rule.getScope());
         if ("pr".equals(mode)) {
             branchName = "publish/rule/" + rule.getRuleId() + "/" + rule.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         } else {
@@ -794,7 +781,7 @@ public class PublicationService {
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
         String branchName;
-        String mode = normalizePublishMode(request.getRequestedMode());
+        String mode = resolvePublishModeForScope(flow.getScope());
         if ("pr".equals(mode)) {
             branchName = "publish/flow/" + flow.getFlowId() + "/" + flow.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         } else {
@@ -850,15 +837,12 @@ public class PublicationService {
                 "tags: " + toYamlInlineList(skill.getTags()),
                 "skill_kind: " + toYamlString(skill.getSkillKind()),
                 "scope: " + toYamlString(skill.getScope()),
-                "environment: " + toYamlLowerName(skill.getEnvironment()),
                 "approval_status: " + toYamlLowerName(skill.getApprovalStatus()),
                 "approved_by: " + toYamlString(skill.getApprovedBy()),
                 "approved_at: " + toYamlInstant(skill.getApprovedAt()),
                 "published_at: " + toYamlInstant(skill.getPublishedAt()),
                 "source_ref: " + toYamlString(baseBranch),
                 "source_path: " + toYamlString(sourceDir),
-                "content_source: git",
-                "visibility: " + toYamlLowerName(skill.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(skill.getLifecycleStatus()),
                 "forked_from: " + toYamlString(skill.getForkedFrom()),
                 "forked_by: " + toYamlString(skill.getForkedBy()),
@@ -886,15 +870,12 @@ public class PublicationService {
                 "tags: " + toYamlInlineList(rule.getTags()),
                 "rule_kind: " + toYamlString(rule.getRuleKind()),
                 "scope: " + toYamlString(rule.getScope()),
-                "environment: " + toYamlLowerName(rule.getEnvironment()),
                 "approval_status: " + toYamlLowerName(rule.getApprovalStatus()),
                 "approved_by: " + toYamlString(rule.getApprovedBy()),
                 "approved_at: " + toYamlInstant(rule.getApprovedAt()),
                 "published_at: " + toYamlInstant(rule.getPublishedAt()),
                 "source_ref: " + toYamlString(baseBranch),
                 "source_path: " + toYamlString(sourceDir),
-                "content_source: git",
-                "visibility: " + toYamlLowerName(rule.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(rule.getLifecycleStatus()),
                 "forked_from: " + toYamlString(rule.getForkedFrom()),
                 "forked_by: " + toYamlString(rule.getForkedBy()),
@@ -923,15 +904,12 @@ public class PublicationService {
                 "flow_kind: " + toYamlString(flow.getFlowKind()),
                 "risk_level: " + toYamlString(flow.getRiskLevel()),
                 "scope: " + toYamlString(flow.getScope()),
-                "environment: " + toYamlLowerName(flow.getEnvironment()),
                 "approval_status: " + toYamlLowerName(flow.getApprovalStatus()),
                 "approved_by: " + toYamlString(flow.getApprovedBy()),
                 "approved_at: " + toYamlInstant(flow.getApprovedAt()),
                 "published_at: " + toYamlInstant(flow.getPublishedAt()),
                 "source_ref: " + toYamlString(baseBranch),
                 "source_path: " + toYamlString(sourceDir),
-                "content_source: git",
-                "visibility: " + toYamlLowerName(flow.getVisibility()),
                 "lifecycle_status: " + toYamlLowerName(flow.getLifecycleStatus()),
                 "forked_from: " + toYamlString(flow.getForkedFrom()),
                 "forked_by: " + toYamlString(flow.getForkedBy()),
@@ -1045,11 +1023,10 @@ public class PublicationService {
     private CatalogGitSettings loadCatalogGitSettings() {
         String repoUrl = valueOrDefault(SettingsService.CATALOG_REPO_URL_KEY, "https://github.com/npronnikov/catalog.git");
         String branch = valueOrDefault(SettingsService.CATALOG_DEFAULT_BRANCH_KEY, "main");
-        String mode = valueOrDefault(SettingsService.CATALOG_PUBLISH_MODE_KEY, "pr");
         String username = valueOrDefault(SettingsService.CATALOG_GIT_USERNAME_KEY, "");
         String password = valueOrDefault(SettingsService.CATALOG_GIT_PASSWORD_KEY, "");
         String workspaceRoot = valueOrDefault(SettingsService.WORKSPACE_ROOT_KEY, "/tmp/workspace");
-        return new CatalogGitSettings(repoUrl, branch, mode, username, password, workspaceRoot);
+        return new CatalogGitSettings(repoUrl, branch, username, password, workspaceRoot);
     }
 
     private String valueOrDefault(String key, String fallback) {
@@ -1061,32 +1038,11 @@ public class PublicationService {
         return value.trim();
     }
 
-    private String normalizePublishMode(String mode) {
-        if (mode == null || mode.isBlank()) {
-            return "pr";
-        }
-        String normalized = mode.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.equals("local") && !normalized.equals("pr")) {
-            throw new ValidationException("publish_mode must be local or pr");
-        }
-        return normalized;
-    }
-
-    private String normalizePublishModeForScope(String mode, String scope) {
+    private String resolvePublishModeForScope(String scope) {
         if (isTeamScope(scope)) {
             return "local";
         }
-        return normalizePublishMode(mode);
-    }
-
-    private PublicationTarget normalizeTargetForScope(PublicationTarget requestedTarget, String scope) {
-        if (isTeamScope(scope)) {
-            return PublicationTarget.GIT_ONLY;
-        }
-        if (requestedTarget == null || requestedTarget == PublicationTarget.DB_ONLY) {
-            return PublicationTarget.DB_AND_GIT;
-        }
-        return requestedTarget;
+        return "pr";
     }
 
     private boolean isTeamScope(String scope) {
@@ -1229,7 +1185,6 @@ public class PublicationService {
     private record CatalogGitSettings(
             String repoUrl,
             String defaultBranch,
-            String publishMode,
             String gitUsername,
             String gitPasswordOrPat,
             String workspaceRoot

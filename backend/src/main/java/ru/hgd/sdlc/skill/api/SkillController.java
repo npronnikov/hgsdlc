@@ -49,11 +49,8 @@ public class SkillController {
             @RequestParam(required = false) String approvalStatus,
             @RequestParam(required = false) String teamCode,
             @RequestParam(required = false) String scope,
-            @RequestParam(required = false) String environment,
             @RequestParam(required = false) String platformCode,
             @RequestParam(required = false) String skillKind,
-            @RequestParam(required = false) String contentSource,
-            @RequestParam(required = false) String visibility,
             @RequestParam(required = false) String version,
             @RequestParam(required = false) String tag,
             @RequestParam(required = false) Boolean hasDescription
@@ -68,11 +65,8 @@ public class SkillController {
                         approvalStatus,
                         teamCode,
                         scope,
-                        environment,
                         platformCode,
                         skillKind,
-                        contentSource,
-                        visibility,
                         version,
                         tag,
                         hasDescription

@@ -41,18 +41,14 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             FROM latest l
             WHERE (:search IS NULL OR LOWER(COALESCE(l.name, '') || ' ' || COALESCE(l.skill_id, '') || ' '
                 || COALESCE(l.canonical_name, '') || ' ' || COALESCE(l.description, '') || ' '
-                || COALESCE(l.coding_agent, '') || ' ' || COALESCE(l.platform_code, '') || ' '
-                || COALESCE(l.environment, '')) LIKE CONCAT('%', LOWER(:search), '%'))
+                || COALESCE(l.coding_agent, '') || ' ' || COALESCE(l.platform_code, '')) LIKE CONCAT('%', LOWER(:search), '%'))
               AND (:codingAgent IS NULL OR l.coding_agent = :codingAgent)
               AND (:status IS NULL OR l.status = :status)
               AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
               AND (:teamCode IS NULL OR l.team_code = :teamCode)
               AND (:scope IS NULL OR l.scope = :scope)
-              AND (:environment IS NULL OR l.environment = :environment)
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:skillKind IS NULL OR l.skill_kind = :skillKind)
-              AND (:contentSource IS NULL OR l.content_source = :contentSource)
-              AND (:visibility IS NULL OR l.visibility = :visibility)
               AND (:version IS NULL OR l.version = :version)
               AND (:tag IS NULL OR LOWER(COALESCE(l.tags_json, '')) LIKE CONCAT('%', LOWER(:tag), '%'))
               AND (
@@ -74,11 +70,8 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             @Param("approvalStatus") String approvalStatus,
             @Param("teamCode") String teamCode,
             @Param("scope") String scope,
-            @Param("environment") String environment,
             @Param("platformCode") String platformCode,
             @Param("skillKind") String skillKind,
-            @Param("contentSource") String contentSource,
-            @Param("visibility") String visibility,
             @Param("version") String version,
             @Param("tag") String tag,
             @Param("hasDescription") Boolean hasDescription,

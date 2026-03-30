@@ -20,16 +20,12 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.publication.application.PublicationService;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.rule.api.RuleSaveRequest;
 import ru.hgd.sdlc.rule.domain.RuleApprovalStatus;
-import ru.hgd.sdlc.rule.domain.RuleContentSource;
-import ru.hgd.sdlc.rule.domain.RuleEnvironment;
 import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleProvider;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
-import ru.hgd.sdlc.rule.domain.RuleVisibility;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 
 @Service
@@ -39,6 +35,8 @@ public class RuleService {
     private static final String TEAM_SCOPE = "team";
     private static final String ORGANIZATION_SCOPE = "organization";
     private static final String TEAM_ID_PREFIX = "team-";
+    private static final List<String> ALLOWED_RULE_KINDS = List.of("architecture", "coding-style", "security");
+    private static final List<String> ALLOWED_PLATFORM_CODES = List.of("FRONT", "BACK", "DATA");
 
     private final RuleVersionRepository repository;
     private final MarkdownFrontmatterParser frontmatterParser;
@@ -89,12 +87,9 @@ public class RuleService {
                 normalizeEnumFilter(query.status()),
                 normalizeFilter(query.teamCode()),
                 normalizeFilter(query.platformCode()),
-                normalizeFilter(query.ruleKind()),
+                normalizeKindFilter(query.ruleKind()),
                 normalizeFilter(query.scope()),
-                normalizeEnumFilter(query.environment()),
                 normalizeEnumFilter(query.approvalStatus()),
-                normalizeEnumFilter(query.contentSource()),
-                normalizeEnumFilter(query.visibility()),
                 normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.tag()),
                 normalizeFilter(query.version()),
@@ -152,6 +147,9 @@ public class RuleService {
         if (request.description() == null || request.description().isBlank()) {
             throw new ValidationException("description is required");
         }
+        if (request.platformCode() == null || request.platformCode().isBlank()) {
+            throw new ValidationException("platform_code is required");
+        }
         if (request.ruleId() == null || request.ruleId().isBlank()) {
             throw new ValidationException("rule_id is required");
         }
@@ -168,8 +166,7 @@ public class RuleService {
         boolean release = Boolean.TRUE.equals(request.release());
         boolean publishNow = false;
         boolean requestPublish = publish;
-        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
-        String publishMode = request.publishMode();
+        String ruleKind = parseRuleKind(request.ruleKind());
         if (codingAgent == null) {
             throw new ValidationException("coding_agent is required");
         }
@@ -248,11 +245,10 @@ public class RuleService {
         entity.setRuleMarkdown(updatedMarkdown);
         entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedMarkdown) : null);
         entity.setTeamCode(normalizeOptional(request.teamCode()));
-        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setPlatformCode(normalizePlatformCode(request.platformCode()));
         entity.setTags(normalizeTags(request.tags()));
-        entity.setRuleKind(normalizeOptional(request.ruleKind()));
+        entity.setRuleKind(ruleKind);
         entity.setScope(scope);
-        entity.setEnvironment(parseEnvironment(request.environment()));
         if (TEAM_SCOPE.equals(scope)) {
             entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
             entity.setForkedBy(resolveForkedBy(user, request.forkedBy()));
@@ -265,10 +261,7 @@ public class RuleService {
         entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
-        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publishNow));
-        entity.setVisibility(parseVisibility(request.visibility()));
         entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
-        entity.setPublicationTarget(publicationTarget);
         if (requestPublish) {
             entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
             entity.setLastPublishError(null);
@@ -282,7 +275,7 @@ public class RuleService {
 
         RuleVersion saved = repository.save(entity);
         if (requestPublish) {
-            publicationService.upsertRuleRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+            publicationService.upsertRuleRequest(saved, resolveSavedBy(user));
         }
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
@@ -425,6 +418,14 @@ public class RuleService {
         return trimmed.isBlank() ? null : trimmed;
     }
 
+    private String normalizeKindFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.toLowerCase().replace(' ', '-');
+    }
+
     private String normalizeEnumFilter(String value) {
         String normalized = normalizeFilter(value);
         if (normalized == null) {
@@ -444,28 +445,6 @@ public class RuleService {
         }
     }
 
-    private RuleEnvironment parseEnvironment(String environment) {
-        if (environment == null || environment.isBlank()) {
-            return RuleEnvironment.DEV;
-        }
-        try {
-            return RuleEnvironment.valueOf(environment.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported environment: " + environment);
-        }
-    }
-
-    private RuleVisibility parseVisibility(String visibility) {
-        if (visibility == null || visibility.isBlank()) {
-            return RuleVisibility.INTERNAL;
-        }
-        try {
-            return RuleVisibility.valueOf(visibility.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported visibility: " + visibility);
-        }
-    }
-
     private RuleLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
         if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
             return RuleLifecycleStatus.ACTIVE;
@@ -475,16 +454,6 @@ public class RuleService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
         }
-    }
-
-    private RuleContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
-        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
-            return RuleContentSource.GIT;
-        }
-        if (publishNow) {
-            return RuleContentSource.GIT;
-        }
-        return RuleContentSource.DB;
     }
 
     private String parseScope(String scope) {
@@ -516,15 +485,28 @@ public class RuleService {
         return user == null ? null : normalizeOptional(user.getUsername());
     }
 
-    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
-        if (!publishRequested) {
-            return PublicationTarget.DB_ONLY;
+    private String normalizePlatformCode(String platformCode) {
+        String normalized = normalizeOptional(platformCode);
+        if (normalized == null) {
+            throw new ValidationException("platform_code is required");
         }
-        try {
-            return PublicationTarget.from(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported publication_target: " + raw);
+        String value = normalized.toUpperCase();
+        if (!ALLOWED_PLATFORM_CODES.contains(value)) {
+            throw new ValidationException("Unsupported platform_code: " + platformCode);
         }
+        return value;
+    }
+
+    private String parseRuleKind(String ruleKind) {
+        String normalized = normalizeOptional(ruleKind);
+        if (normalized == null) {
+            return null;
+        }
+        String value = normalized.toLowerCase().replace(' ', '-');
+        if (!ALLOWED_RULE_KINDS.contains(value)) {
+            throw new ValidationException("Unsupported rule_kind: " + ruleKind);
+        }
+        return value;
     }
 
     private List<String> normalizeTags(List<String> tags) {
@@ -606,10 +588,7 @@ public class RuleService {
             String platformCode,
             String ruleKind,
             String scope,
-            String environment,
             String approvalStatus,
-            String contentSource,
-            String visibility,
             String lifecycleStatus,
             String tag,
             String status,

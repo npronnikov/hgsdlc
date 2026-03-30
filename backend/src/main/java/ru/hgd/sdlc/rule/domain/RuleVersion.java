@@ -18,7 +18,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ru.hgd.sdlc.common.StringListJsonConverter;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
 
 @Getter
 @Setter
@@ -78,10 +77,6 @@ public class RuleVersion {
     private String scope;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "environment", length = 16)
-    private RuleEnvironment environment;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "approval_status", length = 32)
     private RuleApprovalStatus approvalStatus;
 
@@ -101,24 +96,12 @@ public class RuleVersion {
     private String sourcePath;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "content_source", length = 16)
-    private RuleContentSource contentSource;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "visibility", length = 32)
-    private RuleVisibility visibility;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "lifecycle_status", length = 32)
     private RuleLifecycleStatus lifecycleStatus;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "publication_status", length = 32)
     private PublicationStatus publicationStatus;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "publication_target", length = 32)
-    private PublicationTarget publicationTarget;
 
     @Column(name = "published_commit_sha", length = 64)
     private String publishedCommitSha;

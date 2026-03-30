@@ -17,18 +17,14 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.api.FlowSaveRequest;
 import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
-import ru.hgd.sdlc.flow.domain.FlowEnvironment;
 import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
-import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.publication.application.PublicationService;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
@@ -41,6 +37,8 @@ public class FlowService {
     private static final String TEAM_SCOPE = "team";
     private static final String ORGANIZATION_SCOPE = "organization";
     private static final String TEAM_ID_PREFIX = "team-";
+    private static final List<String> ALLOWED_FLOW_KINDS = List.of("analysis", "code", "delivery", "full-cycle");
+    private static final List<String> ALLOWED_PLATFORM_CODES = List.of("FRONT", "BACK", "DATA");
 
     private final FlowVersionRepository repository;
     private final RuleVersionRepository ruleRepository;
@@ -98,12 +96,9 @@ public class FlowService {
                 normalizeFilter(query.teamCode()),
                 normalizeFilter(query.scope()),
                 normalizeFilter(query.platformCode()),
-                normalizeFilter(query.flowKind()),
+                normalizeKindFilter(query.flowKind()),
                 normalizeFilter(query.riskLevel()),
-                normalizeEnumFilter(query.environment()),
                 normalizeEnumFilter(query.approvalStatus()),
-                normalizeEnumFilter(query.contentSource()),
-                normalizeEnumFilter(query.visibility()),
                 normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.tag()),
                 normalizeEnumFilter(query.status()),
@@ -159,6 +154,9 @@ public class FlowService {
         if (request.flowId() == null || request.flowId().isBlank()) {
             throw new ValidationException("flow_id is required");
         }
+        if (request.platformCode() == null || request.platformCode().isBlank()) {
+            throw new ValidationException("platform_code is required");
+        }
         if (!FLOW_ID_PATTERN.matcher(request.flowId()).matches()) {
             throw new ValidationException("flow_id has invalid format");
         }
@@ -191,8 +189,7 @@ public class FlowService {
         boolean release = Boolean.TRUE.equals(request.release());
         boolean publishNow = false;
         boolean requestPublish = publish;
-        PublicationTarget publicationTarget = parsePublicationTarget(request.publicationTarget(), publish);
-        String publishMode = request.publishMode();
+        String flowKind = parseFlowKind(request.flowKind());
 
         List<String> validationErrors = flowValidator.validate(model);
         if (!validationErrors.isEmpty()) {
@@ -273,12 +270,11 @@ public class FlowService {
         entity.setFlowYaml(updatedYaml);
         entity.setChecksum(publishNow ? ChecksumUtil.sha256(updatedYaml) : null);
         entity.setTeamCode(normalizeOptional(request.teamCode()));
-        entity.setPlatformCode(normalizeOptional(request.platformCode()));
+        entity.setPlatformCode(normalizePlatformCode(request.platformCode()));
         entity.setTags(normalizeTags(request.tags()));
-        entity.setFlowKind(normalizeOptional(request.flowKind()));
+        entity.setFlowKind(flowKind);
         entity.setRiskLevel(normalizeOptional(request.riskLevel()));
         entity.setScope(scope);
-        entity.setEnvironment(parseEnvironment(request.environment()));
         if (TEAM_SCOPE.equals(scope)) {
             entity.setForkedFrom(normalizeOptional(request.forkedFrom()));
             entity.setForkedBy(resolveForkedBy(user, request.forkedBy()));
@@ -291,10 +287,7 @@ public class FlowService {
         entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
-        entity.setContentSource(parseContentSource(request.sourceRef(), request.sourcePath(), publishNow));
-        entity.setVisibility(parseVisibility(request.visibility()));
         entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
-        entity.setPublicationTarget(publicationTarget);
         if (requestPublish) {
             entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
             entity.setLastPublishError(null);
@@ -308,7 +301,7 @@ public class FlowService {
 
         FlowVersion saved = repository.save(entity);
         if (requestPublish) {
-            publicationService.upsertFlowRequest(saved, resolveSavedBy(user), publicationTarget, publishMode);
+            publicationService.upsertFlowRequest(saved, resolveSavedBy(user));
         }
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
@@ -325,28 +318,6 @@ public class FlowService {
         return codingAgent.trim().toLowerCase().replace('-', '_');
     }
 
-    private FlowEnvironment parseEnvironment(String environment) {
-        if (environment == null || environment.isBlank()) {
-            return FlowEnvironment.DEV;
-        }
-        try {
-            return FlowEnvironment.valueOf(environment.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported environment: " + environment);
-        }
-    }
-
-    private FlowVisibility parseVisibility(String visibility) {
-        if (visibility == null || visibility.isBlank()) {
-            return FlowVisibility.INTERNAL;
-        }
-        try {
-            return FlowVisibility.valueOf(visibility.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported visibility: " + visibility);
-        }
-    }
-
     private FlowLifecycleStatus parseLifecycleStatus(String lifecycleStatus) {
         if (lifecycleStatus == null || lifecycleStatus.isBlank()) {
             return FlowLifecycleStatus.ACTIVE;
@@ -356,16 +327,6 @@ public class FlowService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
         }
-    }
-
-    private FlowContentSource parseContentSource(String sourceRef, String sourcePath, boolean publishNow) {
-        if (sourceRef != null && !sourceRef.isBlank() && sourcePath != null && !sourcePath.isBlank()) {
-            return FlowContentSource.GIT;
-        }
-        if (publishNow) {
-            return FlowContentSource.GIT;
-        }
-        return FlowContentSource.DB;
     }
 
     private String parseScope(String scope) {
@@ -397,15 +358,28 @@ public class FlowService {
         return user == null ? null : normalizeOptional(user.getUsername());
     }
 
-    private PublicationTarget parsePublicationTarget(String raw, boolean publishRequested) {
-        if (!publishRequested) {
-            return PublicationTarget.DB_ONLY;
+    private String normalizePlatformCode(String platformCode) {
+        String normalized = normalizeOptional(platformCode);
+        if (normalized == null) {
+            throw new ValidationException("platform_code is required");
         }
-        try {
-            return PublicationTarget.from(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Unsupported publication_target: " + raw);
+        String value = normalized.toUpperCase();
+        if (!ALLOWED_PLATFORM_CODES.contains(value)) {
+            throw new ValidationException("Unsupported platform_code: " + platformCode);
         }
+        return value;
+    }
+
+    private String parseFlowKind(String flowKind) {
+        String normalized = normalizeOptional(flowKind);
+        if (normalized == null) {
+            return null;
+        }
+        String value = normalized.toLowerCase().replace(' ', '-');
+        if (!ALLOWED_FLOW_KINDS.contains(value)) {
+            throw new ValidationException("Unsupported flow_kind: " + flowKind);
+        }
+        return value;
     }
 
     private List<String> normalizeTags(List<String> tags) {
@@ -613,6 +587,14 @@ public class FlowService {
         return trimmed.isBlank() ? null : trimmed;
     }
 
+    private String normalizeKindFilter(String value) {
+        String normalized = normalizeFilter(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.toLowerCase().replace(' ', '-');
+    }
+
     private String normalizeEnumFilter(String value) {
         String normalized = normalizeFilter(value);
         if (normalized == null) {
@@ -665,10 +647,7 @@ public class FlowService {
             String platformCode,
             String flowKind,
             String riskLevel,
-            String environment,
             String approvalStatus,
-            String contentSource,
-            String visibility,
             String lifecycleStatus,
             String tag,
             String status,

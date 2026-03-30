@@ -48,10 +48,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:flowKind IS NULL OR l.flow_kind = :flowKind)
               AND (:riskLevel IS NULL OR l.risk_level = :riskLevel)
-              AND (:environment IS NULL OR l.environment = :environment)
               AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
-              AND (:contentSource IS NULL OR l.content_source = :contentSource)
-              AND (:visibility IS NULL OR l.visibility = :visibility)
               AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:status IS NULL OR l.status = :status)
               AND (:version IS NULL OR l.version = :version)
@@ -76,10 +73,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
             @Param("platformCode") String platformCode,
             @Param("flowKind") String flowKind,
             @Param("riskLevel") String riskLevel,
-            @Param("environment") String environment,
             @Param("approvalStatus") String approvalStatus,
-            @Param("contentSource") String contentSource,
-            @Param("visibility") String visibility,
             @Param("lifecycleStatus") String lifecycleStatus,
             @Param("tag") String tag,
             @Param("status") String status,

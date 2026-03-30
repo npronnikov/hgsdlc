@@ -24,18 +24,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import ru.hgd.sdlc.flow.domain.FlowApprovalStatus;
-import ru.hgd.sdlc.flow.domain.FlowContentSource;
-import ru.hgd.sdlc.flow.domain.FlowEnvironment;
 import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
-import ru.hgd.sdlc.flow.domain.FlowVisibility;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
 import ru.hgd.sdlc.project.domain.ProjectStatus;
 import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
-import ru.hgd.sdlc.publication.domain.PublicationTarget;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
@@ -161,22 +157,18 @@ public abstract class RuntimeIntegrationTestBase {
                 .flowYaml(flowYaml)
                 .checksum(null)
                 .teamCode("qa")
-                .platformCode("backend")
+                .platformCode("BACK")
                 .tags(List.of("runtime", "test"))
-                .flowKind("test")
+                .flowKind("analysis")
                 .riskLevel("low")
-                .environment(FlowEnvironment.DEV)
                 .approvalStatus(FlowApprovalStatus.PUBLISHED)
                 .approvedBy("test")
                 .approvedAt(now)
                 .publishedAt(now)
                 .sourceRef("local")
                 .sourcePath(sourcePath)
-                .contentSource(FlowContentSource.GIT)
-                .visibility(FlowVisibility.INTERNAL)
                 .lifecycleStatus(FlowLifecycleStatus.ACTIVE)
                 .publicationStatus(PublicationStatus.PUBLISHED)
-                .publicationTarget(PublicationTarget.DB_ONLY)
                 .scope("organization")
                 .publishedCommitSha(null)
                 .publishedPrUrl(null)

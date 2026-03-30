@@ -38,42 +38,21 @@ const codingAgentOptions = [
   { value: 'claude', label: 'claude' },
 ];
 const platformOptions = [
-  { value: 'FRONT', label: 'FRONT' },
-  { value: 'BACK', label: 'BACK' },
-  { value: 'DATA', label: 'DATA' },
-];
-const environmentOptions = [
-  { value: 'dev', label: 'dev' },
-  { value: 'prod', label: 'prod' },
-];
-const visibilityOptions = [
-  { value: 'internal', label: 'internal' },
-  { value: 'restricted', label: 'restricted' },
-  { value: 'public', label: 'public' },
-];
-const lifecycleOptions = [
-  { value: 'active', label: 'active' },
-  { value: 'deprecated', label: 'deprecated' },
-  { value: 'retired', label: 'retired' },
-];
-const publicationTargetOptions = [
-  { value: 'db_only', label: 'DB' },
-  { value: 'db_and_git', label: 'DB + Git' },
-];
-const publishModeOptions = [
-  { value: 'local', label: 'local' },
-  { value: 'pr', label: 'pr (create Pull Request)' },
+  { value: 'FRONT', label: 'Frontend' },
+  { value: 'BACK', label: 'Backend' },
+  { value: 'DATA', label: 'Data' },
 ];
 const skillKindOptions = [
-  { value: 'analysis', label: 'analysis' },
-  { value: 'generation', label: 'generation' },
-  { value: 'refactor', label: 'refactor' },
-  { value: 'qa', label: 'qa' },
-  { value: 'ops', label: 'ops' },
+  { value: 'analysis', label: 'Analysis' },
+  { value: 'code', label: 'Code' },
+  { value: 'review', label: 'Review' },
+  { value: 'refactor', label: 'Refactor' },
+  { value: 'qa', label: 'Qa' },
+  { value: 'ops', label: 'Ops' },
 ];
 const scopeOptions = [
-  { value: 'organization', label: 'organization' },
-  { value: 'team', label: 'team' },
+  { value: 'organization', label: 'Organization' },
+  { value: 'team', label: 'Team' },
 ];
 
 const DEFAULT_VERSION = '0.1';
@@ -173,18 +152,11 @@ export default function SkillEditor() {
   const [tags, setTags] = useState([]);
   const [tagOptions, setTagOptions] = useState([]);
   const [skillKind, setSkillKind] = useState('');
-  const [environment, setEnvironment] = useState('dev');
-  const [visibility, setVisibility] = useState('internal');
   const [lifecycleStatus, setLifecycleStatus] = useState('active');
   const [approvalStatus, setApprovalStatus] = useState('');
-  const [contentSource, setContentSource] = useState('');
   const [publicationStatus, setPublicationStatus] = useState('');
-  const [publicationTarget, setPublicationTarget] = useState('db_and_git');
-  const [publishMode, setPublishMode] = useState('pr');
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishVariant, setPublishVariant] = useState('minor');
-  const [publishDialogTarget, setPublishDialogTarget] = useState('db_and_git');
-  const [publishDialogMode, setPublishDialogMode] = useState('pr');
   const [forkedFrom, setForkedFrom] = useState('');
   const [isNewSkill, setIsNewSkill] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -211,13 +183,9 @@ export default function SkillEditor() {
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
-      setEnvironment(data.environment || 'dev');
-      setVisibility(data.visibility || 'internal');
       setLifecycleStatus(data.lifecycle_status || 'active');
       setApprovalStatus(data.approval_status || '');
-      setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
-      setPublicationTarget(data.publication_target || 'db_and_git');
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(false);
@@ -283,13 +251,9 @@ export default function SkillEditor() {
       setPlatformCode(data.platform_code || 'FRONT');
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
-      setEnvironment(data.environment || 'dev');
-      setVisibility(data.visibility || 'internal');
       setLifecycleStatus(data.lifecycle_status || 'active');
       setApprovalStatus(data.approval_status || '');
-      setContentSource(data.content_source || '');
       setPublicationStatus(data.publication_status || '');
-      setPublicationTarget(data.publication_target || 'db_and_git');
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(keepEditing);
@@ -370,7 +334,7 @@ export default function SkillEditor() {
     }
   };
 
-  const saveSkill = async ({ publish, release = false, publicationTargetOverride = null, publishModeOverride = null }) => {
+  const saveSkill = async ({ publish, release = false }) => {
     if (!skillId) {
       message.error('Skill ID is required');
       return;
@@ -430,14 +394,10 @@ export default function SkillEditor() {
           platform_code: platformCode,
           tags,
           skill_kind: skillKind || undefined,
-          environment,
-          visibility,
           lifecycle_status: lifecycleStatus,
           forked_from: forkedFrom || undefined,
           skill_markdown: editorValue,
           publish,
-          publication_target: publicationTargetOverride || publicationTarget,
-          publish_mode: publishModeOverride || publishMode,
           release,
           base_version: baseVersion || undefined,
           resource_version: effectiveVersion,
@@ -449,9 +409,7 @@ export default function SkillEditor() {
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
       setApprovalStatus(response.approval_status || approvalStatus);
-      setContentSource(response.content_source || contentSource);
       setPublicationStatus(response.publication_status || publicationStatus);
-      setPublicationTarget(response.publication_target || publicationTarget);
       setScope(response.scope || scope);
       setForkedFrom(response.forked_from || forkedFrom);
       setSelectedSkillId(response.skill_id || normalizedSkillId);
@@ -481,14 +439,9 @@ export default function SkillEditor() {
     setPlatformCode('FRONT');
     setTags([]);
     setSkillKind('');
-    setEnvironment('dev');
-    setVisibility('internal');
     setLifecycleStatus('active');
     setApprovalStatus('');
-    setContentSource('db');
     setPublicationStatus('draft');
-    setPublicationTarget('db_and_git');
-    setPublishMode('pr');
     setForkedFrom('');
     setEditorValue('');
     setResourceVersion(0);
@@ -553,8 +506,6 @@ export default function SkillEditor() {
 
   const openPublishDialog = () => {
     setPublishVariant('minor');
-    setPublishDialogTarget(scope === 'team' ? 'db_and_git' : (publicationTarget || 'db_and_git'));
-    setPublishDialogMode(scope === 'team' ? 'local' : (publishMode || 'pr'));
     setPublishDialogOpen(true);
   };
 
@@ -562,8 +513,6 @@ export default function SkillEditor() {
     const success = await saveSkill({
       publish: true,
       release: publishVariant === 'major',
-      publicationTargetOverride: publishDialogTarget,
-      publishModeOverride: publishDialogMode,
     });
     if (success) {
       setPublishDialogOpen(false);
@@ -808,43 +757,7 @@ export default function SkillEditor() {
               onChange={setSkillKind}
               options={skillKindOptions}
               placeholder="Select skill kind"
-              title="Тип skill (analysis/generation/refactor/qa/ops)."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Environment</Text>
-            <Select
-              value={environment || undefined}
-              onChange={setEnvironment}
-              options={environmentOptions}
-              placeholder="Select environment"
-              title="Среда, для которой предназначена версия: dev или prod."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Visibility</Text>
-            <Select
-              value={visibility || undefined}
-              onChange={setVisibility}
-              options={visibilityOptions}
-              placeholder="Select visibility"
-              title="Видимость версии внутри платформы."
-              style={{ width: '100%', marginTop: 4 }}
-              disabled={!isEditing}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Text className="muted">Lifecycle status</Text>
-            <Select
-              value={lifecycleStatus || undefined}
-              onChange={setLifecycleStatus}
-              options={lifecycleOptions}
-              placeholder="Select lifecycle status"
-              title="Состояние жизненного цикла версии: active/deprecated/retired."
+              title="Тип skill (analysis/code/review/refactor/qa/ops)."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -859,12 +772,6 @@ export default function SkillEditor() {
             <div style={{ marginTop: 12 }}>
               <Text className="muted">Publication status</Text>
               <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
-            </div>
-          )}
-          {!isCreateRoute && (
-            <div style={{ marginTop: 12 }}>
-              <Text className="muted">Content source</Text>
-              <div className="mono" style={{ marginTop: 4 }}>{contentSource || 'db'}</div>
             </div>
           )}
         </Card>
@@ -888,26 +795,6 @@ export default function SkillEditor() {
                 { value: 'minor', label: publishLabel },
                 { value: 'major', label: releaseLabel },
               ]}
-            />
-          </div>
-          <div>
-            <Text className="muted">Publication target</Text>
-            <Select
-              style={{ width: '100%', marginTop: 4 }}
-              value={publishDialogTarget}
-              onChange={setPublishDialogTarget}
-              options={publicationTargetOptions}
-              disabled={scope === 'team'}
-            />
-          </div>
-          <div>
-            <Text className="muted">Publish mode</Text>
-            <Select
-              style={{ width: '100%', marginTop: 4 }}
-              value={publishDialogMode}
-              onChange={setPublishDialogMode}
-              options={publishModeOptions}
-              disabled={scope === 'team'}
             />
           </div>
         </div>
