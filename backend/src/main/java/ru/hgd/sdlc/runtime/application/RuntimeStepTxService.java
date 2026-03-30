@@ -630,6 +630,9 @@ public class RuntimeStepTxService {
         if (run.getPublishMode() == RunPublishMode.PR) {
             run.setPushStatus(RunPublishStatus.PENDING);
             run.setPrStatus(RunPublishStatus.PENDING);
+        } else if (run.getPublishMode() == RunPublishMode.BRANCH) {
+            run.setPushStatus(RunPublishStatus.PENDING);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
         } else {
             run.setPushStatus(RunPublishStatus.SKIPPED);
             run.setPrStatus(RunPublishStatus.SKIPPED);
@@ -669,6 +672,11 @@ public class RuntimeStepTxService {
             if (run.getPrStatus() == RunPublishStatus.FAILED) {
                 run.setPrStatus(RunPublishStatus.PENDING);
             }
+        } else if (run.getPublishMode() == RunPublishMode.BRANCH) {
+            if (run.getPushStatus() == RunPublishStatus.FAILED || run.getPushStatus() == RunPublishStatus.SKIPPED) {
+                run.setPushStatus(RunPublishStatus.PENDING);
+            }
+            run.setPrStatus(RunPublishStatus.SKIPPED);
         } else {
             run.setPushStatus(RunPublishStatus.SKIPPED);
             run.setPrStatus(RunPublishStatus.SKIPPED);
@@ -795,6 +803,9 @@ public class RuntimeStepTxService {
         if (run.getPublishMode() == RunPublishMode.PR) {
             run.setPushStatus(RunPublishStatus.SUCCEEDED);
             run.setPrStatus(RunPublishStatus.SUCCEEDED);
+        } else if (run.getPublishMode() == RunPublishMode.BRANCH) {
+            run.setPushStatus(RunPublishStatus.SUCCEEDED);
+            run.setPrStatus(RunPublishStatus.SKIPPED);
         } else {
             run.setPushStatus(RunPublishStatus.SKIPPED);
             run.setPrStatus(RunPublishStatus.SKIPPED);

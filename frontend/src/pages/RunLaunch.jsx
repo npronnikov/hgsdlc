@@ -227,7 +227,7 @@ export default function RunLaunch() {
         form.setFieldsValue({
           project_id: initialProjectId || undefined,
           target_branch: initialProject?.default_branch || 'main',
-          publish_mode: 'local',
+          publish_mode: 'branch',
           pr_commit_strategy: 'squash',
         });
       } catch (err) {
@@ -429,12 +429,12 @@ export default function RunLaunch() {
                     label="Publish mode"
                     name="publish_mode"
                     rules={[{ required: true, message: 'Select publish mode' }]}
-                    initialValue="local"
+                    initialValue="branch"
                   >
                     <Select
                       options={[
-                        { value: 'local', label: 'local' },
-                        { value: 'pr', label: 'pr' },
+                        { value: 'branch', label: 'Branch' },
+                        { value: 'pr', label: 'Pull Request' },
                       ]}
                       onChange={(value) => {
                         if (value === 'pr' && !form.getFieldValue('pr_commit_strategy')) {

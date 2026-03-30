@@ -14,6 +14,7 @@ const colorMap = {
   failed: '#dc2626',
   completed: '#16a34a',
   cancelled: '#64748b',
+  branch: '#0891b2',
   local: '#0891b2',
   pr: '#4f46e5',
   pending: '#d97706',

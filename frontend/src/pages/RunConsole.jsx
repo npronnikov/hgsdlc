@@ -131,8 +131,11 @@ function publishHeadline(run) {
   if (run.publish_status === 'succeeded' && run.publish_mode === 'pr') {
     return 'Published with Pull Request';
   }
+  if (run.publish_status === 'succeeded' && run.publish_mode === 'branch') {
+    return 'Published to branch';
+  }
   if (run.publish_status === 'succeeded' && run.publish_mode === 'local') {
-    return 'Published locally';
+    return 'Published locally (legacy mode)';
   }
   if (run.publish_status === 'running') {
     return 'Publishing in progress';
@@ -150,8 +153,11 @@ function publishSubtitle(run) {
   if (['failed', 'cancelled'].includes(run.status)) {
     return 'Run ended before publish phase, so publish pipeline was skipped.';
   }
+  if (run.publish_mode === 'branch') {
+    return 'Runtime prepares final commit and pushes work branch without creating pull request.';
+  }
   if (run.publish_mode === 'local') {
-    return 'Runtime prepares a final local commit without pushing branch and without PR.';
+    return 'Legacy mode: runtime prepares a final local commit without push and without PR.';
   }
   if (run.publish_mode === 'pr') {
     return 'Runtime prepares final commit, pushes work branch and opens pull request.';
@@ -895,7 +901,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
       key: 'publish',
       label: 'Publish',
       status: publishPhaseVisible ? run.publish_status : null,
-      hint: run.publish_mode === 'local' ? 'Prepare local final commit' : 'Prepare final release commit',
+      hint: run.publish_mode === 'pr' ? 'Prepare final release commit' : 'Prepare final branch commit',
     },
     {
       key: 'push',

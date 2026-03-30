@@ -126,13 +126,15 @@ public class RunPublishService {
                 runtimeStepTxService.markPublishCommitSucceeded(runId, publishCommitSha);
             }
 
-            if (run.getPublishMode() == RunPublishMode.PR) {
+            if (run.getPublishMode() == RunPublishMode.PR || run.getPublishMode() == RunPublishMode.BRANCH) {
                 run = getRun(runId);
                 if (run.getPushStatus() != RunPublishStatus.SUCCEEDED) {
                     pushWorkBranch(run);
                     runtimeStepTxService.markPublishPushSucceeded(runId);
                 }
+            }
 
+            if (run.getPublishMode() == RunPublishMode.PR) {
                 run = getRun(runId);
                 if (run.getPrStatus() != RunPublishStatus.SUCCEEDED) {
                     PrResult pr = createOrFindPullRequest(run);
@@ -186,17 +188,20 @@ public class RunPublishService {
     }
 
     private String createFinalCommit(RunEntity run) {
-        if (run.getPrCommitStrategy() != null && run.getPrCommitStrategy() != PrCommitStrategy.SQUASH) {
+        boolean squash = run.getPublishMode() == RunPublishMode.PR;
+        if (squash && run.getPrCommitStrategy() != null && run.getPrCommitStrategy() != PrCommitStrategy.SQUASH) {
             throw new PublishException("commit", "UNSUPPORTED_PR_COMMIT_STRATEGY", "Unsupported pr_commit_strategy");
         }
         Path root = resolveProjectRoot(run);
         runGitOrThrow(run, "final_add", List.of("git", "-C", root.toString(), "add", "-A"), "commit");
-        runGitOrThrow(
-                run,
-                "final_soft_reset",
-                List.of("git", "-C", root.toString(), "reset", "--soft", run.getTargetBranch()),
-                "commit"
-        );
+        if (squash) {
+            runGitOrThrow(
+                    run,
+                    "final_soft_reset",
+                    List.of("git", "-C", root.toString(), "reset", "--soft", run.getTargetBranch()),
+                    "commit"
+            );
+        }
         runGitOrThrow(
                 run,
                 "final_commit",

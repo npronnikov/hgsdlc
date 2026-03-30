@@ -131,12 +131,13 @@ public class RunLifecycleService {
         PrCommitStrategy prCommitStrategy = resolvePrCommitStrategy(publishMode, command.prCommitStrategy());
         String workBranch = resolveWorkBranch(runId, command.workBranch(), command.targetBranch());
         RunPublishStatus initialPublishStatus = RunPublishStatus.PENDING;
-        RunPublishStatus initialPushStatus = publishMode == RunPublishMode.LOCAL
-                ? RunPublishStatus.SKIPPED
-                : RunPublishStatus.PENDING;
-        RunPublishStatus initialPrStatus = publishMode == RunPublishMode.LOCAL
-                ? RunPublishStatus.SKIPPED
-                : RunPublishStatus.PENDING;
+        RunPublishStatus initialPushStatus = switch (publishMode) {
+            case PR, BRANCH -> RunPublishStatus.PENDING;
+            case LOCAL -> RunPublishStatus.SKIPPED;
+        };
+        RunPublishStatus initialPrStatus = publishMode == RunPublishMode.PR
+                ? RunPublishStatus.PENDING
+                : RunPublishStatus.SKIPPED;
 
         Path runWorkspaceRoot = resolveRunWorkspaceRoot(settingsService.getWorkspaceRoot(), runId);
         createDirectories(runWorkspaceRoot);
@@ -764,13 +765,16 @@ public class RunLifecycleService {
 
     private RunPublishMode resolvePublishMode(String rawPublishMode) {
         String normalized = normalize(trimToNull(rawPublishMode));
+        if ("branch".equals(normalized)) {
+            return RunPublishMode.BRANCH;
+        }
         if ("local".equals(normalized)) {
             return RunPublishMode.LOCAL;
         }
         if ("pr".equals(normalized)) {
             return RunPublishMode.PR;
         }
-        throw new ValidationException("publish_mode must be local or pr");
+        throw new ValidationException("publish_mode must be branch or pr");
     }
 
     private PrCommitStrategy resolvePrCommitStrategy(RunPublishMode publishMode, String rawStrategy) {
