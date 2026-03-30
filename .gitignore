@@ -125,6 +125,8 @@ docker-compose.override.yml
 /catalog-repo/*
 
 
+.claude/settings*
+
 # ============================================
 # BMAD
 # ============================================

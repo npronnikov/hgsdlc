@@ -1,0 +1,132 @@
+# generated: 2026-03-30
+# last_updated: 2026-03-30
+# story created: 2-1-flow-catalog-crud (2026-03-30)
+# project: hgsdlc
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# BROWNFIELD PROJECT: Significant implementation exists without formal stories.
+# Epics marked 'in-progress' have corresponding backend modules / frontend pages.
+# Next step: run 'bmad-create-story' to create story files for each in-progress epic.
+# FR Coverage Map is defined in _bmad-output/planning-artifacts/epics.md.
+
+generated: 2026-03-30
+last_updated: 2026-03-30
+project: hgsdlc
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 1: Workspace & Управление доступом
+  # FRs: FR19, FR20, FR21, FR22, FR23
+  # UX-DRs: UX-DR1, UX-DR2, UX-DR4, UX-DR5
+  # Code status: модуль workspace ОТСУТСТВУЕТ; FR23 (auth) реализован
+  # ─────────────────────────────────────────────────────────────
+  epic-1: backlog
+  # Stories to create:
+  #   1-1-workspace-crud-and-isolation        (FR19, FR22, NFR5)
+  #   1-2-user-invitation-and-roles           (FR20, FR21)
+  #   1-3-login-password-auth                 (FR23) ← реализовано в модуле auth
+  #   1-4-workspace-selector-ui              (UX-DR1, UX-DR4)
+  #   1-5-workspace-admin-ui                 (UX-DR2, UX-DR5)
+  epic-1-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 2: Каталог воркфлоу
+  # FRs: FR15, FR16, FR17, FR18, FR39
+  # Code status: модули flow, skill, rule, publication — реализованы
+  # ─────────────────────────────────────────────────────────────
+  epic-2: in-progress
+  2-1-flow-catalog-crud: ready-for-dev
+  # Stories to create:
+  #   2-1-flow-catalog-crud                   (FR15, FR16, FR17, FR18) ← flow module
+  #   2-2-flow-versioning-immutability        (FR18) ← FlowLifecycleStatus, catalog-versioning pattern
+  #   2-3-flow-search-by-name-tags            (FR39) ← FlowController search
+  #   2-4-skill-and-rule-catalog              (FR15, FR16) ← skill, rule modules
+  #   2-5-publication-pipeline                (FR15 git-publish) ← publication module
+  epic-2-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 3: Запуск и управление выполнением воркфлоу
+  # FRs: FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8, FR37
+  # Code status: модуль runtime (30 файлов) — реализован
+  # ─────────────────────────────────────────────────────────────
+  epic-3: in-progress
+  # Stories to create:
+  #   3-1-run-launch-with-params              (FR1, FR8) ← RunEntity, version snapshot
+  #   3-2-run-stop-and-status-list            (FR2, FR3) ← RunStatus, RuntimeController
+  #   3-3-run-step-artifact-preview           (FR6) ← ArtifactVersionEntity, AuditRuntime pages
+  #   3-4-gate-approve-reject                 (FR7) ← GateInstanceEntity, GateApproval pages
+  #   3-5-run-replay-frozen-versions          (FR4, FR5) ← version snapshot at start
+  #   3-6-step-retry-without-full-restart     (FR37) ← NodeExecutionStatus, RuntimeRecoveryInitializer
+  epic-3-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 4: Управление артефактами и Git-интеграция
+  # FRs: FR10, FR11, FR12, FR13, FR28, FR29
+  # Code status: ArtifactVersionEntity реализован; git-provider модуль ОТСУТСТВУЕТ
+  # ─────────────────────────────────────────────────────────────
+  epic-4: in-progress
+  # Stories to create:
+  #   4-1-artifact-list-and-traceability      (FR10, FR11, FR36) ← ArtifactVersionEntity, Artifacts page
+  #   4-2-artifact-export-md-json             (FR12) ← export endpoints
+  #   4-3-git-provider-abstraction            (FR13, FR28, FR29) ← GitProvider interface — НЕ РЕАЛИЗОВАН
+  #   4-4-gitlab-provider-impl                (FR28) ← GitLabProvider — НЕ РЕАЛИЗОВАН
+  #   4-5-bitbucket-server-provider-impl      (FR29) ← BitbucketServerProvider — НЕ РЕАЛИЗОВАН
+  epic-4-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 5: Уведомления
+  # FRs: FR9, FR38
+  # UX-DRs: UX-DR3
+  # Code status: модуль notification ОТСУТСТВУЕТ; SseEmitter НЕ реализован
+  # ─────────────────────────────────────────────────────────────
+  epic-5: backlog
+  # Stories to create:
+  #   5-1-sse-notification-stream             (FR9, FR38) ← Spring SseEmitter, /api/notifications/stream
+  #   5-2-notification-bell-ui               (UX-DR3) ← NotificationBell component, Ant Design Badge
+  epic-5-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────────
+  # Epic 6: Аналитика, Аудит и Трассируемость
+  # FRs: FR24, FR25, FR26, FR27, FR32, FR33, FR34, FR35, FR36
+  # Code status: dashboard module + AuditEventEntity реализованы частично
+  # ─────────────────────────────────────────────────────────────
+  epic-6: in-progress
+  # Stories to create:
+  #   6-1-run-overview-dashboard              (FR24, FR25) ← OverviewController, Overview page
+  #   6-2-manual-correction-hotspot-report    (FR26) ← gate rejection stats
+  #   6-3-metrics-export                      (FR27) ← export endpoints
+  #   6-4-immutable-audit-log                 (FR32) ← AuditEventEntity append-only
+  #   6-5-audit-log-filter-and-view           (FR33, FR35) ← AuditRuntime/AuditReview pages
+  #   6-6-audit-log-export                    (FR34) ← export endpoints
+  #   6-7-artifact-traceability-chain         (FR36) ← full chain: run → step → versions → user → time
+  epic-6-retrospective: optional
