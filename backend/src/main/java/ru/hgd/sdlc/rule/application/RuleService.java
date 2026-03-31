@@ -89,7 +89,6 @@ public class RuleService {
                 normalizeFilter(query.platformCode()),
                 normalizeKindFilter(query.ruleKind()),
                 normalizeFilter(query.scope()),
-                normalizeEnumFilter(query.approvalStatus()),
                 normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.tag()),
                 normalizeFilter(query.version()),
@@ -350,9 +349,6 @@ public class RuleService {
     }
 
     private void ensureDraftIsEditable(RuleVersion draft) {
-        if (draft.getApprovalStatus() != RuleApprovalStatus.DRAFT) {
-            throw new ValidationException("Rule draft is locked after publication request");
-        }
         PublicationStatus publicationStatus = draft.getPublicationStatus();
         if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
             throw new ValidationException("Rule draft is locked after publication request");
@@ -613,7 +609,6 @@ public class RuleService {
             String platformCode,
             String ruleKind,
             String scope,
-            String approvalStatus,
             String lifecycleStatus,
             String tag,
             String status,

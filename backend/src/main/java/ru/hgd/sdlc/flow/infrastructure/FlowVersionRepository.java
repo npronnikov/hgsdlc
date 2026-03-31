@@ -18,7 +18,6 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
     Optional<FlowVersion> findFirstByFlowIdAndVersionOrderBySavedAtDesc(String flowId, String version);
 
     List<FlowVersion> findByFlowIdOrderBySavedAtDesc(String flowId);
-    List<FlowVersion> findByApprovalStatusOrderBySavedAtDesc(ru.hgd.sdlc.flow.domain.FlowApprovalStatus approvalStatus);
 
     List<FlowVersion> findAllByOrderBySavedAtDesc();
 
@@ -48,7 +47,6 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:flowKind IS NULL OR l.flow_kind = :flowKind)
               AND (:riskLevel IS NULL OR l.risk_level = :riskLevel)
-              AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
               AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:status IS NULL OR l.status = :status)
               AND (:version IS NULL OR l.version = :version)
@@ -73,7 +71,6 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
             @Param("platformCode") String platformCode,
             @Param("flowKind") String flowKind,
             @Param("riskLevel") String riskLevel,
-            @Param("approvalStatus") String approvalStatus,
             @Param("lifecycleStatus") String lifecycleStatus,
             @Param("tag") String tag,
             @Param("status") String status,

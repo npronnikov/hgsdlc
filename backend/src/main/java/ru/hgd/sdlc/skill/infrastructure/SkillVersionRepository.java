@@ -19,7 +19,7 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
 
     List<SkillVersion> findBySkillIdOrderBySavedAtDesc(String skillId);
 
-    List<SkillVersion> findByApprovalStatusOrderBySavedAtDesc(ru.hgd.sdlc.skill.domain.SkillApprovalStatus approvalStatus);
+    List<SkillVersion> findByPublicationStatusOrderBySavedAtDesc(ru.hgd.sdlc.publication.domain.PublicationStatus publicationStatus);
 
     List<SkillVersion> findAllByOrderBySavedAtDesc();
 
@@ -44,7 +44,6 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
                 || COALESCE(l.coding_agent, '') || ' ' || COALESCE(l.platform_code, '')) LIKE CONCAT('%', LOWER(:search), '%'))
               AND (:codingAgent IS NULL OR l.coding_agent = :codingAgent)
               AND (:status IS NULL OR l.status = :status)
-              AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
               AND (:teamCode IS NULL OR l.team_code = :teamCode)
               AND (:scope IS NULL OR l.scope = :scope)
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
@@ -67,7 +66,6 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             @Param("search") String search,
             @Param("codingAgent") String codingAgent,
             @Param("status") String status,
-            @Param("approvalStatus") String approvalStatus,
             @Param("teamCode") String teamCode,
             @Param("scope") String scope,
             @Param("platformCode") String platformCode,

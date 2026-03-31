@@ -506,7 +506,7 @@ public class SettingsService {
         Optional<SkillVersion> existingOptional = skillVersionRepository.findFirstByCanonicalName(metadata.canonicalName());
         if (existingOptional.isPresent()) {
             SkillVersion existing = existingOptional.get();
-            if (existing.getStatus() == SkillStatus.PUBLISHED || existing.getApprovalStatus() == SkillApprovalStatus.PUBLISHED) {
+            if (existing.getStatus() == SkillStatus.PUBLISHED) {
                 String incomingChecksum = metadata.checksum();
                 String existingChecksum = normalizeChecksum(existing.getChecksum());
                 if (incomingChecksum.equals(existingChecksum)) {

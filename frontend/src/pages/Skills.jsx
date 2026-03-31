@@ -18,7 +18,6 @@ export default function Skills() {
     search: '',
     codingAgent: null,
     status: null,
-    approvalStatus: null,
     teamCode: null,
     scope: null,
     platformCode: null,
@@ -47,7 +46,6 @@ export default function Skills() {
       if (filters.search.trim()) params.set('search', filters.search.trim());
       if (filters.codingAgent) params.set('codingAgent', filters.codingAgent);
       if (filters.status) params.set('status', filters.status);
-      if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
       if (filters.teamCode) params.set('teamCode', filters.teamCode);
       if (filters.scope) params.set('scope', filters.scope);
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
@@ -64,7 +62,6 @@ export default function Skills() {
         teamCode: skill.team_code,
         scope: skill.scope,
         status: skill.status,
-        approvalStatus: skill.approval_status,
         platformCode: skill.platform_code,
         tags: skill.tags || [],
         skillKind: skill.skill_kind,
@@ -98,7 +95,6 @@ export default function Skills() {
     filters.search,
     filters.codingAgent,
     filters.status,
-    filters.approvalStatus,
     filters.teamCode,
     filters.scope,
     filters.platformCode,
@@ -108,7 +104,6 @@ export default function Skills() {
 
   const codingAgents = useMemo(() => Array.from(new Set(skills.map((s) => s.codingAgent).filter(Boolean))), [skills]);
   const statuses = useMemo(() => Array.from(new Set(skills.map((s) => s.status).filter(Boolean))), [skills]);
-  const approvalStatuses = useMemo(() => Array.from(new Set(skills.map((s) => s.approvalStatus).filter(Boolean))), [skills]);
   const teamCodes = useMemo(() => Array.from(new Set(skills.map((s) => s.teamCode).filter(Boolean))), [skills]);
   const scopes = useMemo(() => Array.from(new Set(skills.map((s) => s.scope).filter(Boolean))), [skills]);
   const platforms = useMemo(() => Array.from(new Set(skills.map((s) => s.platformCode).filter(Boolean))), [skills]);
@@ -119,7 +114,6 @@ export default function Skills() {
     if (filters.search.trim()) items.push({ key: 'search', label: `Search: ${filters.search.trim()}` });
     if (filters.codingAgent) items.push({ key: 'codingAgent', label: `Agent: ${filters.codingAgent}` });
     if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
-    if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
     if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
     if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
@@ -195,9 +189,6 @@ export default function Skills() {
                 <div className="resource-card-footer skill-card-footer">
                   <span className="resource-chip skill-card-chip">{skill.codingAgent || 'no agent'}</span>
                   <span className="skill-card-footer-item">TEAM: {skill.teamCode || 'no team'}</span>
-                  {skill.approvalStatus && skill.approvalStatus !== skill.status && (
-                    <span className="skill-card-footer-item">Approval: {formatStatusLabel(skill.approvalStatus)}</span>
-                  )}
                 </div>
               </Card>
             ))}
@@ -230,7 +221,6 @@ export default function Skills() {
           </div>
           <div className="filter-row"><Text className="muted">Coding Agent</Text><Select allowClear value={filters.codingAgent} onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))} options={codingAgents.map((value) => ({ value, label: value }))} placeholder="Select agent" /></div>
           <div className="filter-row"><Text className="muted">Status</Text><Select allowClear value={filters.status} onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))} options={statuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select status" /></div>
-          <div className="filter-row"><Text className="muted">Approval</Text><Select allowClear value={filters.approvalStatus} onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))} options={approvalStatuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select approval" /></div>
           <div className="filter-row"><Text className="muted">Team</Text><Select allowClear value={filters.teamCode} onChange={(value) => setFilters((prev) => ({ ...prev, teamCode: value || null }))} options={teamCodes.map((value) => ({ value, label: value }))} placeholder="Select team" /></div>
           <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platforms.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>

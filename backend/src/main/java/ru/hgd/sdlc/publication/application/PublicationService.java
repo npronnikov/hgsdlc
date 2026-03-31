@@ -922,7 +922,6 @@ public class PublicationService {
         metadata.append("tags: ").append(toYamlInlineList(skill.getTags())).append('\n');
         metadata.append("skill_kind: ").append(toYamlString(skill.getSkillKind())).append('\n');
         metadata.append("scope: ").append(toYamlString(skill.getScope())).append('\n');
-        metadata.append("approval_status: ").append(toYamlLowerName(skill.getApprovalStatus())).append('\n');
         metadata.append("approved_by: ").append(toYamlString(skill.getApprovedBy())).append('\n');
         metadata.append("approved_at: ").append(toYamlInstant(skill.getApprovedAt())).append('\n');
         metadata.append("published_at: ").append(toYamlInstant(skill.getPublishedAt())).append('\n');
@@ -954,7 +953,6 @@ public class PublicationService {
                 "tags: " + toYamlInlineList(rule.getTags()),
                 "rule_kind: " + toYamlString(rule.getRuleKind()),
                 "scope: " + toYamlString(rule.getScope()),
-                "approval_status: " + toYamlLowerName(rule.getApprovalStatus()),
                 "approved_by: " + toYamlString(rule.getApprovedBy()),
                 "approved_at: " + toYamlInstant(rule.getApprovedAt()),
                 "published_at: " + toYamlInstant(rule.getPublishedAt()),
@@ -988,7 +986,6 @@ public class PublicationService {
                 "flow_kind: " + toYamlString(flow.getFlowKind()),
                 "risk_level: " + toYamlString(flow.getRiskLevel()),
                 "scope: " + toYamlString(flow.getScope()),
-                "approval_status: " + toYamlLowerName(flow.getApprovalStatus()),
                 "approved_by: " + toYamlString(flow.getApprovedBy()),
                 "approved_at: " + toYamlInstant(flow.getApprovedAt()),
                 "published_at: " + toYamlInstant(flow.getPublishedAt()),

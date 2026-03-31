@@ -215,7 +215,6 @@ const emptyFlow = {
   scope: 'organization',
   forkedFrom: '',
   lifecycleStatus: 'active',
-  approvalStatus: '',
   publicationStatus: 'draft',
   failOnMissingDeclaredOutput: false,
   failOnMissingExpectedMutation: false,
@@ -1078,7 +1077,6 @@ export default function FlowEditor() {
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
         lifecycleStatus: data.lifecycle_status || 'active',
-        approvalStatus: data.approval_status || '',
         publicationStatus: data.publication_status || 'draft',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
@@ -1121,7 +1119,6 @@ export default function FlowEditor() {
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
         lifecycleStatus: data.lifecycle_status || 'active',
-        approvalStatus: data.approval_status || '',
         publicationStatus: data.publication_status || 'draft',
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
@@ -1263,10 +1260,8 @@ export default function FlowEditor() {
   };
 
   const saveFlow = async ({ publish, release = false }) => {
-    const approval = (flowMeta.approvalStatus || '').toLowerCase();
     const publication = (flowMeta.publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
-      || (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
     if (!isCreateMode && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -1348,7 +1343,6 @@ export default function FlowEditor() {
         scope: response.scope || prev.scope,
         forkedFrom: response.forked_from || prev.forkedFrom,
         lifecycleStatus: response.lifecycle_status || prev.lifecycleStatus,
-        approvalStatus: response.approval_status || prev.approvalStatus,
         publicationStatus: response.publication_status || prev.publicationStatus,
         failOnMissingDeclaredOutput: response.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: response.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
@@ -1456,7 +1450,7 @@ export default function FlowEditor() {
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
-    updateFlowMeta({ approvalStatus: 'draft', publicationStatus: 'draft' });
+    updateFlowMeta({ publicationStatus: 'draft' });
     setIsEditing(true);
     if (draftForMajor) {
       setResourceVersion(draftForMajor.resourceVersion ?? 0);
@@ -1472,10 +1466,8 @@ export default function FlowEditor() {
     setPublishDialogOpen(true);
   };
 
-  const approvalStatusValue = (flowMeta.approvalStatus || '').toLowerCase();
   const publicationStatusValue = (flowMeta.publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
-    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !isCreateMode && !!flowMeta.flowId && !!flowVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
@@ -1877,12 +1869,6 @@ export default function FlowEditor() {
                   />
                 </div>
               </div>
-              {!isCreateMode && (
-                <div>
-                  <Text className="muted">Approval status</Text>
-                  <div className="mono">{flowMeta.approvalStatus || 'draft'}</div>
-                </div>
-              )}
               {!isCreateMode && (
                 <div>
                   <Text className="muted">Publication status</Text>

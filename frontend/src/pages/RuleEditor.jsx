@@ -148,7 +148,6 @@ export default function RuleEditor() {
   const [ruleKind, setRuleKind] = useState('');
   const [scope, setScope] = useState('organization');
   const [lifecycleStatus, setLifecycleStatus] = useState('active');
-  const [approvalStatus, setApprovalStatus] = useState('');
   const [publicationStatus, setPublicationStatus] = useState('');
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishVariant, setPublishVariant] = useState('minor');
@@ -180,7 +179,6 @@ export default function RuleEditor() {
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || 'organization');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setApprovalStatus(data.approval_status || '');
       setPublicationStatus(data.publication_status || '');
       setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
@@ -239,7 +237,6 @@ export default function RuleEditor() {
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || 'organization');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setApprovalStatus(data.approval_status || '');
       setPublicationStatus(data.publication_status || '');
       setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
@@ -322,10 +319,8 @@ export default function RuleEditor() {
   };
 
   const saveRule = async ({ publish, release = false }) => {
-    const approval = (approvalStatus || '').toLowerCase();
     const publication = (publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
-      || (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
     if (selectedRuleId && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -396,7 +391,6 @@ export default function RuleEditor() {
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
       setSelectedRuleId(response.rule_id || normalizedRuleId);
-      setApprovalStatus(response.approval_status || approvalStatus);
       setPublicationStatus(response.publication_status || publicationStatus);
       setScope(response.scope || scope);
       setForkedFrom(response.forked_from || forkedFrom);
@@ -423,7 +417,6 @@ export default function RuleEditor() {
     setRuleKind('');
     setScope('organization');
     setLifecycleStatus('active');
-    setApprovalStatus('');
     setPublicationStatus('draft');
     setForkedFrom('');
     setEditorValue('');
@@ -464,10 +457,8 @@ export default function RuleEditor() {
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
-  const approvalStatusValue = (approvalStatus || '').toLowerCase();
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
-    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !!selectedRuleId && !!ruleVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
@@ -483,7 +474,6 @@ export default function RuleEditor() {
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
-    setApprovalStatus('draft');
     setPublicationStatus('draft');
     setIsEditing(true);
     if (draftForMajor) {
@@ -786,12 +776,6 @@ export default function RuleEditor() {
               disabled={!isEditing}
             />
           </div>
-          {!isCreateRoute && (
-            <div style={{ marginTop: 12 }}>
-              <Text className="muted">Approval status</Text>
-              <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
-            </div>
-          )}
           {!isCreateRoute && (
             <div style={{ marginTop: 12 }}>
               <Text className="muted">Publication status</Text>

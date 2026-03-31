@@ -21,7 +21,6 @@ export default function Rules() {
     platformCode: null,
     ruleKind: null,
     scope: null,
-    approvalStatus: null,
     lifecycleStatus: null,
     tag: null,
     status: null,
@@ -53,7 +52,6 @@ export default function Rules() {
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.ruleKind) params.set('ruleKind', filters.ruleKind);
       if (filters.scope) params.set('scope', filters.scope);
-      if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
       if (filters.lifecycleStatus) params.set('lifecycleStatus', filters.lifecycleStatus);
       if (filters.tag) params.set('tag', filters.tag);
       if (filters.status) params.set('status', filters.status);
@@ -72,7 +70,6 @@ export default function Rules() {
         tags: rule.tags || [],
         ruleKind: rule.rule_kind,
         scope: rule.scope,
-        approvalStatus: rule.approval_status,
         lifecycleStatus: rule.lifecycle_status,
         status: rule.status,
         version: rule.version,
@@ -108,7 +105,6 @@ export default function Rules() {
     filters.platformCode,
     filters.ruleKind,
     filters.scope,
-    filters.approvalStatus,
     filters.lifecycleStatus,
     filters.tag,
     filters.status,
@@ -122,7 +118,6 @@ export default function Rules() {
   const platformCodes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.platformCode).filter(Boolean))), [rules]);
   const ruleKinds = useMemo(() => Array.from(new Set(rules.map((rule) => rule.ruleKind).filter(Boolean))), [rules]);
   const scopes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.scope).filter(Boolean))), [rules]);
-  const approvalStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.approvalStatus).filter(Boolean))), [rules]);
   const lifecycleStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.lifecycleStatus).filter(Boolean))), [rules]);
   const tags = useMemo(() => Array.from(new Set(rules.flatMap((rule) => rule.tags || []).filter(Boolean))), [rules]);
   const activeFilters = useMemo(() => {
@@ -130,7 +125,6 @@ export default function Rules() {
     if (filters.search.trim()) items.push({ key: 'search', label: `Search: ${filters.search.trim()}` });
     if (filters.codingAgent) items.push({ key: 'codingAgent', label: `Agent: ${filters.codingAgent}` });
     if (filters.status) items.push({ key: 'status', label: `Status: ${filters.status}` });
-    if (filters.approvalStatus) items.push({ key: 'approvalStatus', label: `Approval: ${filters.approvalStatus}` });
     if (filters.teamCode) items.push({ key: 'teamCode', label: `Team: ${filters.teamCode}` });
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.ruleKind) items.push({ key: 'ruleKind', label: `Type: ${filters.ruleKind}` });
@@ -206,9 +200,6 @@ export default function Rules() {
                 <div className="resource-card-footer minimal-card-footer">
                   <span className="resource-chip minimal-card-chip">{rule.codingAgent || 'no agent'}</span>
                   <span className="minimal-card-footer-item">TEAM: {rule.teamCode || 'no team'}</span>
-                  {rule.approvalStatus && rule.approvalStatus !== rule.status && (
-                    <span className="minimal-card-footer-item">Approval: {formatStatusLabel(rule.approvalStatus)}</span>
-                  )}
                 </div>
               </Card>
             ))}
@@ -241,7 +232,6 @@ export default function Rules() {
           </div>
           <div className="filter-row"><Text className="muted">Coding Agent</Text><Select allowClear value={filters.codingAgent} onChange={(value) => setFilters((prev) => ({ ...prev, codingAgent: value || null }))} options={codingAgents.map((agent) => ({ value: agent, label: agent }))} placeholder="Select agent" /></div>
           <div className="filter-row"><Text className="muted">Status</Text><Select allowClear value={filters.status} onChange={(value) => setFilters((prev) => ({ ...prev, status: value || null }))} options={statuses.map((status) => ({ value: status, label: formatStatusLabel(status) }))} placeholder="Select status" /></div>
-          <div className="filter-row"><Text className="muted">Approval</Text><Select allowClear value={filters.approvalStatus} onChange={(value) => setFilters((prev) => ({ ...prev, approvalStatus: value || null }))} options={approvalStatuses.map((value) => ({ value, label: formatStatusLabel(value) }))} placeholder="Select approval status" /></div>
           <div className="filter-row"><Text className="muted">Team</Text><Select allowClear value={filters.teamCode} onChange={(value) => setFilters((prev) => ({ ...prev, teamCode: value || null }))} options={teamCodes.map((value) => ({ value, label: value }))} placeholder="Select team" /></div>
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.ruleKind} onChange={(value) => setFilters((prev) => ({ ...prev, ruleKind: value || null }))} options={ruleKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>

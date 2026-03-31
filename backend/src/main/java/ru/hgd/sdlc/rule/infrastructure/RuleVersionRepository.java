@@ -18,7 +18,6 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
     Optional<RuleVersion> findFirstByCanonicalName(String canonicalName);
 
     List<RuleVersion> findByRuleIdOrderBySavedAtDesc(String ruleId);
-    List<RuleVersion> findByApprovalStatusOrderBySavedAtDesc(ru.hgd.sdlc.rule.domain.RuleApprovalStatus approvalStatus);
 
     List<RuleVersion> findAllByOrderBySavedAtDesc();
 
@@ -48,7 +47,6 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:ruleKind IS NULL OR l.rule_kind = :ruleKind)
               AND (:scope IS NULL OR l.scope = :scope)
-              AND (:approvalStatus IS NULL OR l.approval_status = :approvalStatus)
               AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:version IS NULL OR l.version = :version)
               AND (:tag IS NULL OR LOWER(COALESCE(l.tags_json, '')) LIKE CONCAT('%', LOWER(:tag), '%'))
@@ -72,7 +70,6 @@ public interface RuleVersionRepository extends JpaRepository<RuleVersion, UUID> 
             @Param("platformCode") String platformCode,
             @Param("ruleKind") String ruleKind,
             @Param("scope") String scope,
-            @Param("approvalStatus") String approvalStatus,
             @Param("lifecycleStatus") String lifecycleStatus,
             @Param("tag") String tag,
             @Param("version") String version,

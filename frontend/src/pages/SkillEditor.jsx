@@ -199,7 +199,6 @@ export default function SkillEditor() {
   const [tagOptions, setTagOptions] = useState([]);
   const [skillKind, setSkillKind] = useState('');
   const [lifecycleStatus, setLifecycleStatus] = useState('active');
-  const [approvalStatus, setApprovalStatus] = useState('');
   const [publicationStatus, setPublicationStatus] = useState('');
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishVariant, setPublishVariant] = useState('minor');
@@ -273,7 +272,6 @@ export default function SkillEditor() {
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setApprovalStatus(data.approval_status || '');
       setPublicationStatus(data.publication_status || '');
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
@@ -350,7 +348,6 @@ export default function SkillEditor() {
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setApprovalStatus(data.approval_status || '');
       setPublicationStatus(data.publication_status || '');
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
@@ -561,10 +558,8 @@ export default function SkillEditor() {
   };
 
   const saveSkill = async ({ publish, release = false }) => {
-    const approval = (approvalStatus || '').toLowerCase();
     const publication = (publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
-      || (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
     if (selectedSkillId && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -591,6 +586,10 @@ export default function SkillEditor() {
     }
     if (!platformCode) {
       message.error('Platform is required');
+      return;
+    }
+    if (!skillKind) {
+      message.error('Skill kind is required');
       return;
     }
     if (!packageFiles.some((item) => item.path === 'SKILL.md')) {
@@ -632,7 +631,7 @@ export default function SkillEditor() {
           scope,
           platform_code: platformCode,
           tags,
-          skill_kind: skillKind || undefined,
+          skill_kind: skillKind,
           lifecycle_status: lifecycleStatus,
           forked_from: forkedFrom || undefined,
           files: packageFiles.map((item) => ({
@@ -651,7 +650,6 @@ export default function SkillEditor() {
       setSkillVersion(response.version || skillVersion);
       setBaseVersion(response.version || baseVersion);
       setCurrentStatus(response.status || currentStatus);
-      setApprovalStatus(response.approval_status || approvalStatus);
       setPublicationStatus(response.publication_status || publicationStatus);
       setScope(response.scope || scope);
       setForkedFrom(response.forked_from || forkedFrom);
@@ -683,7 +681,6 @@ export default function SkillEditor() {
     setTags([]);
     setSkillKind('');
     setLifecycleStatus('active');
-    setApprovalStatus('');
     setPublicationStatus('draft');
     setCreateFolderModalOpen(false);
     setCreateFileModalOpen(false);
@@ -795,10 +792,8 @@ export default function SkillEditor() {
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
-  const approvalStatusValue = (approvalStatus || '').toLowerCase();
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
-    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !!selectedSkillId && !!skillVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
@@ -814,7 +809,6 @@ export default function SkillEditor() {
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
-    setApprovalStatus('draft');
     setPublicationStatus('draft');
     setIsEditing(true);
     if (draftForMajor) {
@@ -1163,7 +1157,7 @@ export default function SkillEditor() {
               />
             </div>
             <div style={{ marginTop: 12 }}>
-              <Text className="muted">Skill kind</Text>
+              <Text className="muted">{requiredLabel('Skill kind')}</Text>
               <Select
                 value={skillKind || undefined}
                 onChange={setSkillKind}
@@ -1174,14 +1168,8 @@ export default function SkillEditor() {
                 disabled={!isEditing}
               />
             </div>
-            {!isCreateRoute && (
-              <div style={{ marginTop: 12 }}>
-                <Text className="muted">Approval status</Text>
-                <div className="mono" style={{ marginTop: 4 }}>{approvalStatus || 'draft'}</div>
-              </div>
-            )}
-            {!isCreateRoute && (
-              <div style={{ marginTop: 12 }}>
+          {!isCreateRoute && (
+            <div style={{ marginTop: 12 }}>
                 <Text className="muted">Publication status</Text>
                 <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
               </div>

@@ -98,7 +98,6 @@ public class FlowService {
                 normalizeFilter(query.platformCode()),
                 normalizeKindFilter(query.flowKind()),
                 normalizeFilter(query.riskLevel()),
-                normalizeEnumFilter(query.approvalStatus()),
                 normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.tag()),
                 normalizeEnumFilter(query.status()),
@@ -519,9 +518,6 @@ public class FlowService {
     }
 
     private void ensureDraftIsEditable(FlowVersion draft) {
-        if (draft.getApprovalStatus() != FlowApprovalStatus.DRAFT) {
-            throw new ValidationException("Flow draft is locked after publication request");
-        }
         PublicationStatus publicationStatus = draft.getPublicationStatus();
         if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
             throw new ValidationException("Flow draft is locked after publication request");
@@ -672,7 +668,6 @@ public class FlowService {
             String platformCode,
             String flowKind,
             String riskLevel,
-            String approvalStatus,
             String lifecycleStatus,
             String tag,
             String status,

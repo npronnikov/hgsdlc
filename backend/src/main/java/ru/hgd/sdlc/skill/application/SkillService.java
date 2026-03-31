@@ -99,7 +99,6 @@ public class SkillService {
                 normalizeFilter(query.search()),
                 normalizeEnumFilter(query.codingAgent()),
                 normalizeEnumFilter(query.status()),
-                normalizeEnumFilter(query.approvalStatus()),
                 normalizeFilter(query.teamCode()),
                 normalizeFilter(query.scope()),
                 normalizeFilter(query.platformCode()),
@@ -132,7 +131,7 @@ public class SkillService {
     @Transactional(readOnly = true)
     public List<SkillVersion> listPendingPublication(User user) {
         requireApprover(user);
-        return repository.findByApprovalStatusOrderBySavedAtDesc(SkillApprovalStatus.PENDING_APPROVAL);
+        return repository.findByPublicationStatusOrderBySavedAtDesc(PublicationStatus.PENDING_APPROVAL);
     }
 
     @Transactional
@@ -140,12 +139,13 @@ public class SkillService {
         requireApprover(user);
         SkillVersion entity = repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
                 .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
-        if (entity.getApprovalStatus() != SkillApprovalStatus.PENDING_APPROVAL) {
+        if (entity.getPublicationStatus() != PublicationStatus.PENDING_APPROVAL) {
             throw new ValidationException("Skill is not pending approval");
         }
         Instant now = Instant.now();
         entity.setApprovalStatus(SkillApprovalStatus.PUBLISHED);
         entity.setStatus(SkillStatus.PUBLISHED);
+        entity.setPublicationStatus(PublicationStatus.PUBLISHED);
         entity.setApprovedBy(resolveSavedBy(user));
         entity.setApprovedAt(now);
         entity.setPublishedAt(now);
@@ -162,7 +162,7 @@ public class SkillService {
         requireApprover(user);
         SkillVersion entity = repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
                 .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
-        if (entity.getApprovalStatus() != SkillApprovalStatus.PENDING_APPROVAL) {
+        if (entity.getPublicationStatus() != PublicationStatus.PENDING_APPROVAL) {
             throw new ValidationException("Skill is not pending approval");
         }
         entity.setApprovalStatus(SkillApprovalStatus.REJECTED);
@@ -435,9 +435,6 @@ public class SkillService {
     }
 
     private void ensureDraftIsEditable(SkillVersion draft) {
-        if (draft.getApprovalStatus() != SkillApprovalStatus.DRAFT) {
-            throw new ValidationException("Skill draft is locked after publication request");
-        }
         PublicationStatus publicationStatus = draft.getPublicationStatus();
         if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
             throw new ValidationException("Skill draft is locked after publication request");
@@ -795,7 +792,6 @@ public class SkillService {
             String search,
             String codingAgent,
             String status,
-            String approvalStatus,
             String teamCode,
             String scope,
             String platformCode,
