@@ -702,7 +702,7 @@ export default function FlowEditor() {
   );
   const ruleOptions = filteredRules.map((rule) => ({
     value: rule.canonical,
-    label: `${rule.name} · ${rule.version}`,
+    label: `${rule.name} · ${rule.version}${rule.scope === 'team' ? ' (team)' : ''}`,
     disabled: rule.status !== 'published',
   }));
 
@@ -711,7 +711,7 @@ export default function FlowEditor() {
   );
   const skillOptions = filteredSkills.map((skill) => ({
     value: skill.canonical,
-    label: `${skill.name} · ${skill.version}`,
+    label: `${skill.name} · ${skill.version}${skill.scope === 'team' ? ' (team)' : ''}`,
     disabled: skill.status !== 'published',
   }));
 
@@ -1009,6 +1009,7 @@ export default function FlowEditor() {
         name: rule.title || rule.rule_id,
         description: rule.description || '',
         ruleId: rule.rule_id,
+        scope: rule.scope || 'organization',
         codingAgent: rule.coding_agent,
         status: rule.status,
         version: rule.version,
@@ -1028,6 +1029,7 @@ export default function FlowEditor() {
         name: skill.name || skill.skill_id,
         description: skill.description || '',
         skillId: skill.skill_id,
+        scope: skill.scope || 'organization',
         codingAgent: skill.coding_agent,
         status: skill.status,
         version: skill.version,
@@ -1261,6 +1263,14 @@ export default function FlowEditor() {
   };
 
   const saveFlow = async ({ publish, release = false }) => {
+    const approval = (flowMeta.approvalStatus || '').toLowerCase();
+    const publication = (flowMeta.publicationStatus || '').toLowerCase();
+    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
+      || (!!publication && publication !== 'draft');
+    if (!isCreateMode && isLockedAfterPublicationRequest) {
+      message.error('Редактирование запрещено после отправки на публикацию');
+      return false;
+    }
     if (!flowMeta.flowId) {
       message.error('Flow ID is required');
       return false;
@@ -1435,13 +1445,18 @@ export default function FlowEditor() {
   };
 
   const startDraftFromPublished = () => {
-    const sourceVersion = flowVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    if (!latestPublishedVersion) {
+      message.error('Для создания новой версии нужен опубликованный flow');
+      return;
+    }
+    const sourceVersion = latestPublishedVersion;
     const sourceId = flowMeta.flowId;
     if (sourceId && sourceVersion) {
       updateFlowMeta({ forkedFrom: `${sourceId}@${sourceVersion}` });
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
+    updateFlowMeta({ approvalStatus: 'draft', publicationStatus: 'draft' });
     setIsEditing(true);
     if (draftForMajor) {
       setResourceVersion(draftForMajor.resourceVersion ?? 0);
@@ -1455,6 +1470,56 @@ export default function FlowEditor() {
   const openPublishDialog = () => {
     setPublishVariant('minor');
     setPublishDialogOpen(true);
+  };
+
+  const approvalStatusValue = (flowMeta.approvalStatus || '').toLowerCase();
+  const publicationStatusValue = (flowMeta.publicationStatus || '').toLowerCase();
+  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
+    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = !isCreateMode && !!flowMeta.flowId && !!flowVersion && currentStatus === 'draft' && !hasPublicationRequest;
+
+  const deleteCurrentDraft = async () => {
+    if (!canDeleteDraft) {
+      return;
+    }
+    Modal.confirm({
+      title: 'Delete draft flow?',
+      content: `Flow ${flowMeta.flowId}@${flowVersion} will be removed.`,
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        const currentFlowId = flowMeta.flowId;
+        try {
+          await apiRequest(`/flows/${currentFlowId}/versions/${flowVersion}/draft`, {
+            method: 'DELETE',
+          });
+          message.success('Draft deleted');
+          try {
+            await loadFlow(currentFlowId);
+            await loadFlowVersions(currentFlowId);
+            setIsEditing(false);
+          } catch (reloadErr) {
+            setFlowMeta({
+              ...emptyFlow,
+              flowId: currentFlowId,
+              scope: currentFlowId?.startsWith('team-') ? 'team' : 'organization',
+            });
+            setNodes([]);
+            setSelectedNodeId(null);
+            setFlowVersion(DEFAULT_VERSION);
+            setBaseVersion(DEFAULT_VERSION);
+            setCurrentStatus('draft');
+            setResourceVersion(0);
+            setVersionOptions([]);
+            setIsEditing(true);
+          }
+        } catch (err) {
+          message.error(toRussianError(err?.message, 'Failed to delete Flow draft'));
+        }
+      },
+    });
   };
 
   const confirmPublish = async () => {
@@ -1472,30 +1537,46 @@ export default function FlowEditor() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Flow editor</Title>
         <Space>
-          {!isEditing ? (
+          {!isEditing && (
             currentStatus === 'draft' ? (
-              <Button type="default" onClick={() => setIsEditing(true)}>
-                Edit
-              </Button>
+              <>
+                <Button type="default" onClick={() => setIsEditing(true)} disabled={!canEditCurrentDraft}>
+                  Edit
+                </Button>
+                <Button type="default" onClick={openPublishDialog} disabled={!canEditCurrentDraft}>
+                  Request publication
+                </Button>
+                {canDeleteDraft && (
+                  <Button danger type="default" onClick={deleteCurrentDraft}>
+                    Delete draft
+                  </Button>
+                )}
+              </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
                 {`Create new version ${nextDraftVersion}`}
               </Button>
             )
-          ) : (
-            <Button
-              type="default"
-              onClick={async () => {
-                const ok = await saveFlow({ publish: false });
-                if (ok) {
-                  setIsEditing(false);
-                }
-              }}
-            >
-              Save
-            </Button>
           )}
-          <Button type="default" onClick={openPublishDialog}>Request publication</Button>
+          {isEditing && (
+            <>
+              <Button
+                type="default"
+                disabled={currentStatus === 'draft' && !canEditCurrentDraft}
+                onClick={async () => {
+                  const ok = await saveFlow({ publish: false });
+                  if (ok) {
+                    setIsEditing(false);
+                  }
+                }}
+              >
+                Save
+              </Button>
+              <Button type="default" onClick={openPublishDialog} disabled={currentStatus === 'draft' && !canEditCurrentDraft}>
+                Request publication
+              </Button>
+            </>
+          )}
         </Space>
       </div>
 

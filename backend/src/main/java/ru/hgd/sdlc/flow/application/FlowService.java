@@ -141,6 +141,20 @@ public class FlowService {
     }
 
     @Transactional
+    public void deleteDraft(String flowId, String version, User user) {
+        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new ValidationException("Authenticated user is required");
+        }
+        FlowVersion entity = repository.findFirstByFlowIdAndVersionOrderBySavedAtDesc(flowId, version)
+                .orElseThrow(() -> new NotFoundException("Flow version not found: " + flowId + "@" + version));
+        if (entity.getStatus() != FlowStatus.DRAFT) {
+            throw new ValidationException("Only draft flow version can be deleted");
+        }
+        ensureDraftIsEditable(entity);
+        repository.delete(entity);
+    }
+
+    @Transactional
     public FlowVersion save(String flowId, FlowSaveRequest request, User user) {
         if (request == null) {
             throw new ValidationException("Request body is required");
@@ -211,6 +225,7 @@ public class FlowService {
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
         if (existingDraft != null) {
+            ensureDraftIsEditable(existingDraft);
             if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
@@ -501,6 +516,16 @@ public class FlowService {
         draft.setCanonicalName(draft.getFlowId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
         repository.saveAndFlush(draft);
+    }
+
+    private void ensureDraftIsEditable(FlowVersion draft) {
+        if (draft.getApprovalStatus() != FlowApprovalStatus.DRAFT) {
+            throw new ValidationException("Flow draft is locked after publication request");
+        }
+        PublicationStatus publicationStatus = draft.getPublicationStatus();
+        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+            throw new ValidationException("Flow draft is locked after publication request");
+        }
     }
 
     private int resolveBaseMajor(String baseVersion, List<FlowVersion> publishedVersions) {

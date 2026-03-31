@@ -561,6 +561,14 @@ export default function SkillEditor() {
   };
 
   const saveSkill = async ({ publish, release = false }) => {
+    const approval = (approvalStatus || '').toLowerCase();
+    const publication = (publicationStatus || '').toLowerCase();
+    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
+      || (!!publication && publication !== 'draft');
+    if (selectedSkillId && isLockedAfterPublicationRequest) {
+      message.error('Редактирование запрещено после отправки на публикацию');
+      return false;
+    }
     if (!skillId) {
       message.error('Skill ID is required');
       return;
@@ -787,15 +795,27 @@ export default function SkillEditor() {
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
+  const approvalStatusValue = (approvalStatus || '').toLowerCase();
+  const publicationStatusValue = (publicationStatus || '').toLowerCase();
+  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
+    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = !!selectedSkillId && !!skillVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
   const startDraftFromPublished = () => {
-    const sourceVersion = skillVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    if (!latestPublishedVersion) {
+      message.error('Для создания новой версии нужен опубликованный skill');
+      return;
+    }
+    const sourceVersion = latestPublishedVersion;
     const sourceId = selectedSkillId || skillId;
     if (sourceId && sourceVersion) {
       setForkedFrom(`${sourceId}@${sourceVersion}`);
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
+    setApprovalStatus('draft');
+    setPublicationStatus('draft');
     setIsEditing(true);
     if (draftForMajor) {
       setResourceVersion(draftForMajor.resourceVersion ?? 0);
@@ -804,6 +824,39 @@ export default function SkillEditor() {
     }
     setResourceVersion(0);
     setSkillVersion(nextDraftVersion);
+  };
+
+  const deleteCurrentDraft = async () => {
+    if (!canDeleteDraft) {
+      return;
+    }
+    Modal.confirm({
+      title: 'Delete draft skill?',
+      content: `Skill ${selectedSkillId}@${skillVersion} will be removed.`,
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await apiRequest(`/skills/${selectedSkillId}/versions/${skillVersion}/draft`, {
+            method: 'DELETE',
+          });
+          message.success('Draft deleted');
+          if (selectedSkillId) {
+            try {
+              await loadSkill(selectedSkillId);
+            } catch (reloadErr) {
+              startNewSkill();
+              setSkillId(selectedSkillId);
+            }
+          } else {
+            startNewSkill();
+          }
+        } catch (err) {
+          message.error(toRussianError(err?.message, 'Failed to delete Skill draft'));
+        }
+      },
+    });
   };
 
   const openPublishDialog = () => {
@@ -829,8 +882,11 @@ export default function SkillEditor() {
           {!isEditing && (
             currentStatus === 'draft' ? (
               <>
-                <Button type="default" onClick={beginEditDraft}>Edit</Button>
-                <Button type="default" onClick={openPublishDialog}>Request publication</Button>
+                <Button type="default" onClick={beginEditDraft} disabled={!canEditCurrentDraft}>Edit</Button>
+                <Button type="default" onClick={openPublishDialog} disabled={!canEditCurrentDraft}>Request publication</Button>
+                {canDeleteDraft && (
+                  <Button danger type="default" onClick={deleteCurrentDraft}>Delete draft</Button>
+                )}
               </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>

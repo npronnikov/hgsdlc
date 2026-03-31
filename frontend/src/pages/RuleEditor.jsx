@@ -322,6 +322,14 @@ export default function RuleEditor() {
   };
 
   const saveRule = async ({ publish, release = false }) => {
+    const approval = (approvalStatus || '').toLowerCase();
+    const publication = (publicationStatus || '').toLowerCase();
+    const isLockedAfterPublicationRequest = (!!approval && approval !== 'draft')
+      || (!!publication && publication !== 'draft');
+    if (selectedRuleId && isLockedAfterPublicationRequest) {
+      message.error('Редактирование запрещено после отправки на публикацию');
+      return false;
+    }
     if (!ruleId) {
       message.error('Rule ID is required');
       return;
@@ -456,15 +464,27 @@ export default function RuleEditor() {
   const releaseMajor = maxPublishedMajor === null ? 1 : maxPublishedMajor + 1;
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
+  const approvalStatusValue = (approvalStatus || '').toLowerCase();
+  const publicationStatusValue = (publicationStatus || '').toLowerCase();
+  const hasPublicationRequest = (!!approvalStatusValue && approvalStatusValue !== 'draft')
+    || (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = !!selectedRuleId && !!ruleVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
   const startDraftFromPublished = () => {
-    const sourceVersion = ruleVersion || baseVersion || latestPublishedVersion || DEFAULT_VERSION;
+    if (!latestPublishedVersion) {
+      message.error('Для создания новой версии нужен опубликованный rule');
+      return;
+    }
+    const sourceVersion = latestPublishedVersion;
     const sourceId = selectedRuleId || ruleId;
     if (sourceId && sourceVersion) {
       setForkedFrom(`${sourceId}@${sourceVersion}`);
     }
     setBaseVersion(sourceVersion);
     setCurrentStatus('draft');
+    setApprovalStatus('draft');
+    setPublicationStatus('draft');
     setIsEditing(true);
     if (draftForMajor) {
       setResourceVersion(draftForMajor.resourceVersion ?? 0);
@@ -473,6 +493,36 @@ export default function RuleEditor() {
     }
     setResourceVersion(0);
     setRuleVersion(nextDraftVersion);
+  };
+
+  const deleteCurrentDraft = async () => {
+    if (!canDeleteDraft) {
+      return;
+    }
+    Modal.confirm({
+      title: 'Delete draft rule?',
+      content: `Rule ${selectedRuleId}@${ruleVersion} will be removed.`,
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        const currentRuleId = selectedRuleId;
+        try {
+          await apiRequest(`/rules/${currentRuleId}/versions/${ruleVersion}/draft`, {
+            method: 'DELETE',
+          });
+          message.success('Draft deleted');
+          try {
+            await loadRule(currentRuleId);
+          } catch (reloadErr) {
+            startNewRule();
+            setRuleId(currentRuleId);
+          }
+        } catch (err) {
+          message.error(toRussianError(err?.message, 'Failed to delete Rule draft'));
+        }
+      },
+    });
   };
 
   const openPublishDialog = () => {
@@ -498,8 +548,11 @@ export default function RuleEditor() {
           {!isEditing && (
             currentStatus === 'draft' ? (
               <>
-                <Button type="default" onClick={beginEditDraft}>Edit</Button>
-                <Button type="default" onClick={openPublishDialog}>Request publication</Button>
+                <Button type="default" onClick={beginEditDraft} disabled={!canEditCurrentDraft}>Edit</Button>
+                <Button type="default" onClick={openPublishDialog} disabled={!canEditCurrentDraft}>Request publication</Button>
+                {canDeleteDraft && (
+                  <Button danger type="default" onClick={deleteCurrentDraft}>Delete draft</Button>
+                )}
               </>
             ) : (
               <Button type="default" onClick={startDraftFromPublished}>
@@ -509,8 +562,8 @@ export default function RuleEditor() {
           )}
           {isEditing && (
             <>
-              <Button type="default" onClick={() => saveRule({ publish: false })}>Save</Button>
-              <Button type="default" onClick={openPublishDialog}>Request publication</Button>
+              <Button type="default" disabled={!canEditCurrentDraft && currentStatus === 'draft'} onClick={() => saveRule({ publish: false })}>Save</Button>
+              <Button type="default" disabled={!canEditCurrentDraft && currentStatus === 'draft'} onClick={openPublishDialog}>Request publication</Button>
             </>
           )}
         </Space>

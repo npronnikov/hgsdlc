@@ -174,6 +174,20 @@ public class SkillService {
         return publicationService.rejectSkillPublication(skillId, version, user, "Rejected by approver");
     }
 
+    @Transactional
+    public void deleteDraft(String skillId, String version, User user) {
+        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new ValidationException("Authenticated user is required");
+        }
+        SkillVersion entity = repository.findFirstBySkillIdAndVersionOrderBySavedAtDesc(skillId, version)
+                .orElseThrow(() -> new NotFoundException("Skill version not found: " + skillId + "@" + version));
+        if (entity.getStatus() != SkillStatus.DRAFT) {
+            throw new ValidationException("Only draft skill version can be deleted");
+        }
+        ensureDraftIsEditable(entity);
+        repository.delete(entity);
+    }
+
     @Transactional(readOnly = true)
     public SkillVersion getLatest(String skillId) {
         return repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.PUBLISHED)
@@ -278,6 +292,7 @@ public class SkillService {
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
         if (existingDraft != null) {
+            ensureDraftIsEditable(existingDraft);
             if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
@@ -417,6 +432,16 @@ public class SkillService {
                 .createdAt(version.getSavedAt())
                 .updatedAt(version.getSavedAt())
                 .build();
+    }
+
+    private void ensureDraftIsEditable(SkillVersion draft) {
+        if (draft.getApprovalStatus() != SkillApprovalStatus.DRAFT) {
+            throw new ValidationException("Skill draft is locked after publication request");
+        }
+        PublicationStatus publicationStatus = draft.getPublicationStatus();
+        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+            throw new ValidationException("Skill draft is locked after publication request");
+        }
     }
 
     private String resolveDraftVersion(

@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -105,6 +106,16 @@ public class SkillController {
             @AuthenticationPrincipal User user
     ) {
         return SkillResponse.from(skillService.rejectPublication(skillId, version, user));
+    }
+
+    @DeleteMapping("/{skillId}/versions/{version}/draft")
+    public ResponseEntity<Void> deleteDraft(
+            @PathVariable String skillId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        skillService.deleteDraft(skillId, version, user);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{skillId}")

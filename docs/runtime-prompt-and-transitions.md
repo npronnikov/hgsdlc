@@ -251,6 +251,15 @@ Retry доступен только из `PUBLISH_FAILED` или `WAITING_PUBLIS
 Тексты секций:
 - `backend/src/main/resources/runtime/prompt-texts.ru.yaml`
 
+Важно: часть итогового prompt берётся не из flow/run, а из runtime-настроек локализации prompt.
+Это именно файл `prompt-texts.ru.yaml`, из которого `AgentPromptBuilder` читает:
+- заголовки секций (`Task`, `Instruction`, `Available inputs`, ...)
+- footer
+- текстовые шаблоны для `inputs`
+- текстовые шаблоны для `expected_results`
+
+Если в `prompt-texts.ru.yaml` отсутствует любой обязательный ключ или он пустой, builder падает при загрузке с `IllegalStateException` (prompt не будет собран).
+
 ### 8.1 Источники полей
 
 `AgentInput`:
@@ -289,6 +298,35 @@ Retry доступен только из `PUBLISH_FAILED` или `WAITING_PUBLIS
 - `\r\n -> \n`
 - 3+ пустых строк -> 2
 
+### 8.6 Какие части prompt приходят из `prompt-texts.ru.yaml`
+
+Из блока `sections`:
+- `task_header` -> строка перед `run.featureRequest`
+- `request_clarification_header` -> строка перед `pending_rework_instruction`
+- `node_instruction_header` -> строка перед `node.instruction`
+- `inputs_header` -> заголовок списка input-ов
+- `expected_results_header` -> заголовок списка expected results
+- `footer` -> финальная строка prompt (всегда)
+
+Из блока `inputs`:
+- `use_upstream_artifact_by_path`
+- `use_upstream_artifact_by_key_and_path`
+- `use_upstream_artifact_by_value`
+
+Runtime подставляет плейсхолдеры:
+- `{artifact_key}`
+- `{path}`
+- `{size_bytes}`
+- `{content}`
+
+Из блока `expected_results`:
+- `required_artifacts` (с `{artifacts}`)
+- `required_run_paths` (с `{paths}`)
+- `required_mutations`
+- `summary`
+
+Следствие: изменение `prompt-texts.ru.yaml` меняет итоговый prompt глобально для всех AI-node без изменения flow YAML.
+
 ---
 
 ## 9. Матрица «событие -> результат»
@@ -322,55 +360,438 @@ Retry доступен только из `PUBLISH_FAILED` или `WAITING_PUBLIS
 
 ---
 
-## 11. Улучшения (предлагаемые, приоритетно)
+## 11. Сквозной пример flow разработки ПО (с полными prompt)
 
-1. Ввести базовый системный prompt (обязательный префикс)
+Ниже пример end-to-end flow под запрос пользователя:
+`Добавь новую кнопку в интерфейс`.
 
-Сейчас prompt строится только из секций task/instruction/inputs/results + footer. Нет стабильной системной «рамы поведения». Рекомендуется добавить фиксированный системный блок в шаблон, например:
+Пример flow (логические node):
+1. `ai-analyze-request` (AI): «Проанализируй запрос пользователя и задай 5 релевантных вопросов»
+2. `human-answer-questions` (human_input gate): пользователь отвечает на вопросы
+3. `ai-write-requirements` (AI): «На основании запроса пользователя и ответов напиши требования»
+4. `ai-build-plan` (AI): «На базе требований создай план реализации»
+5. `approve-plan` (human_approval gate)
+6. `ai-implement` (AI): «Разработай функционал согласно запросу пользователя, требованиям и плану»
+7. `approve-implementation` (human_approval gate, с rework)
+8. `terminal-complete`
 
+### 11.1 Принятые допущения по артефактам и transfer_mode
+
+- `ai-analyze-request` создаёт `questions.md` (`scope=run`, `required=true`, `modifiable=true`).
+- `human-answer-questions` редактирует `questions.md` и отдаёт обновлённый файл.
+- В `ai-write-requirements` файл ответов передаётся **по ссылке** (`transfer_mode=by_ref`).
+- Далее между AI-нодами артефакты передаются **по значению** (`by_value`):
+  - `requirements.md` -> `ai-build-plan`
+  - `requirements.md` и `plan.md` -> `ai-implement`
+- Для `ai-implement` есть `expected_mutations`:
+  - `scope=project`, `path=frontend/src/components/ActionButton.tsx`, `required=true`
+
+### 11.2 Node 1: `ai-analyze-request` — полный итоговый prompt
+
+`execution_context: []`, поэтому `Available inputs` отсутствует.
+
+````text
+[source: TASK_SECTION | sections.task_header + run.featureRequest]
+Task:
+Добавь новую кнопку в интерфейс
+
+[source: NODE_INSTRUCTION_SECTION | sections.node_instruction_header + node.instruction]
+Instruction:
+Проанализируй запрос пользователя и задай 5 релевантных вопросов.
+Сохрани результат в questions.md.
+
+[source: EXPECTED_RESULTS_SECTION | sections.expected_results_header + expected_results.required_artifacts + expected_results.required_run_paths + expected_results.summary]
+Expected result:
+- Create and fill required artifacts: questions.
+- Write generated artifacts strictly to these paths: .hgsdlc/nodes/ai-analyze-request/attempt-1/questions.md. Before finishing, verify each file exists and is not empty.
+- Return a brief summary of completed work.
+
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
+
+### 11.3 Node 2: `human-answer-questions` — prompt не строится
+
+Для `human_input` runtime prompt не генерирует. Открывается gate с payload:
+- `human_input_artifacts` (редактируемая копия `questions.md`)
+- `git_summary`/`git_changes`
+- `user_instructions` из `node.instruction`
+
+### 11.4 Node 3: `ai-write-requirements` (ответы по ссылке by_ref) — полный итоговый prompt
+
+Предположим `execution_context` содержит `artifact_ref` на `questions.md` из `human-answer-questions`, `transfer_mode=by_ref`, `required=true`.
+
+````text
+[source: TASK_SECTION | sections.task_header + run.featureRequest]
+Task:
+Добавь новую кнопку в интерфейс
+
+[source: NODE_INSTRUCTION_SECTION | sections.node_instruction_header + node.instruction]
+Instruction:
+На основании запроса пользователя и ответов напиши требования.
+Сохрани требования в requirements.md.
+
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_key_and_path + resolvedContext.artifact_ref]
+Available inputs:
+- Use the input artifact 'questions' by full path '/workspace/<run-id>/.hgsdlc/nodes/human-answer-questions/attempt-1/questions.md'.
+
+[source: EXPECTED_RESULTS_SECTION | sections.expected_results_header + expected_results.required_artifacts + expected_results.required_run_paths + expected_results.summary]
+Expected result:
+- Create and fill required artifacts: requirements.
+- Write generated artifacts strictly to these paths: .hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md. Before finishing, verify each file exists and is not empty.
+- Return a brief summary of completed work.
+
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
+
+Почему контент не в prompt: для `by_ref` builder добавляет путь, но не inline содержимое.
+
+### 11.5 Node 4: `ai-build-plan` (requirements по значению by_value) — полный итоговый prompt
+
+Предположим контент `requirements.md`:
+`- Добавить кнопку "Отправить"\n- Расположить справа от поля ввода\n- Поддержать disabled/loading`.
+
+````text
+[source: TASK_SECTION | sections.task_header + run.featureRequest]
+Task:
+Добавь новую кнопку в интерфейс
+
+[source: NODE_INSTRUCTION_SECTION | sections.node_instruction_header + node.instruction]
+Instruction:
+На базе требований создай план реализации.
+Сохрани план в plan.md.
+
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_value + resolvedContext.artifact_ref]
+Available inputs:
+- Use inline artifact content 'requirements' (path '/workspace/<run-id>/.hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md', size 112 bytes):
 ```text
-Ты — система разработки ПО в runtime flow.
-Работай строго в рамках текущей node и её переходов.
-Считай execution_context единственным источником входных артефактов.
-Не придумывай отсутствующие данные; при нехватке используй минимально безопасное действие.
-Строго выполни expected results этой node.
-Не меняй файлы вне разрешённых scope/path.
-Верни краткий отчёт о результате и проверках.
+- Добавить кнопку "Отправить"
+- Расположить справа от поля ввода
+- Поддержать disabled/loading
 ```
 
-2. Сделать prompt-builder детерминированным по режимам node
+[source: EXPECTED_RESULTS_SECTION | sections.expected_results_header + expected_results.required_artifacts + expected_results.required_run_paths + expected_results.summary]
+Expected result:
+- Create and fill required artifacts: plan.
+- Write generated artifacts strictly to these paths: .hgsdlc/nodes/ai-build-plan/attempt-1/plan.md. Before finishing, verify each file exists and is not empty.
+- Return a brief summary of completed work.
 
-Добавить явный policy слой: `PromptPolicy` по `node_kind` + сценарий (`start`, `rework`, `normal`) с жёсткими правилами секций. Сейчас структура формируется условно и может быть недостаточно контролируемой.
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
 
-3. Явно сериализовать «контракт node» в prompt
+Что важно: для `by_value` в prompt попадает inline контент и размер (`size_bytes`); при размере > 64KB будет `EXECUTION_CONTEXT_TOO_LARGE`.
 
-Добавлять машинно-стабильный блок (например YAML/JSON) со структурой:
-- `node_id`, `node_kind`, `allowed_transitions`
-- `required_outputs`, `required_mutations`
-- `scope_policy`
-Это снизит неоднозначность поведения агента.
+### 11.6 Node 5: `approve-plan` — prompt не строится
 
-4. Разделить human-review instruction и AI instruction
+Для `human_approval` runtime prompt не генерирует.
 
-Сейчас используется `node.instruction` в разных контекстах (prompt и gate payload). Рекомендуется завести отдельные поля:
-- `agent_instruction`
-- `reviewer_instruction`
-Чтобы не смешивать требования к агенту и человеку.
+### 11.7 Node 6: `ai-implement` (requirements+plan по значению) — полный итоговый prompt
 
-5. Расширить тестовый flow под контролируемый prompt
+Предположим `execution_context`: `requirements.md` by_value и `plan.md` by_value.
 
-Сделать отдельный regression flow, где проверяется:
-- start-node prompt с базовым системным блоком
-- rework-переходы (target=start и target!=start)
-- `by_ref` и `by_value`
-- обязательные expected results
-- неизменность формата prompt по snapshot-тесту
+````text
+[source: TASK_SECTION | sections.task_header + run.featureRequest]
+Task:
+Добавь новую кнопку в интерфейс
 
-6. Добавить snapshot-тесты prompt на уровне builder
+[source: NODE_INSTRUCTION_SECTION | sections.node_instruction_header + node.instruction]
+Instruction:
+Разработай функционал согласно запросу пользователя, требованиям и плану.
 
-Тестировать `AgentPromptBuilder` таблицей кейсов:
-- без контекста
-- с `pending_rework_instruction`
-- с `artifact_ref by_value`
-- с required run-paths/mutations
-и фиксировать финальный prompt текстом (golden files).
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_value + resolvedContext.artifact_ref]
+Available inputs:
+- Use inline artifact content 'requirements' (path '/workspace/<run-id>/.hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md', size 112 bytes):
+```text
+- Добавить кнопку "Отправить"
+- Расположить справа от поля ввода
+- Поддержать disabled/loading
+```
+- Use inline artifact content 'plan' (path '/workspace/<run-id>/.hgsdlc/nodes/ai-build-plan/attempt-1/plan.md', size 167 bytes):
+```text
+1. Обновить компонент формы.
+2. Добавить кнопку ActionButton.
+3. Добавить состояния disabled/loading.
+4. Обновить тесты UI.
+```
+
+[source: EXPECTED_RESULTS_SECTION | sections.expected_results_header + expected_results.required_mutations + expected_results.summary]
+Expected result:
+- Apply repository changes required for this task.
+- Return a brief summary of completed work.
+
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
+
+### 11.8 Node 7: `approve-implementation` (rework с комментарием к строкам 1-10) — prompt не строится
+
+Пользователь отправляет rework instruction: `Переведи данный текст на русский` (к строкам 1-10 выбранного файла).
+
+### 11.9 Повтор Node 6 после rework — полный итоговый prompt (attempt-2)
+
+Ключевое отличие: появляется секция clarification.
+
+````text
+[source: TASK_SECTION | sections.task_header + run.featureRequest]
+Task:
+Добавь новую кнопку в интерфейс
+
+[source: REQUEST_CLARIFICATION_SECTION | sections.request_clarification_header + run.pendingReworkInstruction]
+Request clarification:
+Файл frontend/src/components/ActionButton.tsx, строки 1-10: Переведи данный текст на русский.
+
+[source: NODE_INSTRUCTION_SECTION | sections.node_instruction_header + node.instruction]
+Instruction:
+Разработай функционал согласно запросу пользователя, требованиям и плану.
+
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_value + resolvedContext.artifact_ref]
+Available inputs:
+- Use inline artifact content 'requirements' (path '/workspace/<run-id>/.hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md', size 112 bytes):
+```text
+- Добавить кнопку "Отправить"
+- Расположить справа от поля ввода
+- Поддержать disabled/loading
+```
+- Use inline artifact content 'plan' (path '/workspace/<run-id>/.hgsdlc/nodes/ai-build-plan/attempt-1/plan.md', size 167 bytes):
+```text
+1. Обновить компонент формы.
+2. Добавить кнопку ActionButton.
+3. Добавить состояния disabled/loading.
+4. Обновить тесты UI.
+```
+
+[source: EXPECTED_RESULTS_SECTION | sections.expected_results_header + expected_results.required_mutations + expected_results.summary]
+Expected result:
+- Apply repository changes required for this task.
+- Return a brief summary of completed work.
+
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
+
+### 11.10 Node 8: `terminal-complete`
+
+Prompt не строится. Node переводит run в `WAITING_PUBLISH` (или `FAILED`, если terminal достигнут после `on_failure`), далее publish pipeline.
+
+## 12. Наглядный алгоритм формирования prompt
+
+### 12.1 Пошаговый pipeline builder
+
+1. Берётся шаблон `prompt-template.md` с токенами секций.
+2. Загружаются текстовые настройки из `prompt-texts.ru.yaml` (headers/footer/inputs/expected_results шаблоны).
+3. Формируется `AgentInput`:
+- `task` = `run.featureRequest`
+- `requestClarification` = `run.pendingReworkInstruction`
+- `nodeInstruction` = `node.instruction`
+- `inputs` = summary `artifact_ref` из `resolvedContext`
+- `expectedResults` = required outputs/mutations + summary
+4. Для каждой секции проверяется условие включения.
+5. Токены в шаблоне заменяются текстом секций.
+6. Нормализация: `\r\n -> \n`, затем схлопывание лишних пустых строк.
+7. Считается `sha256(prompt)` и пишется audit `prompt_package_built`.
+
+### 12.2 Визуальная схема (что включится)
+
+```text
+TASK_SECTION                  <- featureRequest != null
+REQUEST_CLARIFICATION_SECTION <- pendingReworkInstruction != null
+NODE_INSTRUCTION_SECTION      <- node.instruction != null
+INPUTS_SECTION                <- resolvedContext has artifact_ref entries
+EXPECTED_RESULTS_SECTION      <- always at least summary (для AI node)
+FOOTER_SECTION                <- always
+```
+
+### 12.3 Правила by_ref vs by_value
+
+- `by_ref`: в prompt попадает только путь.
+- `by_value`: в prompt попадают путь + размер + полный inline контент.
+- `by_value` полезен для точного контекста, но риск:
+  - переполнение лимита `64KB`;
+  - избыточный prompt-size.
+
+### 12.4 Почему в gate-нодах нет prompt
+
+- `human_input` и `human_approval` не используют `AgentPromptBuilder`.
+- Вместо этого runtime открывает gate и передаёт payload для UI/reviewer.
+- Следующий prompt появится только когда flow перейдёт в AI node.
+
+---
+
+## 13. Улучшения промпта и runtime (по предложению)
+
+Ниже целевая доработка prompt-контракта: сделать поведение агента более предсказуемым, а сам prompt — более понятным и менее «корявым».
+
+### 13.1 Новая вводная (системная рамка)
+
+Рекомендуется всегда начинать prompt с короткой системной вводной:
+
+```text
+Ты — система разработки ПО, выполняющая текущий шаг flow.
+Flow состоит из шагов (nodes), каждый шаг имеет цель и ограничения.
+Базовые термины:
+- User Request: исходный запрос пользователя.
+- Node Instruction: инструкция текущего шага.
+- Rework Task: уточнение/исправление после ревью (если шаг запущен повторно).
+- Input Artifacts: входные файлы для шага.
+- Expected Artifacts: файлы, которые нужно получить по итогу шага.
+Работай только в рамках текущего шага и его входных данных.
+```
+
+Зачем:
+- сразу задаёт роль и границы;
+- убирает двусмысленность между «ты чат-ассистент» и «ты runtime-исполнитель шага».
+
+### 13.2 Явные приоритеты контекста: что важнее чего
+
+В prompt нужно явно описать приоритет источников задачи.
+
+Предлагаемый порядок приоритетов:
+1. `Rework Task` (если есть) — самый высокий приоритет как корректировка прошлого результата.
+2. `Node Instruction` — цель текущего шага.
+3. `User Request` — глобальная цель флоу (контекст, который нельзя потерять).
+4. `Input Artifacts` — фактические данные для выполнения.
+
+Рекомендуемый блок правил поведения:
+
+```text
+Правила выполнения:
+1) Если есть Rework Task, сначала выполни его требования.
+2) Затем выполни Node Instruction.
+3) Не противоречь User Request.
+4) Используй только предоставленные Input Artifacts; не выдумывай отсутствующие данные.
+5) Не изменяй файлы вне ожидаемого результата шага.
+6) Если данных не хватает, зафиксируй это в summary и сделай минимально безопасный результат.
+```
+
+Что делать/что не делать:
+- Делать:
+  - опираться на входные файлы;
+  - соблюдать приоритет rework;
+  - выдавать только релевантные изменения текущему шагу.
+- Не делать:
+  - игнорировать rework при его наличии;
+  - менять произвольные файлы «на будущее»;
+  - подменять входные артефакты предположениями.
+
+### 13.3 Упростить блоки входа/выхода (человеческий формат)
+
+Текущий текст `expected_results.required_*` перегружен формулировками. Лучше перейти к прямым спискам.
+
+Вместо:
+- "Write generated artifacts strictly to these paths ..."
+
+Предлагаемый формат:
+
+```text
+Input files:
+- <path1>
+- <path2>
+
+Expected output files:
+- <pathA>
+- <pathB>
+```
+
+И отдельная строка для мутаций проекта:
+
+```text
+Required project changes:
+- <path/to/file>
+```
+
+Плюс короткий policy:
+
+```text
+Ожидаю как результат только перечисленные output files и required project changes.
+```
+
+Идея по реализации без ломки модели:
+- добавить новые ключи в `prompt-texts.ru.yaml`:
+  - `inputs_header_simple`
+  - `expected_output_files_header`
+  - `required_project_changes_header`
+- в `AgentPromptBuilder` рендерить «простую форму» для `inputs/expected`.
+
+### 13.4 Уточнить, что такое "задача" шага
+
+В документации и prompt явно зафиксировать:
+- Текущая задача шага =
+  - `Rework Task`, если шаг запущен после rework;
+  - иначе `Node Instruction`.
+- `User Request` всегда остаётся фоном и не должен теряться.
+
+Это снимет путаницу, где «задача» одновременно и пользовательский запрос, и инструкция ноды.
+
+### 13.5 Structured output шага (обязательный)
+
+Предложение: в конце каждого AI-шага требовать структурированный summary в стабильном формате.
+
+Пример целевого формата:
+
+```text
+STEP_SUMMARY_JSON:
+{
+  "step_id": "ai-build-plan",
+  "attempt": 1,
+  "status": "done",
+  "completed_actions": [
+    "Сформирован план реализации",
+    "План сохранён в plan.md"
+  ],
+  "output_files": ["plan.md"],
+  "project_changes": [],
+  "open_questions": [],
+  "risks": []
+}
+```
+
+Минимальные требования:
+- фиксированный префикс (`STEP_SUMMARY_JSON:`);
+- валидный JSON;
+- обязательные поля (`step_id`, `status`, `completed_actions`, `output_files`).
+
+### 13.6 Протащить summary между шагами в runtime
+
+Предложение по системе:
+1. На завершении AI-node runtime парсит `STEP_SUMMARY_JSON`.
+2. Сохраняет summary как:
+- отдельный артефакт шага (`step-summary.json`), и/или
+- запись в БД `node_execution_summary_json`.
+3. При сборке следующего prompt добавляет блок:
+
+```text
+Workflow progress:
+You are on step <N> (<step_id>).
+Previous steps summary:
+- Step 1: ...
+- Step 2: ...
+- Step 3: ...
+```
+
+Целевой эффект:
+- агент понимает контекст цепочки без перечитывания всех файлов;
+- меньше повторной работы и расхождений между шагами;
+- rework становится более управляемым (агент видит, что уже делал раньше).
+
+### 13.7 Минимальный план внедрения
+
+1. Prompt-слой:
+- добавить системную вводную;
+- добавить блок приоритетов;
+- упростить рендер input/output секций.
+
+2. Summary-слой:
+- добавить обязательный structured output в footer-инструкцию;
+- добавить в runtime extraction + persistence summary.
+
+3. Контекст следующего шага:
+- добавить новую секцию `WORKFLOW_PROGRESS_SECTION` в `prompt-template.md`;
+- заполнять её summary последних успешных шагов.
+
+4. Тесты:
+- snapshot-тесты нового prompt-формата;
+- тест на парсинг/сохранение summary;
+- интеграционный тест: summary шага N появляется в prompt шага N+1.
+

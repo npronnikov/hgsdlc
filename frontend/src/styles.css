@@ -187,6 +187,46 @@ body {
   background: #ecfeff;
 }
 
+:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default,
+:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default {
+  color: #b42323 !important;
+  border-color: #efb0b0 !important;
+  background: #fff5f5 !important;
+  box-shadow: none !important;
+}
+
+:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:hover,
+:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:focus,
+:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:active,
+:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:hover,
+:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:focus,
+:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:active {
+  color: #991b1b !important;
+  border-color: #e48989 !important;
+  background: #ffecec !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default,
+:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default {
+  color: #fecaca !important;
+  border-color: #7f1d1d !important;
+  background: #3b0a0a !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:hover,
+:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:focus,
+:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:active,
+:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:hover,
+:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:focus,
+:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:active {
+  color: #fee2e2 !important;
+  border-color: #b91c1c !important;
+  background: #4a0d0d !important;
+  box-shadow: none !important;
+}
+
 .ant-card,
 .ant-card-head,
 .ant-card-cover img,

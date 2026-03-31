@@ -131,6 +131,20 @@ public class RuleService {
     }
 
     @Transactional
+    public void deleteDraft(String ruleId, String version, User user) {
+        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new ValidationException("Authenticated user is required");
+        }
+        RuleVersion entity = repository.findFirstByRuleIdAndVersionOrderBySavedAtDesc(ruleId, version)
+                .orElseThrow(() -> new NotFoundException("Rule version not found: " + ruleId + "@" + version));
+        if (entity.getStatus() != RuleStatus.DRAFT) {
+            throw new ValidationException("Only draft rule version can be deleted");
+        }
+        ensureDraftIsEditable(entity);
+        repository.delete(entity);
+    }
+
+    @Transactional
     public RuleVersion save(String ruleId, RuleSaveRequest request, User user) {
         if (request == null) {
             throw new ValidationException("Request body is required");
@@ -188,6 +202,7 @@ public class RuleService {
         Integer maxPublishedMajor = findMaxPublishedMajor(publishedVersions);
         Integer maxMinorForMajor = findMaxPublishedMinorForMajor(publishedVersions, baseMajor);
         if (existingDraft != null) {
+            ensureDraftIsEditable(existingDraft);
             if (existingDraft.getResourceVersion() != request.resourceVersion()) {
                 throw new ConflictException("resource_version mismatch for draft");
             }
@@ -332,6 +347,16 @@ public class RuleService {
         draft.setCanonicalName(draft.getRuleId() + "@" + nextDraftVersion);
         draft.setChecksum(null);
         repository.saveAndFlush(draft);
+    }
+
+    private void ensureDraftIsEditable(RuleVersion draft) {
+        if (draft.getApprovalStatus() != RuleApprovalStatus.DRAFT) {
+            throw new ValidationException("Rule draft is locked after publication request");
+        }
+        PublicationStatus publicationStatus = draft.getPublicationStatus();
+        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+            throw new ValidationException("Rule draft is locked after publication request");
+        }
     }
 
     private int resolveBaseMajor(String baseVersion, List<RuleVersion> publishedVersions) {

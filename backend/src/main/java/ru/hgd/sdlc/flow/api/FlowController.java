@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -103,6 +104,16 @@ public class FlowController {
         var flowVersion = flowService.getVersion(flowId, version);
         var model = flowYamlParser.parse(flowVersion.getFlowYaml());
         return FlowResponse.from(flowVersion, model);
+    }
+
+    @DeleteMapping("/{flowId}/versions/{version}/draft")
+    public ResponseEntity<Void> deleteDraft(
+            @PathVariable String flowId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        flowService.deleteDraft(flowId, version, user);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{flowId}/save")

@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -94,6 +95,16 @@ public class RuleController {
     @GetMapping("/{ruleId}/versions/{version}")
     public RuleResponse getVersion(@PathVariable String ruleId, @PathVariable String version) {
         return RuleResponse.from(ruleService.getVersion(ruleId, version));
+    }
+
+    @DeleteMapping("/{ruleId}/versions/{version}/draft")
+    public ResponseEntity<Void> deleteDraft(
+            @PathVariable String ruleId,
+            @PathVariable String version,
+            @AuthenticationPrincipal User user
+    ) {
+        ruleService.deleteDraft(ruleId, version, user);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{ruleId}/save")
