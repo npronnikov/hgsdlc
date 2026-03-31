@@ -624,7 +624,7 @@ export default function HumanGate() {
             {isApproval && (
               <>
                 <Button onClick={() => setActiveActionPanel('approve')}>Approve</Button>
-                <Button className="btn-warning-common" onClick={() => setActiveActionPanel('rework')}>Rework</Button>
+                <Button type="default" danger onClick={() => setActiveActionPanel('rework')}>Rework</Button>
               </>
             )}
             {isInput && (
@@ -756,6 +756,7 @@ export default function HumanGate() {
                   >
                     <Button
                       type="text"
+                      danger
                       onClick={() => {
                         setContextMenuState({ open: false, x: 0, y: 0 });
                         openAddRequestModalFromSelection();
@@ -904,7 +905,8 @@ export default function HumanGate() {
             )}
             {activeActionPanel === 'rework' && (
               <Button
-                className="btn-warning-common"
+                type="default"
+                danger
                 onClick={async () => {
                   const ok = await requestRework();
                   if (!ok) return;

@@ -191,7 +191,7 @@ export default function GateApproval() {
               <Button type="default" onClick={approve} loading={submitting}>Approve</Button>
               <Button
                 type="default"
-                style={{ borderColor: '#d97706', color: '#d97706' }}
+                danger
                 onClick={rework}
                 loading={submitting}
                 disabled={reworkDiscardBlocked}

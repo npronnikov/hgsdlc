@@ -155,7 +155,8 @@ function ApprovalForm({ gate, onComplete }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
         <Button style={{ borderColor: '#16a34a', color: '#16a34a' }} onClick={approve} loading={activeAction === 'approve'} disabled={activeAction !== null}>Approve</Button>
         <Button
-          style={{ borderColor: '#d97706', color: '#d97706' }}
+          type="default"
+          danger
           onClick={rework}
           loading={activeAction === 'rework'}
           disabled={activeAction !== null || !instruction.trim() || reworkDiscardBlocked}

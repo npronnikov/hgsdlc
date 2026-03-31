@@ -242,7 +242,7 @@ export default function Requests() {
         if (row.status === 'pending_approval') {
           return (
             <Space>
-              <Button size="small" onClick={() => openRejectDialog(row)} icon={<CloseOutlined />}>Reject</Button>
+              <Button size="small" type="default" danger onClick={() => openRejectDialog(row)} icon={<CloseOutlined />}>Reject</Button>
               <Button size="small" type="default" onClick={() => approve(row)} icon={<CheckOutlined />}>Approve</Button>
             </Space>
           );

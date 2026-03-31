@@ -1,0 +1,7 @@
+Runtime publish: run {{RUN_ID}}
+
+Flow: {{FLOW_CANONICAL_NAME}}
+Work branch: {{WORK_BRANCH}}
+Target branch: {{TARGET_BRANCH}}
+Initial user request:
+{{INITIAL_USER_REQUEST}}

@@ -2,6 +2,7 @@ package ru.hgd.sdlc.runtime.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -18,6 +19,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -43,6 +46,11 @@ public class RunPublishService {
     private static final Logger log = LoggerFactory.getLogger(RunPublishService.class);
     private static final String DEFAULT_PUSH_USER = "x-access-token";
     private static final Duration PR_TIMEOUT = Duration.ofSeconds(30);
+    private static final String RUN_ID_TOKEN = "{{RUN_ID}}";
+    private static final String FLOW_CANONICAL_NAME_TOKEN = "{{FLOW_CANONICAL_NAME}}";
+    private static final String WORK_BRANCH_TOKEN = "{{WORK_BRANCH}}";
+    private static final String TARGET_BRANCH_TOKEN = "{{TARGET_BRANCH}}";
+    private static final String INITIAL_USER_REQUEST_TOKEN = "{{INITIAL_USER_REQUEST}}";
 
     private final RunRepository runRepository;
     private final ProjectRepository projectRepository;
@@ -51,6 +59,8 @@ public class RunPublishService {
     private final SettingsService settingsService;
     private final TaskExecutor taskExecutor;
     private final ObjectMapper objectMapper;
+    private final String publishCommitMessageTemplate;
+    private final String publishPrBodyTemplate;
     private final ConcurrentMap<UUID, Object> publishLocks = new ConcurrentHashMap<>();
 
     public RunPublishService(
@@ -60,7 +70,9 @@ public class RunPublishService {
             ProcessExecutionPort processExecutionPort,
             SettingsService settingsService,
             TaskExecutor taskExecutor,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            @Value("classpath:runtime/publish-commit-message-template.txt") Resource publishCommitMessageTemplateResource,
+            @Value("classpath:runtime/publish-pr-body-template.md") Resource publishPrBodyTemplateResource
     ) {
         this.runRepository = runRepository;
         this.projectRepository = projectRepository;
@@ -69,6 +81,14 @@ public class RunPublishService {
         this.settingsService = settingsService;
         this.taskExecutor = taskExecutor;
         this.objectMapper = objectMapper;
+        this.publishCommitMessageTemplate = readTemplate(
+                publishCommitMessageTemplateResource,
+                "Failed to load runtime publish commit message template"
+        );
+        this.publishPrBodyTemplate = readTemplate(
+                publishPrBodyTemplateResource,
+                "Failed to load runtime publish PR body template"
+        );
     }
 
     public void dispatchPublish(UUID runId) {
@@ -205,7 +225,7 @@ public class RunPublishService {
         runGitOrThrow(
                 run,
                 "final_commit",
-                List.of("git", "-C", root.toString(), "commit", "--allow-empty", "-m", "runtime publish: run " + run.getId()),
+                List.of("git", "-C", root.toString(), "commit", "--allow-empty", "-m", renderPublishCommitMessage(run)),
                 "commit"
         );
         CommandResult sha = runGitOrThrow(
@@ -269,7 +289,7 @@ public class RunPublishService {
                     "title", "Runtime run " + run.getId() + ": " + run.getFlowCanonicalName(),
                     "head", run.getWorkBranch(),
                     "base", run.getTargetBranch(),
-                    "body", "Automated PR created by runtime publishing"
+                    "body", renderPublishPrBody(run)
             );
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/repos/" + repo.owner() + "/" + repo.repo() + "/pulls"))
@@ -489,6 +509,36 @@ public class RunPublishService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String renderPublishCommitMessage(RunEntity run) {
+        return renderTemplate(publishCommitMessageTemplate, run);
+    }
+
+    private String renderPublishPrBody(RunEntity run) {
+        return renderTemplate(publishPrBodyTemplate, run);
+    }
+
+    private String renderTemplate(String template, RunEntity run) {
+        String rendered = template
+                .replace(RUN_ID_TOKEN, run.getId() == null ? "" : run.getId().toString())
+                .replace(FLOW_CANONICAL_NAME_TOKEN, nullToEmpty(run.getFlowCanonicalName()))
+                .replace(WORK_BRANCH_TOKEN, nullToEmpty(run.getWorkBranch()))
+                .replace(TARGET_BRANCH_TOKEN, nullToEmpty(run.getTargetBranch()))
+                .replace(INITIAL_USER_REQUEST_TOKEN, nullToEmpty(run.getFeatureRequest()));
+        return rendered.replace("\r\n", "\n").trim();
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String readTemplate(Resource templateResource, String errorMessage) {
+        try (InputStream inputStream = templateResource.getInputStream()) {
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException(errorMessage, exception);
+        }
     }
 
     private String truncate(String value, int maxLength) {

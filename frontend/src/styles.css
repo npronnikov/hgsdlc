@@ -130,6 +130,49 @@ body {
   color: var(--primary-hover);
 }
 
+.ant-btn-dangerous.ant-btn-default,
+.ant-btn-dangerous.ant-btn-primary,
+.ant-btn-dangerous.ant-btn-dashed {
+  border-color: var(--danger) !important;
+  background: var(--danger) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px -10px rgba(220, 38, 38, 0.45);
+}
+
+.ant-btn-dangerous.ant-btn-default:hover,
+.ant-btn-dangerous.ant-btn-default:focus,
+.ant-btn-dangerous.ant-btn-primary:hover,
+.ant-btn-dangerous.ant-btn-primary:focus,
+.ant-btn-dangerous.ant-btn-dashed:hover,
+.ant-btn-dangerous.ant-btn-dashed:focus {
+  border-color: var(--danger-hover) !important;
+  background: var(--danger-hover) !important;
+  color: #fff !important;
+}
+
+.ant-btn-dangerous.ant-btn-default:active,
+.ant-btn-dangerous.ant-btn-primary:active,
+.ant-btn-dangerous.ant-btn-dashed:active {
+  border-color: var(--danger-active) !important;
+  background: var(--danger-active) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-dangerous.ant-btn-default:focus-visible,
+.ant-btn-dangerous.ant-btn-primary:focus-visible,
+.ant-btn-dangerous.ant-btn-dashed:focus-visible,
+.ant-btn-dangerous.ant-btn-text:focus-visible,
+.ant-btn-dangerous.ant-btn-link:focus-visible,
+.ant-btn-dangerous.ant-btn-default:focus,
+.ant-btn-dangerous.ant-btn-primary:focus,
+.ant-btn-dangerous.ant-btn-dashed:focus,
+.ant-btn-dangerous.ant-btn-text:focus,
+.ant-btn-dangerous.ant-btn-link:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35) !important;
+}
+
 .ant-btn.btn-danger-common {
   border-color: var(--danger) !important;
   background: var(--danger) !important;
@@ -187,43 +230,27 @@ body {
   background: #ecfeff;
 }
 
-:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default,
-:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default {
-  color: #b42323 !important;
-  border-color: #efb0b0 !important;
-  background: #fff5f5 !important;
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-default:disabled,
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-default[disabled],
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-primary:disabled,
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-primary[disabled],
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-dashed:disabled,
+:root:not([data-theme="dark"]) .ant-btn-dangerous.ant-btn-dashed[disabled] {
+  color: #fff !important;
+  border-color: #fca5a5 !important;
+  background: #fca5a5 !important;
   box-shadow: none !important;
 }
 
-:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:hover,
-:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:focus,
-:root:not([data-theme="dark"]) .rule-editor-page .ant-btn-dangerous.ant-btn-default:active,
-:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:hover,
-:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:focus,
-:root:not([data-theme="dark"]) .flow-editor-page .ant-btn-dangerous.ant-btn-default:active {
-  color: #991b1b !important;
-  border-color: #e48989 !important;
-  background: #ffecec !important;
-  box-shadow: none !important;
-}
-
-:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default,
-:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default {
-  color: #fecaca !important;
-  border-color: #7f1d1d !important;
-  background: #3b0a0a !important;
-  box-shadow: none !important;
-}
-
-:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:hover,
-:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:focus,
-:root[data-theme="dark"] .rule-editor-page .ant-btn-dangerous.ant-btn-default:active,
-:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:hover,
-:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:focus,
-:root[data-theme="dark"] .flow-editor-page .ant-btn-dangerous.ant-btn-default:active {
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-default:disabled,
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-default[disabled],
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-primary:disabled,
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-primary[disabled],
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-dashed:disabled,
+:root[data-theme="dark"] .ant-btn-dangerous.ant-btn-dashed[disabled] {
   color: #fee2e2 !important;
-  border-color: #b91c1c !important;
-  background: #4a0d0d !important;
+  border-color: #7f1d1d !important;
+  background: #7f1d1d !important;
   box-shadow: none !important;
 }
 

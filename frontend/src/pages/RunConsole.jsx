@@ -929,6 +929,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
           )}
           <Button
             type="default"
+            danger
             className="btn-danger-common"
             onClick={cancelRun}
             icon={<MinusCircleOutlined />}
