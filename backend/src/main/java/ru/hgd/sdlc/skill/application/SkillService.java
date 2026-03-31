@@ -436,7 +436,10 @@ public class SkillService {
 
     private void ensureDraftIsEditable(SkillVersion draft) {
         PublicationStatus publicationStatus = draft.getPublicationStatus();
-        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+        if (publicationStatus == PublicationStatus.PENDING_APPROVAL
+                || publicationStatus == PublicationStatus.APPROVED
+                || publicationStatus == PublicationStatus.PUBLISHING
+                || publicationStatus == PublicationStatus.PUBLISHED) {
             throw new ValidationException("Skill draft is locked after publication request");
         }
     }

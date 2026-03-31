@@ -7,7 +7,7 @@ import { DeleteOutlined, FileAddOutlined, FileOutlined, FolderAddOutlined, Folde
 import { apiRequest } from '../api/request.js';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
-import { formatStatusLabel } from '../components/StatusTag.jsx';
+import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
@@ -55,6 +55,7 @@ const scopeOptions = [
   { value: 'organization', label: 'Organization' },
   { value: 'team', label: 'Team' },
 ];
+const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
 
 const DEFAULT_VERSION = '0.1';
 const parseMajorMinor = (version) => {
@@ -559,7 +560,7 @@ export default function SkillEditor() {
 
   const saveSkill = async ({ publish, release = false }) => {
     const publication = (publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedSkillId && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -793,7 +794,7 @@ export default function SkillEditor() {
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !!selectedSkillId && !!skillVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
@@ -1171,7 +1172,9 @@ export default function SkillEditor() {
           {!isCreateRoute && (
             <div style={{ marginTop: 12 }}>
                 <Text className="muted">Publication status</Text>
-                <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
+                <div style={{ marginTop: 4 }}>
+                  <StatusTag value={publicationStatus || 'draft'} />
+                </div>
               </div>
             )}
           </Card>

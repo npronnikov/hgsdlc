@@ -519,7 +519,10 @@ public class FlowService {
 
     private void ensureDraftIsEditable(FlowVersion draft) {
         PublicationStatus publicationStatus = draft.getPublicationStatus();
-        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+        if (publicationStatus == PublicationStatus.PENDING_APPROVAL
+                || publicationStatus == PublicationStatus.APPROVED
+                || publicationStatus == PublicationStatus.PUBLISHING
+                || publicationStatus == PublicationStatus.PUBLISHED) {
             throw new ValidationException("Flow draft is locked after publication request");
         }
     }

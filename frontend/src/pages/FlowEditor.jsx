@@ -198,6 +198,7 @@ const scopeOptions = [
   { value: 'organization', label: 'Organization' },
   { value: 'team', label: 'Team' },
 ];
+const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
 const requiredLabel = (label) => `${label} *`;
 
 const emptyFlow = {
@@ -1261,7 +1262,7 @@ export default function FlowEditor() {
 
   const saveFlow = async ({ publish, release = false }) => {
     const publication = (flowMeta.publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (!isCreateMode && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -1467,7 +1468,7 @@ export default function FlowEditor() {
   };
 
   const publicationStatusValue = (flowMeta.publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !isCreateMode && !!flowMeta.flowId && !!flowVersion && currentStatus === 'draft' && !hasPublicationRequest;
 

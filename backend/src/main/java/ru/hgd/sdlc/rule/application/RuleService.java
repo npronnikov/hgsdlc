@@ -350,7 +350,10 @@ public class RuleService {
 
     private void ensureDraftIsEditable(RuleVersion draft) {
         PublicationStatus publicationStatus = draft.getPublicationStatus();
-        if (publicationStatus != null && publicationStatus != PublicationStatus.DRAFT) {
+        if (publicationStatus == PublicationStatus.PENDING_APPROVAL
+                || publicationStatus == PublicationStatus.APPROVED
+                || publicationStatus == PublicationStatus.PUBLISHING
+                || publicationStatus == PublicationStatus.PUBLISHED) {
             throw new ValidationException("Rule draft is locked after publication request");
         }
     }

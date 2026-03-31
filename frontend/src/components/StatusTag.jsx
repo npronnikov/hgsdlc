@@ -8,6 +8,8 @@ const colorMap = {
   archived: '#64748b',
   waiting_gate: '#d97706',
   waiting_publish: '#0ea5e9',
+  pending_approval: '#d97706',
+  publishing: '#2563eb',
   publish_failed: '#dc2626',
   created: '#2563eb',
   running: '#2563eb',

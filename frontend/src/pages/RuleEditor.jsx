@@ -51,6 +51,7 @@ const scopeOptions = [
   { value: 'organization', label: 'Organization' },
   { value: 'team', label: 'Team' },
 ];
+const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
 
 const DEFAULT_VERSION = '0.1';
 const parseMajorMinor = (version) => {
@@ -320,7 +321,7 @@ export default function RuleEditor() {
 
   const saveRule = async ({ publish, release = false }) => {
     const publication = (publicationStatus || '').toLowerCase();
-    const isLockedAfterPublicationRequest = (!!publication && publication !== 'draft');
+    const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedRuleId && isLockedAfterPublicationRequest) {
       message.error('Редактирование запрещено после отправки на публикацию');
       return false;
@@ -458,7 +459,7 @@ export default function RuleEditor() {
   const releaseVersion = `${releaseMajor}.0`;
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
-  const hasPublicationRequest = (!!publicationStatusValue && publicationStatusValue !== 'draft');
+  const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
   const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
   const canDeleteDraft = !!selectedRuleId && !!ruleVersion && currentStatus === 'draft' && !hasPublicationRequest;
 
