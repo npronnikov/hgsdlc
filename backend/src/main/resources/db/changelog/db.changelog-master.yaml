@@ -65,3 +65,5 @@ databaseChangeLog:
       file: db/changelog/037-catalog-remove-obsolete-attributes.sql
   - include:
       file: db/changelog/038-skill-package-v11.sql
+  - include:
+      file: db/changelog/039-node-execution-step-summary.sql

@@ -52,15 +52,25 @@ public class RuntimeIntegrationTestConfig {
 
                 String prompt = buildPrompt(request);
                 String checksum = ChecksumUtil.sha256(prompt);
+                boolean startNode = request.flowModel() != null
+                        && request.flowModel().getStartNodeId() != null
+                        && request.flowModel().getStartNodeId().equals(request.node().getId());
+                String rework = request.run().getPendingReworkInstruction();
+                boolean taskIsRework = rework != null && !rework.isBlank();
+                String task = taskIsRework ? rework : request.node().getInstruction();
                 AgentPromptBuilder.AgentInput agentInput = new AgentPromptBuilder.AgentInput(
-                        request.flowModel() != null
-                                && request.flowModel().getStartNodeId() != null
-                                && request.flowModel().getStartNodeId().equals(request.node().getId()),
+                        startNode,
                         request.run().getFeatureRequest(),
-                        request.run().getPendingReworkInstruction(),
-                        request.node().getInstruction(),
+                        task,
+                        taskIsRework,
+                        taskIsRework ? request.node().getInstruction() : null,
                         summarizeInputs(request.resolvedContext()),
-                        List.of("summary")
+                        List.of(),
+                        List.of(),
+                        false,
+                        request.workflowProgress() == null ? List.of() : request.workflowProgress(),
+                        request.node().getId(),
+                        request.execution().getAttemptNo()
                 );
                 AgentPromptBuilder.AgentPromptPackage promptPackage = new AgentPromptBuilder.AgentPromptPackage(
                         agentInput,

@@ -30,6 +30,7 @@ public class SettingsController {
                 settings.workspaceRoot(),
                 settings.codingAgent(),
                 settings.aiTimeoutSeconds(),
+                settings.promptLanguage(),
                 settings.catalogRepoUrl(),
                 settings.catalogDefaultBranch(),
                 settings.publishMode(),
@@ -65,12 +66,14 @@ public class SettingsController {
                 request.workspaceRoot(),
                 request.codingAgent(),
                 request.aiTimeoutSeconds(),
+                request.promptLanguage(),
                 user == null ? "system" : user.getUsername()
         );
         RuntimeSettingsResponse response = new RuntimeSettingsResponse(
                 updated.workspaceRoot(),
                 updated.codingAgent(),
                 updated.aiTimeoutSeconds(),
+                updated.promptLanguage(),
                 updated.catalogRepoUrl(),
                 updated.catalogDefaultBranch(),
                 updated.publishMode(),
@@ -113,6 +116,7 @@ public class SettingsController {
                 updated.workspaceRoot(),
                 updated.codingAgent(),
                 updated.aiTimeoutSeconds(),
+                updated.promptLanguage(),
                 updated.catalogRepoUrl(),
                 updated.catalogDefaultBranch(),
                 updated.publishMode(),
@@ -163,13 +167,15 @@ public class SettingsController {
     public record RuntimeSettingsRequest(
             @JsonProperty("workspace_root") String workspaceRoot,
             @JsonProperty("coding_agent") String codingAgent,
-            @JsonProperty("ai_timeout_seconds") Integer aiTimeoutSeconds
+            @JsonProperty("ai_timeout_seconds") Integer aiTimeoutSeconds,
+            @JsonProperty("prompt_language") String promptLanguage
     ) {}
 
     public record RuntimeSettingsResponse(
             @JsonProperty("workspace_root") String workspaceRoot,
             @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("ai_timeout_seconds") int aiTimeoutSeconds,
+            @JsonProperty("prompt_language") String promptLanguage,
             @JsonProperty("catalog_repo_url") String catalogRepoUrl,
             @JsonProperty("catalog_default_branch") String catalogDefaultBranch,
             @JsonProperty("publish_mode") String publishMode,

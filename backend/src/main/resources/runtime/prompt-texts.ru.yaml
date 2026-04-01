@@ -1,34 +1,64 @@
-# Runtime prompt localization/texts for AI nodes.
+# Runtime prompt texts for AI nodes (v2) — Russian.
 # Field comments explain when each text is injected.
 
 sections:
-  # Inserted for all AI nodes; contains the original user request for this run.
-  task_header: "Task:"
-  # Inserted when a pending rework instruction exists.
-  request_clarification_header: "Request clarification:"
-  # Inserted when the node contains instruction text.
-  node_instruction_header: "Instruction:"
-  # Inserted when at least one input item exists.
-  inputs_header: "Available inputs:"
-  # Inserted when at least one expected result exists.
-  expected_results_header: "Expected result:"
-  # Always inserted at the end of the prompt.
-  footer: "Use repository rules and available skills."
+  # Always first. Static system introduction with terms and execution rules.
+  system_intro: |
+    Ты — автоматизированная система разработки программного обеспечения, выполняющая один шаг за роз в многошаговом процессе разработки.
+
+    Термины:
+    - Запрос пользователя: исходная цель текущего запуска флоу (только фоновый контекст).
+    - Инструкция узла: спецификация данного шага.
+    - Задача на переработку: корректировка от ревьюера — присутствует только при отклонении предыдущего результата.
+    - Входные файлы: файлы, предоставленные для данного шага.
+    - Выходные файлы: файлы, которые необходимо создать в результате выполнения шага.
+    - Изменения в проекте: изменения файлов репозитория, требуемые данным шагом.
+    - Итог шага: структурированный отчёт, который необходимо сформировать после завершения работы.
+
+    Правила выполнения:
+    1. Основная задача — Задача на переработку (если есть), иначе — Инструкция узла.
+    2. Запрос пользователя — это фоновый контекст: придерживайтесь его, но не выполняйте заново.
+    3. Используйте только предоставленные Входные файлы. Не придумывайте и не предполагайте отсутствующие данные.
+    4. Создавайте только перечисленные Выходные файлы и Изменения в проекте — без лишних файлов.
+    5. При наличии Задачи на переработку: сначала устраните её, затем убедитесь, что Инструкция узла по-прежнему выполнена.
+    6. При отсутствии необходимых данных: зафиксируйте это в Итоге шага и сформируйте минимально возможный результат.
+
+  # Inserted when previous AI steps have saved summaries.
+  # Placeholders: {step_no}, {step_id}
+  workflow_progress_header: "Прогресс флоу — вы на шаге {step_no} ({step_id}):"
+  # Single step line. Placeholders: {step_no}, {step_id}, {summary}
+  workflow_progress_step: "- Шаг {step_no} — {step_id}: {summary}"
+
+  # Inserted when featureRequest is not null.
+  context_header: "Запрос пользователя:"
+
+  # Inserted always. Header switches based on whether task is a rework.
+  task_header: "Задача:"
+  rework_task_header: "Задача на переработку:"
+  # Shown below the rework task when rework is present, so agent retains step scope.
+  node_instruction_context_header: "Инструкция узла (контекст):"
+  # Delimiters wrapping user-provided instruction text.
+  instruction_begin: "[begin instruction]"
+  instruction_end: "[end instruction]"
+
+  # Inserted when resolvedContext has artifact_ref entries.
+  inputs_header: "Входные файлы:"
+
+  # Inserted when run-scope output artifacts exist.
+  output_files_header: "Выходные файлы:"
+  # Inserted when required expected_mutations or project-scope produced_artifacts exist.
+  project_changes_header: "Ожидаемые файлы для создания в проекте:"
+
+  # Always inserted before footer. Placeholders: {step_id}, {attempt_no}
+  structured_output: "После выполнения работы выведи итог шага в следующем формате:\n\nSTEP_SUMMARY:\n```json\n{\n  \"step_id\": \"{step_id}\",\n  \"attempt\": {attempt_no},\n  \"status\": \"done\",\n  \"actions\": [\"опиши каждое выполненное действие\"],\n  \"output_files\": [\"relative/path/to/produced/file\"],\n  \"project_changes\": [\"relative/path/to/changed/file\"],\n  \"issues\": []\n}\n```"
+
+  # Always last.
+  footer: "Используй правила репозитория и доступные навыки."
 
 inputs:
   # Added for artifact_ref when artifact key cannot be resolved. Placeholder: {path}
-  use_upstream_artifact_by_path: "Use the input artifact by path '{path}'."
+  use_upstream_artifact_by_path: "{path}"
   # Added for artifact_ref when artifact_key is known. Placeholders: {artifact_key}, {path}
-  use_upstream_artifact_by_key_and_path: "Use the input artifact '{artifact_key}' by full path '{path}'."
+  use_upstream_artifact_by_key_and_path: "{artifact_key}: {path}"
   # Added for artifact_ref with transfer_mode=by_value. Placeholders: {artifact_key}, {path}, {size_bytes}, {content}
-  use_upstream_artifact_by_value: "Use inline artifact content '{artifact_key}' (path '{path}', size {size_bytes} bytes):\n```text\n{content}\n```"
-
-expected_results:
-  # Added when required output artifacts exist. Placeholder: {artifacts}
-  required_artifacts: "Create and fill required artifacts: {artifacts}."
-  # Added when required run-scope output artifacts exist. Placeholder: {paths}
-  required_run_paths: "Write generated artifacts strictly to these paths: {paths}. Before finishing, verify each file exists and is not empty."
-  # Added when required expected_mutations exist.
-  required_mutations: "Apply repository changes required for this task."
-  # Always added.
-  summary: "Return a brief summary of completed work."
+  use_upstream_artifact_by_value: "{artifact_key} ({size_bytes} байт):\n```text\n{content}\n```"

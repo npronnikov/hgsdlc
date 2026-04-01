@@ -191,7 +191,7 @@ public class GateDecisionService {
                 gate.getNodeExecutionId(),
                 trimToNull(command.comment())
         );
-        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
+        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId(), null);
         applyTransition(run, null, updatedGate, node.getOnSubmit(), "on_submit");
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }
@@ -225,7 +225,7 @@ public class GateDecisionService {
                 trimToNull(command.comment()),
                 command.reviewedArtifactVersionIds()
         );
-        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
+        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId(), null);
         applyTransition(run, null, updatedGate, node.getOnApprove(), "on_approve");
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }
@@ -276,7 +276,7 @@ public class GateDecisionService {
         } else {
             runtimeStepTxService.replacePendingReworkInstruction(run.getId(), gate.getId(), reworkInstruction);
         }
-        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId());
+        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), gate.getNodeExecutionId(), gate.getNodeId(), null);
         applyTransition(run, null, updatedGate, transitionTarget, "on_rework");
         return new GateActionResult(updatedGate, getRunEntity(run.getId()));
     }

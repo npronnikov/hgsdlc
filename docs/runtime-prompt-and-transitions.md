@@ -619,179 +619,498 @@ FOOTER_SECTION                <- always
 
 ---
 
-## 13. Улучшения промпта и runtime (по предложению)
+## 13. Целевая архитектура prompt (v2)
 
-Ниже целевая доработка prompt-контракта: сделать поведение агента более предсказуемым, а сам prompt — более понятным и менее «корявым».
+Цель — сделать prompt структурированным, с явными приоритетами, чистым форматом ввода/вывода и накапливаемым контекстом между шагами.
 
-### 13.1 Новая вводная (системная рамка)
-
-Рекомендуется всегда начинать prompt с короткой системной вводной:
+### 13.1 Новый шаблон (целевой prompt-template.md)
 
 ```text
-Ты — система разработки ПО, выполняющая текущий шаг flow.
-Flow состоит из шагов (nodes), каждый шаг имеет цель и ограничения.
-Базовые термины:
-- User Request: исходный запрос пользователя.
-- Node Instruction: инструкция текущего шага.
-- Rework Task: уточнение/исправление после ревью (если шаг запущен повторно).
-- Input Artifacts: входные файлы для шага.
-- Expected Artifacts: файлы, которые нужно получить по итогу шага.
-Работай только в рамках текущего шага и его входных данных.
+{{SYSTEM_INTRO_SECTION}}
+{{WORKFLOW_PROGRESS_SECTION}}
+{{CONTEXT_SECTION}}
+{{TASK_SECTION}}
+{{INPUTS_SECTION}}
+{{EXPECTED_OUTPUTS_SECTION}}
+{{STRUCTURED_OUTPUT_SECTION}}
+{{FOOTER_SECTION}}
 ```
 
-Зачем:
-- сразу задаёт роль и границы;
-- убирает двусмысленность между «ты чат-ассистент» и «ты runtime-исполнитель шага».
+Сравнение со старым шаблоном:
 
-### 13.2 Явные приоритеты контекста: что важнее чего
+| Старый токен | Новый токен | Изменение |
+|---|---|---|
+| `{{TASK_SECTION}}` | `{{CONTEXT_SECTION}}` | Переименован; содержит только `featureRequest` как фоновый контекст |
+| `{{REQUEST_CLARIFICATION_SECTION}}` | убран | Поглощён `{{TASK_SECTION}}` |
+| `{{NODE_INSTRUCTION_SECTION}}` | `{{TASK_SECTION}}` | Стал основной задачей; объединяет instruction и rework |
+| `{{INPUTS_SECTION}}` | `{{INPUTS_SECTION}}` | Формат упрощён |
+| `{{EXPECTED_RESULTS_SECTION}}` | `{{EXPECTED_OUTPUTS_SECTION}}` | Формат упрощён; файлы и мутации разделены |
+| — | `{{SYSTEM_INTRO_SECTION}}` | Новый; статичный |
+| — | `{{WORKFLOW_PROGRESS_SECTION}}` | Новый; summary прошлых шагов из runtime |
+| — | `{{STRUCTURED_OUTPUT_SECTION}}` | Новый; инструкция по формату вывода |
+| `{{FOOTER_SECTION}}` | `{{FOOTER_SECTION}}` | Без изменений |
 
-В prompt нужно явно описать приоритет источников задачи.
+---
 
-Предлагаемый порядок приоритетов:
-1. `Rework Task` (если есть) — самый высокий приоритет как корректировка прошлого результата.
-2. `Node Instruction` — цель текущего шага.
-3. `User Request` — глобальная цель флоу (контекст, который нельзя потерять).
-4. `Input Artifacts` — фактические данные для выполнения.
+### 13.2 SYSTEM_INTRO_SECTION — системная вводная (всегда)
 
-Рекомендуемый блок правил поведения:
+Статичный текст, всегда первый. Источник: ключ `sections.system_intro` в `prompt-texts.ru.yaml`.
+
+Целевой текст секции:
 
 ```text
-Правила выполнения:
-1) Если есть Rework Task, сначала выполни его требования.
-2) Затем выполни Node Instruction.
-3) Не противоречь User Request.
-4) Используй только предоставленные Input Artifacts; не выдумывай отсутствующие данные.
-5) Не изменяй файлы вне ожидаемого результата шага.
-6) Если данных не хватает, зафиксируй это в summary и сделай минимально безопасный результат.
+You are an automated software development system executing a single step in a multi-step development flow.
+
+Terms:
+- User Request: the original goal for this flow run (background context only).
+- Node Instruction: the specification for this step.
+- Rework Task: a reviewer correction — present only when the previous result was rejected.
+- Input Files: files provided for this step.
+- Output Files: files you must produce as the step result.
+- Project Changes: repository file modifications required by this step.
+- Step Summary: a structured report you must produce after completing work.
+
+Execution rules:
+1. Your primary task is the Rework Task (if present), otherwise the Node Instruction.
+2. The User Request is background context — stay aligned with it, but do not re-execute it.
+3. Use only the provided Input Files. Do not invent or assume missing data.
+4. Produce only the listed Output Files and Project Changes — no extra files.
+5. If a Rework Task is present: address it first, then verify the Node Instruction is still satisfied.
+6. If required data is missing: note it in the Step Summary and produce the safest minimal result.
 ```
 
-Что делать/что не делать:
-- Делать:
-  - опираться на входные файлы;
-  - соблюдать приоритет rework;
-  - выдавать только релевантные изменения текущему шагу.
-- Не делать:
-  - игнорировать rework при его наличии;
-  - менять произвольные файлы «на будущее»;
-  - подменять входные артефакты предположениями.
+---
 
-### 13.3 Упростить блоки входа/выхода (человеческий формат)
+### 13.3 WORKFLOW_PROGRESS_SECTION — прогресс флоу
 
-Текущий текст `expected_results.required_*` перегружен формулировками. Лучше перейти к прямым спискам.
+Присутствует если есть хотя бы один завершённый AI-шаг с сохранённым summary.
 
-Вместо:
-- "Write generated artifacts strictly to these paths ..."
+Источник данных: `node_execution.step_summary_json` всех предшествующих AI-нод этого run с `status=SUCCEEDED`, в порядке выполнения.
 
-Предлагаемый формат:
+Целевой формат:
+
+```text
+Workflow progress — you are on step {N} ({current_step_id}):
+- Step 1 — {step_id}: {one-liner из actions[0]}
+- Step 2 — {step_id}: {one-liner из actions[0]}
+```
+
+Ключи в yaml: `sections.workflow_progress_header` (с плейсхолдерами `{step_no}`, `{step_id}`), `sections.workflow_progress_step` (с плейсхолдерами `{step_no}`, `{step_id}`, `{summary}`).
+
+Если у шага нет сохранённого summary — шаг пропускается (graceful degradation).
+
+---
+
+### 13.4 CONTEXT_SECTION — запрос пользователя (фоновый контекст)
+
+Присутствует только если `featureRequest != null`.
+
+Источник: `sections.context_header` + `run.featureRequest`.
+
+Формат:
+
+```text
+User Request:
+{featureRequest}
+```
+
+---
+
+### 13.5 TASK_SECTION — задача шага (ключевое изменение)
+
+**Задача шага = Rework Task если есть, иначе Node Instruction.**
+
+Логика формирования секции:
+
+Если `pendingReworkInstruction == null` (нормальный запуск):
+```text
+Task:
+{node.instruction}
+```
+
+Если `pendingReworkInstruction != null` (повтор после rework):
+```text
+Rework Task:
+{pendingReworkInstruction}
+
+Node Instruction (context):
+{node.instruction}
+```
+
+Rework Task — основная задача попытки. Node Instruction показывается как контекст, чтобы агент не вышел за область ответственности шага.
+
+Ключи в yaml: `sections.task_header`, `sections.rework_task_header`, `sections.node_instruction_context_header`.
+
+---
+
+### 13.6 INPUTS_SECTION — входные файлы (упрощённый формат)
+
+Присутствует только если есть `artifact_ref` в `resolvedContext`.
+
+Источник: `sections.inputs_header` + шаблоны из блока `inputs`.
+
+Целевой формат:
 
 ```text
 Input files:
-- <path1>
-- <path2>
-
-Expected output files:
-- <pathA>
-- <pathB>
+- {artifact_key}: {path}
+- {artifact_key} ({size_bytes} bytes):
+```text
+{content}
+```
 ```
 
-И отдельная строка для мутаций проекта:
+Изменения в yaml (блок `inputs`):
 
-```text
-Required project changes:
-- <path/to/file>
+```yaml
+inputs:
+  use_upstream_artifact_by_path: "{path}"
+  use_upstream_artifact_by_key_and_path: "{artifact_key}: {path}"
+  use_upstream_artifact_by_value: "{artifact_key} ({size_bytes} bytes):\n```text\n{content}\n```"
 ```
 
-Плюс короткий policy:
+---
+
+### 13.7 EXPECTED_OUTPUTS_SECTION — ожидаемые результаты (упрощённый формат)
+
+Заменяет старый `EXPECTED_RESULTS_SECTION`. Выводятся только конкретные пути — без обёрток типа «Create and fill required artifacts».
+
+Секция `Output files:` — run-scope пути required `produced_artifacts` (через `runScopeArtifactPath()`). Выводится только если есть такие пути.
+
+Секция `Project changes:` — пути required `expected_mutations`. Выводится только если есть required мутации.
+
+Целевой формат:
 
 ```text
-Ожидаю как результат только перечисленные output files и required project changes.
+Output files:
+- .hgsdlc/nodes/{node_id}/attempt-{N}/{path}
+
+Project changes:
+- {project-scoped path}
 ```
 
-Идея по реализации без ломки модели:
-- добавить новые ключи в `prompt-texts.ru.yaml`:
-  - `inputs_header_simple`
-  - `expected_output_files_header`
-  - `required_project_changes_header`
-- в `AgentPromptBuilder` рендерить «простую форму» для `inputs/expected`.
+Если нет ни output files, ни project changes — `EXPECTED_OUTPUTS_SECTION` пустой (summary переходит в `STRUCTURED_OUTPUT_SECTION`).
 
-### 13.4 Уточнить, что такое "задача" шага
+Поле `output_artifact` на ноде: устаревает — не даёт пути, не может быть показано в упрощённом формате. Следует использовать `produced_artifacts` с явными путями.
 
-В документации и prompt явно зафиксировать:
-- Текущая задача шага =
-  - `Rework Task`, если шаг запущен после rework;
-  - иначе `Node Instruction`.
-- `User Request` всегда остаётся фоном и не должен теряться.
+Ключи в yaml: `sections.output_files_header`, `sections.project_changes_header`.
+Удалить старые ключи из блока `expected_results`: `required_artifacts`, `required_run_paths`, `required_mutations`, `summary`.
 
-Это снимет путаницу, где «задача» одновременно и пользовательский запрос, и инструкция ноды.
+---
 
-### 13.5 Structured output шага (обязательный)
+### 13.8 STRUCTURED_OUTPUT_SECTION — структурированный вывод (всегда)
 
-Предложение: в конце каждого AI-шага требовать структурированный summary в стабильном формате.
+Всегда присутствует для AI-нод. Статичный шаблон с плейсхолдерами `{step_id}` и `{attempt_no}`, которые runtime подставляет при рендере.
 
-Пример целевого формата:
+Источник: `sections.structured_output` в yaml.
 
-```text
-STEP_SUMMARY_JSON:
+Целевой текст секции:
+
+````text
+After completing your work, output a step summary in this exact format:
+
+STEP_SUMMARY:
+```json
 {
-  "step_id": "ai-build-plan",
+  "step_id": "{step_id}",
+  "attempt": {attempt_no},
+  "status": "done",
+  "actions": ["describe each main action taken"],
+  "output_files": ["relative/path/to/produced/file"],
+  "project_changes": ["relative/path/to/changed/file"],
+  "issues": []
+}
+```
+````
+
+Требования к формату:
+- Фиксированный префикс `STEP_SUMMARY:` перед JSON-блоком.
+- Валидный JSON.
+- Обязательные поля: `step_id`, `attempt`, `status`, `actions`.
+- `status`: `"done"` если всё выполнено; `"partial"` если часть не выполнена — описать в `issues`.
+- Если `STEP_SUMMARY` отсутствует в stdout — runtime логирует warning, нода считается успешной (graceful degradation).
+
+---
+
+### 13.9 Изменения в prompt-texts.ru.yaml
+
+Новая структура:
+
+```yaml
+sections:
+  system_intro: |
+    You are an automated software development system...
+    (полный текст из 13.2)
+  context_header: "User Request:"
+  task_header: "Task:"
+  rework_task_header: "Rework Task:"
+  node_instruction_context_header: "Node Instruction (context):"
+  workflow_progress_header: "Workflow progress — you are on step {step_no} ({step_id}):"
+  workflow_progress_step: "- Step {step_no} — {step_id}: {summary}"
+  inputs_header: "Input files:"
+  output_files_header: "Output files:"
+  project_changes_header: "Project changes:"
+  structured_output: |
+    After completing your work, output a step summary in this exact format:
+    (полный текст из 13.8)
+  footer: "Use repository rules and available skills."
+
+inputs:
+  use_upstream_artifact_by_path: "{path}"
+  use_upstream_artifact_by_key_and_path: "{artifact_key}: {path}"
+  use_upstream_artifact_by_value: "{artifact_key} ({size_bytes} bytes):\n```text\n{content}\n```"
+```
+
+Удалить: `request_clarification_header`, `node_instruction_header`, `expected_results_header`.
+Удалить весь старый блок `expected_results`.
+
+---
+
+### 13.10 Изменения в AgentInput и AgentPromptBuilder
+
+**Новая структура `AgentInput`:**
+
+```java
+public record AgentInput(
+    boolean startNode,                            // для audit (без изменений)
+    String context,                               // run.featureRequest (фоновый контекст)
+    String task,                                  // rework instruction или node.instruction
+    boolean taskIsRework,                         // true если task = rework
+    String nodeInstructionContext,                // node.instruction при rework (для контекста)
+    List<String> inputs,                          // строки входных файлов
+    List<String> outputFiles,                     // run-scope пути ожидаемых артефактов
+    List<String> projectChangePaths,              // пути expected_mutations (если известны)
+    boolean hasProjectChanges,                    // есть required mutations
+    List<WorkflowProgressEntry> workflowProgress, // summary прошлых шагов
+    String stepId,                                // для STRUCTURED_OUTPUT_SECTION
+    int attemptNo
+)
+
+public record WorkflowProgressEntry(int stepNo, String stepId, String summary) {}
+```
+
+Изменения в `build()`:
+- `context` ← `run.featureRequest`
+- `task` ← `run.pendingReworkInstruction` если есть, иначе `node.instruction`
+- `taskIsRework` ← `pendingReworkInstruction != null`
+- `nodeInstructionContext` ← `node.instruction` только если `taskIsRework == true`
+- `workflowProgress` ← передаётся из `RunStepService` (загружается перед вызовом builder)
+- `stepId` ← `node.getId()`
+- `attemptNo` ← `execution.getAttemptNo()`
+
+---
+
+### 13.11 Runtime: извлечение и хранение step summary
+
+**После успешного завершения AI-ноды в `executeAiNode()`:**
+
+1. Искать в stdout последнее вхождение строки `STEP_SUMMARY:`.
+2. Извлечь JSON из следующего ` ```json ... ``` ` блока.
+3. Валидировать обязательные поля (`step_id`, `attempt`, `status`, `actions`).
+4. Сохранить в `NodeExecutionEntity.stepSummaryJson`.
+5. Если не найдено или невалидно → `stepSummaryJson = null`, audit warning, нода успешна.
+
+**При сборке prompt для следующей AI-ноды:**
+
+1. Загрузить все `NodeExecutionEntity` с `stepSummaryJson != null` для текущего run, упорядоченные по `executedAt`.
+2. Назначить порядковые номера (1-based).
+3. Из каждого summary взять `actions[0]` как one-liner.
+4. Передать список `WorkflowProgressEntry` в `AgentPromptBuilder.build()`.
+
+**Схема данных:**
+
+```sql
+ALTER TABLE node_execution ADD COLUMN step_summary_json TEXT;
+```
+
+---
+
+### 13.12 Матрица изменений
+
+| Компонент | Изменение |
+|---|---|
+| `prompt-template.md` | Полностью переписать (8 новых токенов вместо 6) |
+| `prompt-texts.ru.yaml` | Новые ключи, удалить старые |
+| `AgentPromptBuilder` | Новая структура `AgentInput`, переработать все методы рендера |
+| `RunStepService.executeAiNode()` | Загрузка `workflowProgress` перед вызовом builder + парсинг `STEP_SUMMARY` из stdout + сохранение |
+| `NodeExecutionEntity` | Новое поле `stepSummaryJson TEXT` |
+| DB migration | `ALTER TABLE node_execution ADD COLUMN step_summary_json TEXT` |
+| Тесты | Snapshot новых форматов; тест парсинга `STEP_SUMMARY`; интеграционный тест: summary шага N появляется в prompt шага N+1 |
+
+---
+
+## 14. Примеры prompt в новом формате
+
+Тот же сквозной пример из раздела 11 (`Добавь новую кнопку в интерфейс`), в новом формате v2.
+
+### 14.1 Node 1: `ai-analyze-request` — шаг 1, нет прогресса
+
+Первый шаг: нет предыдущих summary, нет rework, нет входных артефактов.
+
+````text
+[source: SYSTEM_INTRO_SECTION | sections.system_intro]
+You are an automated software development system executing a single step in a multi-step development flow.
+
+Terms:
+- User Request: the original goal for this flow run (background context only).
+- Node Instruction: the specification for this step.
+- Rework Task: a reviewer correction — present only when the previous result was rejected.
+- Input Files: files provided for this step.
+- Output Files: files you must produce as the step result.
+- Project Changes: repository file modifications required by this step.
+- Step Summary: a structured report you must produce after completing work.
+
+Execution rules:
+1. Your primary task is the Rework Task (if present), otherwise the Node Instruction.
+2. The User Request is background context — stay aligned with it, but do not re-execute it.
+3. Use only the provided Input Files. Do not invent or assume missing data.
+4. Produce only the listed Output Files and Project Changes — no extra files.
+5. If a Rework Task is present: address it first, then verify the Node Instruction is still satisfied.
+6. If required data is missing: note it in the Step Summary and produce the safest minimal result.
+
+[source: CONTEXT_SECTION | sections.context_header + run.featureRequest]
+User Request:
+Добавь новую кнопку в интерфейс
+
+[source: TASK_SECTION | sections.task_header + node.instruction]
+Task:
+Проанализируй запрос пользователя и задай 5 релевантных вопросов.
+Сохрани результат в questions.md.
+
+[source: EXPECTED_OUTPUTS_SECTION | sections.output_files_header + runScopeArtifactPath]
+Output files:
+- .hgsdlc/nodes/ai-analyze-request/attempt-1/questions.md
+
+[source: STRUCTURED_OUTPUT_SECTION | sections.structured_output + {step_id} + {attempt_no}]
+After completing your work, output a step summary in this exact format:
+
+STEP_SUMMARY:
+```json
+{
+  "step_id": "ai-analyze-request",
   "attempt": 1,
   "status": "done",
-  "completed_actions": [
-    "Сформирован план реализации",
-    "План сохранён в plan.md"
-  ],
-  "output_files": ["plan.md"],
+  "actions": ["describe each main action taken"],
+  "output_files": [".hgsdlc/nodes/ai-analyze-request/attempt-1/questions.md"],
   "project_changes": [],
-  "open_questions": [],
-  "risks": []
+  "issues": []
 }
 ```
 
-Минимальные требования:
-- фиксированный префикс (`STEP_SUMMARY_JSON:`);
-- валидный JSON;
-- обязательные поля (`step_id`, `status`, `completed_actions`, `output_files`).
+[source: FOOTER_SECTION | sections.footer]
+Use repository rules and available skills.
+````
 
-### 13.6 Протащить summary между шагами в runtime
+### 14.2 Node 3: `ai-write-requirements` — шаг 2, есть прогресс, inputs by_ref
 
-Предложение по системе:
-1. На завершении AI-node runtime парсит `STEP_SUMMARY_JSON`.
-2. Сохраняет summary как:
-- отдельный артефакт шага (`step-summary.json`), и/или
-- запись в БД `node_execution_summary_json`.
-3. При сборке следующего prompt добавляет блок:
+````text
+[source: SYSTEM_INTRO_SECTION | sections.system_intro]
+You are an automated software development system...
+(полный текст вводной — см. 13.2)
 
-```text
-Workflow progress:
-You are on step <N> (<step_id>).
-Previous steps summary:
-- Step 1: ...
-- Step 2: ...
-- Step 3: ...
+[source: WORKFLOW_PROGRESS_SECTION | sections.workflow_progress_header + node_execution.step_summary_json]
+Workflow progress — you are on step 2 (ai-write-requirements):
+- Step 1 — ai-analyze-request: Generated 5 clarifying questions about UI button requirements.
+
+[source: CONTEXT_SECTION | sections.context_header + run.featureRequest]
+User Request:
+Добавь новую кнопку в интерфейс
+
+[source: TASK_SECTION | sections.task_header + node.instruction]
+Task:
+На основании запроса пользователя и ответов напиши требования.
+Сохрани требования в requirements.md.
+
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_key_and_path]
+Input files:
+- questions: /workspace/<run-id>/.hgsdlc/nodes/human-answer-questions/attempt-1/questions.md
+
+[source: EXPECTED_OUTPUTS_SECTION | sections.output_files_header]
+Output files:
+- .hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md
+
+[source: STRUCTURED_OUTPUT_SECTION]
+After completing your work, output a step summary in this exact format:
+
+STEP_SUMMARY:
+```json
+{
+  "step_id": "ai-write-requirements",
+  "attempt": 1,
+  "status": "done",
+  "actions": ["describe each main action taken"],
+  "output_files": [".hgsdlc/nodes/ai-write-requirements/attempt-1/requirements.md"],
+  "project_changes": [],
+  "issues": []
+}
 ```
 
-Целевой эффект:
-- агент понимает контекст цепочки без перечитывания всех файлов;
-- меньше повторной работы и расхождений между шагами;
-- rework становится более управляемым (агент видит, что уже делал раньше).
+[source: FOOTER_SECTION]
+Use repository rules and available skills.
+````
 
-### 13.7 Минимальный план внедрения
+### 14.3 Node 6: `ai-implement` — шаг 5, rework attempt-2
 
-1. Prompt-слой:
-- добавить системную вводную;
-- добавить блок приоритетов;
-- упростить рендер input/output секций.
+Ключевое отличие: `TASK_SECTION` меняет заголовок на `Rework Task:`, ниже — `Node Instruction (context):`.
 
-2. Summary-слой:
-- добавить обязательный structured output в footer-инструкцию;
-- добавить в runtime extraction + persistence summary.
+````text
+[source: SYSTEM_INTRO_SECTION]
+You are an automated software development system...
 
-3. Контекст следующего шага:
-- добавить новую секцию `WORKFLOW_PROGRESS_SECTION` в `prompt-template.md`;
-- заполнять её summary последних успешных шагов.
+[source: WORKFLOW_PROGRESS_SECTION]
+Workflow progress — you are on step 5 (ai-implement):
+- Step 1 — ai-analyze-request: Generated 5 clarifying questions about UI button requirements.
+- Step 2 — ai-write-requirements: Wrote requirements.md with 3 requirements.
+- Step 3 — ai-build-plan: Created plan.md with 4 implementation steps.
 
-4. Тесты:
-- snapshot-тесты нового prompt-формата;
-- тест на парсинг/сохранение summary;
-- интеграционный тест: summary шага N появляется в prompt шага N+1.
+[source: CONTEXT_SECTION | sections.context_header + run.featureRequest]
+User Request:
+Добавь новую кнопку в интерфейс
+
+[source: TASK_SECTION | sections.rework_task_header + run.pendingReworkInstruction + sections.node_instruction_context_header + node.instruction]
+Rework Task:
+Файл frontend/src/components/ActionButton.tsx, строки 1-10: Переведи данный текст на русский.
+
+Node Instruction (context):
+Разработай функционал согласно запросу пользователя, требованиям и плану.
+
+[source: INPUTS_SECTION | sections.inputs_header + inputs.use_upstream_artifact_by_value]
+Input files:
+- requirements (112 bytes):
+```text
+- Добавить кнопку "Отправить"
+- Расположить справа от поля ввода
+- Поддержать disabled/loading
+```
+- plan (167 bytes):
+```text
+1. Обновить компонент формы.
+2. Добавить кнопку ActionButton.
+3. Добавить состояния disabled/loading.
+4. Обновить тесты UI.
+```
+
+[source: EXPECTED_OUTPUTS_SECTION | sections.project_changes_header + expected_mutations paths]
+Project changes:
+- frontend/src/components/ActionButton.tsx
+
+[source: STRUCTURED_OUTPUT_SECTION]
+After completing your work, output a step summary in this exact format:
+
+STEP_SUMMARY:
+```json
+{
+  "step_id": "ai-implement",
+  "attempt": 2,
+  "status": "done",
+  "actions": ["describe each main action taken"],
+  "output_files": [],
+  "project_changes": ["frontend/src/components/ActionButton.tsx"],
+  "issues": []
+}
+```
+
+[source: FOOTER_SECTION]
+Use repository rules and available skills.
+````
 

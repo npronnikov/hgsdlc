@@ -2,6 +2,7 @@ package ru.hgd.sdlc.runtime.application.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,7 @@ import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.domain.PathRequirement;
 import ru.hgd.sdlc.runtime.application.AgentInvocationContext;
+import ru.hgd.sdlc.runtime.application.AgentPromptBuilder;
 import ru.hgd.sdlc.runtime.application.CodingAgentException;
 import ru.hgd.sdlc.runtime.application.CodingAgentStrategy;
 import ru.hgd.sdlc.runtime.application.ExecutionTraceBuilder;
@@ -182,6 +184,7 @@ public class RunStepService {
         FlowModel flowModel = parseFlowSnapshot(run);
         String pendingReworkInstruction = trimToNull(run.getPendingReworkInstruction());
         List<Map<String, Object>> resolvedContext = resolveExecutionContext(run, node);
+        List<AgentPromptBuilder.WorkflowProgressEntry> workflowProgress = loadWorkflowProgress(run.getId());
         CodingAgentStrategy strategy = resolveCodingAgentStrategy(flowModel);
         AgentInvocationContext agentInvocationContext;
         try {
@@ -192,7 +195,8 @@ public class RunStepService {
                     execution,
                     resolvedContext,
                     resolveProjectRoot(run),
-                    resolveNodeExecutionRoot(run, execution)
+                    resolveNodeExecutionRoot(run, execution),
+                    workflowProgress
             ));
         } catch (CodingAgentException ex) {
             throw new NodeFailureException(ex.getErrorCode(), ex.getMessage(), false, ex.getDetails());
@@ -280,7 +284,15 @@ public class RunStepService {
                 )
         );
 
-        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId());
+        String stepSummaryJson = extractStepSummary(agentResult.stdout());
+        if (stepSummaryJson == null) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(), execution.getId(), null,
+                    "step_summary_missing", ActorType.SYSTEM, "runtime",
+                    Map.of("node_id", node.getId())
+            );
+        }
+        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), stepSummaryJson);
         if (pendingReworkInstruction != null) {
             runtimeStepTxService.consumePendingReworkInstruction(run.getId(), execution.getId(), node.getId());
         }
@@ -334,7 +346,7 @@ public class RunStepService {
                 )
         );
 
-        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId());
+        runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), null);
         applyTransition(run, execution, null, node.getOnSuccess(), "on_success");
         return true;
     }
@@ -1751,6 +1763,74 @@ public class RunStepService {
 
         public Map<String, Object> getDetails() {
             return details;
+        }
+    }
+
+    private List<AgentPromptBuilder.WorkflowProgressEntry> loadWorkflowProgress(UUID runId) {
+        List<NodeExecutionEntity> executions = nodeExecutionRepository
+                .findByRunIdAndNodeKindAndStatusAndStepSummaryJsonIsNotNullOrderByStartedAtAsc(
+                        runId, "ai", NodeExecutionStatus.SUCCEEDED);
+        List<AgentPromptBuilder.WorkflowProgressEntry> result = new ArrayList<>();
+        for (int i = 0; i < executions.size(); i++) {
+            NodeExecutionEntity exec = executions.get(i);
+            String summary = extractFirstAction(exec.getStepSummaryJson());
+            if (summary != null) {
+                result.add(new AgentPromptBuilder.WorkflowProgressEntry(i + 1, exec.getNodeId(), summary));
+            }
+        }
+        return result;
+    }
+
+    private String extractFirstAction(String stepSummaryJson) {
+        if (stepSummaryJson == null) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(stepSummaryJson);
+            JsonNode actions = root.path("actions");
+            if (actions.isArray() && !actions.isEmpty()) {
+                String action = actions.get(0).asText("").trim();
+                return action.isEmpty() ? null : action;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private String extractStepSummary(String stdout) {
+        if (stdout == null) {
+            return null;
+        }
+        int markerIdx = stdout.lastIndexOf("STEP_SUMMARY:");
+        if (markerIdx < 0) {
+            return null;
+        }
+        String after = stdout.substring(markerIdx + "STEP_SUMMARY:".length());
+        int jsonBlockStart = after.indexOf("```json");
+        if (jsonBlockStart < 0) {
+            return null;
+        }
+        int contentStart = after.indexOf('\n', jsonBlockStart);
+        if (contentStart < 0) {
+            return null;
+        }
+        contentStart++;
+        int jsonEnd = after.indexOf("```", contentStart);
+        if (jsonEnd < 0) {
+            return null;
+        }
+        String json = after.substring(contentStart, jsonEnd).trim();
+        try {
+            JsonNode root = objectMapper.readTree(json);
+            if (root.path("step_id").isMissingNode()
+                    || root.path("attempt").isMissingNode()
+                    || root.path("status").isMissingNode()
+                    || root.path("actions").isMissingNode()) {
+                return null;
+            }
+            return json;
+        } catch (Exception e) {
+            return null;
         }
     }
 

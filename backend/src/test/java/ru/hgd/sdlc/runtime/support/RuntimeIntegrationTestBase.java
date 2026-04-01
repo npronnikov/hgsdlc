@@ -194,7 +194,7 @@ public abstract class RuntimeIntegrationTestBase {
         String repoUrl = settingsService.getCatalogRepoUrl();
         String suffix = Integer.toHexString(repoUrl.toLowerCase(Locale.ROOT).hashCode());
         return Path.of(settingsService.getWorkspaceRoot()).toAbsolutePath().normalize()
-                .resolve(".catalog-mirror")
+                .resolve(".catalog-repo")
                 .resolve(suffix);
     }
 

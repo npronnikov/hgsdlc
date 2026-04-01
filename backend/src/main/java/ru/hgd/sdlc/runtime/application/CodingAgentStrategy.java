@@ -20,6 +20,7 @@ public interface CodingAgentStrategy {
             NodeExecutionEntity execution,
             List<Map<String, Object>> resolvedContext,
             Path projectRoot,
-            Path nodeExecutionRoot
+            Path nodeExecutionRoot,
+            List<AgentPromptBuilder.WorkflowProgressEntry> workflowProgress
     ) {}
 }

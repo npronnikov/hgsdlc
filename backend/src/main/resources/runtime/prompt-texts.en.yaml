@@ -1,0 +1,64 @@
+# Runtime prompt texts for AI nodes (v2).
+# Field comments explain when each text is injected.
+
+sections:
+  # Always first. Static system introduction with terms and execution rules.
+  system_intro: |
+    You are an automated software development system executing a single step at a time in a multi-step development flow.
+
+    Terms:
+    - User Request: the original goal for this flow run (background context only).
+    - Node Instruction: the specification for this step.
+    - Rework Task: a reviewer correction — present only when the previous result was rejected.
+    - Input Files: files provided for this step.
+    - Output Files: files you must produce as the step result.
+    - Project Changes: repository file modifications required by this step.
+    - Step Summary: a structured report you must produce after completing work.
+
+    Execution rules:
+    1. Your primary task is the Rework Task (if present), otherwise the Node Instruction.
+    2. The User Request is background context — stay aligned with it, but do not re-execute it.
+    3. Use only the provided Input Files. Do not invent or assume missing data.
+    4. Produce only the listed Output Files and Project Changes — no extra files.
+    5. If a Rework Task is present: address it first, then verify the Node Instruction is still satisfied.
+    6. If required data is missing: note it in the Step Summary and produce the safest minimal result.
+
+  # Inserted when previous AI steps have saved summaries.
+  # Placeholders: {step_no}, {step_id}
+  workflow_progress_header: "Workflow progress — you are on step {step_no} ({step_id}):"
+  # Single step line. Placeholders: {step_no}, {step_id}, {summary}
+  workflow_progress_step: "- Step {step_no} — {step_id}: {summary}"
+
+  # Inserted when featureRequest is not null.
+  context_header: "User Request:"
+
+  # Inserted always. Header switches based on whether task is a rework.
+  task_header: "Task:"
+  rework_task_header: "Rework Task:"
+  # Shown below the rework task when rework is present, so agent retains step scope.
+  node_instruction_context_header: "Node Instruction (context):"
+  # Delimiters wrapping user-provided instruction text.
+  instruction_begin: "[begin instruction]"
+  instruction_end: "[end instruction]"
+
+  # Inserted when resolvedContext has artifact_ref entries.
+  inputs_header: "Input files:"
+
+  # Inserted when run-scope output artifacts exist.
+  output_files_header: "Output files:"
+  # Inserted when required expected_mutations or project-scope produced_artifacts exist.
+  project_changes_header: "Expected files to create in project:"
+
+  # Always inserted before footer. Placeholders: {step_id}, {attempt_no}
+  structured_output: "After completing your work, output a step summary in this exact format:\n\nSTEP_SUMMARY:\n```json\n{\n  \"step_id\": \"{step_id}\",\n  \"attempt\": {attempt_no},\n  \"status\": \"done\",\n  \"actions\": [\"describe each main action taken\"],\n  \"output_files\": [\"relative/path/to/produced/file\"],\n  \"project_changes\": [\"relative/path/to/changed/file\"],\n  \"issues\": []\n}\n```"
+
+  # Always last.
+  footer: "Use repository rules and available skills."
+
+inputs:
+  # Added for artifact_ref when artifact key cannot be resolved. Placeholder: {path}
+  use_upstream_artifact_by_path: "{path}"
+  # Added for artifact_ref when artifact_key is known. Placeholders: {artifact_key}, {path}
+  use_upstream_artifact_by_key_and_path: "{artifact_key}: {path}"
+  # Added for artifact_ref with transfer_mode=by_value. Placeholders: {artifact_key}, {path}, {size_bytes}, {content}
+  use_upstream_artifact_by_value: "{artifact_key} ({size_bytes} bytes):\n```text\n{content}\n```"

@@ -22,4 +22,10 @@ public interface NodeExecutionRepository extends JpaRepository<NodeExecutionEnti
             UUID runId,
             List<NodeExecutionStatus> statuses
     );
+
+    List<NodeExecutionEntity> findByRunIdAndNodeKindAndStatusAndStepSummaryJsonIsNotNullOrderByStartedAtAsc(
+            UUID runId,
+            String nodeKind,
+            NodeExecutionStatus status
+    );
 }

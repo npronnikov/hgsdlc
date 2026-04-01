@@ -20,6 +20,7 @@ export default function Settings() {
         workspace_root: data?.workspace_root || '/tmp/workspace',
         coding_agent: data?.coding_agent || 'qwen',
         ai_timeout_seconds: data?.ai_timeout_seconds ?? 900,
+        prompt_language: data?.prompt_language || 'en',
         catalog_repo_url: data?.catalog_repo_url || DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: data?.catalog_default_branch || 'main',
         git_username: data?.git_username || '',
@@ -35,6 +36,7 @@ export default function Settings() {
         workspace_root: '/tmp/workspace',
         coding_agent: 'qwen',
         ai_timeout_seconds: 900,
+        prompt_language: 'en',
         catalog_repo_url: DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: 'main',
         git_username: '',
@@ -67,6 +69,7 @@ export default function Settings() {
           workspace_root: values.workspace_root,
           coding_agent: values.coding_agent,
           ai_timeout_seconds: values.ai_timeout_seconds,
+          prompt_language: values.prompt_language,
         }),
       });
       await apiRequest('/settings/catalog', {
@@ -182,6 +185,19 @@ export default function Settings() {
             extra="Maximum wait time for AI node and command execution (in seconds). Default is 900 (15 minutes)."
           >
             <InputNumber min={10} max={7200} style={{ width: '100%' }} placeholder="900" />
+          </Form.Item>
+          <Form.Item
+            label="Prompt language"
+            name="prompt_language"
+            rules={[{ required: true, message: 'Select prompt language' }]}
+            extra="Language used for AI prompt texts (headers, instructions, structured output format)."
+          >
+            <Select
+              options={[
+                { value: 'en', label: 'English' },
+                { value: 'ru', label: 'Russian' },
+              ]}
+            />
           </Form.Item>
         </Form>
         )}

@@ -59,6 +59,7 @@ public class SettingsService {
     public static final String WORKSPACE_ROOT_KEY = "runtime.workspace_root";
     public static final String CODING_AGENT_KEY = "runtime.coding_agent";
     public static final String AI_TIMEOUT_SECONDS_KEY = "runtime.ai_timeout_seconds";
+    public static final String PROMPT_LANGUAGE_KEY = "runtime.prompt_language";
     public static final String CATALOG_REPO_URL_KEY = "catalog.repo_url";
     public static final String CATALOG_DEFAULT_BRANCH_KEY = "catalog.default_branch";
     public static final String CATALOG_PUBLISH_MODE_KEY = "catalog.publish_mode";
@@ -76,6 +77,7 @@ public class SettingsService {
     private static final String DEFAULT_WORKSPACE_ROOT = "/tmp/workspace";
     private static final String DEFAULT_CODING_AGENT = "qwen";
     private static final int DEFAULT_AI_TIMEOUT_SECONDS = 900;
+    private static final String DEFAULT_PROMPT_LANGUAGE = "en";
     private static final String DEFAULT_CATALOG_REPO_URL = "https://github.com/npronnikov/catalog.git";
     private static final String DEFAULT_CATALOG_DEFAULT_BRANCH = "main";
     private static final String DEFAULT_CATALOG_PUBLISH_MODE = "pr";
@@ -163,6 +165,14 @@ public class SettingsService {
         return repository.findById(AI_TIMEOUT_SECONDS_KEY);
     }
 
+    public String getPromptLanguage() {
+        return repository.findById(PROMPT_LANGUAGE_KEY)
+                .map(SystemSetting::getSettingValue)
+                .filter(v -> !v.isBlank())
+                .map(this::normalizePromptLanguage)
+                .orElse(DEFAULT_PROMPT_LANGUAGE);
+    }
+
     public SystemSetting updateWorkspaceRoot(String workspaceRoot, String actorId) {
         String normalized = normalizeWorkspaceRoot(workspaceRoot);
         SystemSetting setting = repository.findById(WORKSPACE_ROOT_KEY)
@@ -193,6 +203,16 @@ public class SettingsService {
         return repository.save(setting);
     }
 
+    public SystemSetting updatePromptLanguage(String language, String actorId) {
+        String normalized = normalizePromptLanguage(language);
+        SystemSetting setting = repository.findById(PROMPT_LANGUAGE_KEY)
+                .orElseGet(() -> SystemSetting.builder().settingKey(PROMPT_LANGUAGE_KEY).build());
+        setting.setSettingValue(normalized);
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
     @Transactional
     public RuntimeSettings getRuntimeSettings() {
         Optional<SystemSetting> workspaceSetting = getWorkspaceRootSetting();
@@ -210,6 +230,7 @@ public class SettingsService {
         Optional<SystemSetting> gitPassword = repository.findById(CATALOG_GIT_PASSWORD_KEY);
         Optional<SystemSetting> localGitUser = repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY);
         Optional<SystemSetting> localGitEmail = repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY);
+        Optional<SystemSetting> promptLanguageSetting = repository.findById(PROMPT_LANGUAGE_KEY);
         SystemSetting latestSetting = latestOf(
                 workspaceSetting.orElse(null),
                 codingAgentSetting.orElse(null),
@@ -225,12 +246,14 @@ public class SettingsService {
                 gitUser.orElse(null),
                 gitPassword.orElse(null),
                 localGitUser.orElse(null),
-                localGitEmail.orElse(null)
+                localGitEmail.orElse(null),
+                promptLanguageSetting.orElse(null)
         );
         return new RuntimeSettings(
                 workspaceSetting.map(SystemSetting::getSettingValue).orElse(getWorkspaceRoot()),
                 codingAgentSetting.map(SystemSetting::getSettingValue).orElse(getRuntimeCodingAgent()),
                 aiTimeoutSetting.map(SystemSetting::getSettingValue).map(Integer::parseInt).orElse(DEFAULT_AI_TIMEOUT_SECONDS),
+                promptLanguageSetting.map(SystemSetting::getSettingValue).map(this::normalizePromptLanguage).orElse(DEFAULT_PROMPT_LANGUAGE),
                 catalogRepoUrl.map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 catalogBranch.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 publishMode.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
@@ -249,15 +272,17 @@ public class SettingsService {
     }
 
     @Transactional
-    public RuntimeSettings updateRuntimeSettings(String workspaceRoot, String codingAgent, int aiTimeoutSeconds, String actorId) {
+    public RuntimeSettings updateRuntimeSettings(String workspaceRoot, String codingAgent, int aiTimeoutSeconds, String promptLanguage, String actorId) {
         SystemSetting workspaceSetting = updateWorkspaceRoot(workspaceRoot, actorId);
         SystemSetting codingAgentSetting = updateRuntimeCodingAgent(codingAgent, actorId);
         SystemSetting aiTimeoutSetting = updateAiTimeoutSeconds(aiTimeoutSeconds, actorId);
-        SystemSetting latestSetting = latestOf(workspaceSetting, codingAgentSetting, aiTimeoutSetting);
+        SystemSetting promptLanguageSetting = updatePromptLanguage(promptLanguage, actorId);
+        SystemSetting latestSetting = latestOf(workspaceSetting, codingAgentSetting, aiTimeoutSetting, promptLanguageSetting);
         return new RuntimeSettings(
                 workspaceSetting.getSettingValue(),
                 codingAgentSetting.getSettingValue(),
                 Integer.parseInt(aiTimeoutSetting.getSettingValue()),
+                promptLanguageSetting.getSettingValue(),
                 repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 repository.findById(CATALOG_DEFAULT_BRANCH_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 repository.findById(CATALOG_PUBLISH_MODE_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
@@ -308,6 +333,7 @@ public class SettingsService {
                 getWorkspaceRoot(),
                 getRuntimeCodingAgent(),
                 getAiTimeoutSeconds(),
+                getPromptLanguage(),
                 repo.getSettingValue(),
                 branch.getSettingValue(),
                 mode.getSettingValue(),
@@ -1232,6 +1258,17 @@ public class SettingsService {
         return path.toString();
     }
 
+    private String normalizePromptLanguage(String language) {
+        if (language == null || language.isBlank()) {
+            return DEFAULT_PROMPT_LANGUAGE;
+        }
+        String normalized = language.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.equals("en") && !normalized.equals("ru")) {
+            throw new ValidationException("prompt_language must be en or ru");
+        }
+        return normalized;
+    }
+
     private String normalizeCodingAgent(String codingAgent) {
         if (codingAgent == null || codingAgent.isBlank()) {
             throw new ValidationException("coding_agent is required");
@@ -1273,6 +1310,7 @@ public class SettingsService {
             String workspaceRoot,
             String codingAgent,
             int aiTimeoutSeconds,
+            String promptLanguage,
             String catalogRepoUrl,
             String catalogDefaultBranch,
             String publishMode,

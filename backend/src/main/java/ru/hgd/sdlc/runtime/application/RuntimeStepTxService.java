@@ -266,7 +266,8 @@ public class RuntimeStepTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public NodeExecutionEntity markNodeExecutionSucceeded(UUID runId, UUID executionId, String nodeId) {
+    public NodeExecutionEntity markNodeExecutionSucceeded(
+            UUID runId, UUID executionId, String nodeId, String stepSummaryJson) {
         RunEntity run = getRun(runId);
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
         if (run.getStatus() == RunStatus.CANCELLED || execution.getStatus() == NodeExecutionStatus.CANCELLED) {
@@ -279,6 +280,7 @@ public class RuntimeStepTxService {
         }
         execution.setStatus(NodeExecutionStatus.SUCCEEDED);
         execution.setFinishedAt(Instant.now());
+        execution.setStepSummaryJson(stepSummaryJson);
         nodeExecutionRepository.save(execution);
         appendAuditInternal(
                 runId,

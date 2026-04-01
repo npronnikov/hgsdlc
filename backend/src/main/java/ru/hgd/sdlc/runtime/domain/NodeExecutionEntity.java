@@ -64,6 +64,9 @@ public class NodeExecutionEntity {
     @Column(name = "checkpoint_created_at")
     private Instant checkpointCreatedAt;
 
+    @Column(name = "step_summary_json", columnDefinition = "TEXT")
+    private String stepSummaryJson;
+
     @Version
     @Column(name = "resource_version", nullable = false)
     private long resourceVersion;
