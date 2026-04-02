@@ -933,7 +933,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
             className="btn-danger-common"
             onClick={cancelRun}
             icon={<MinusCircleOutlined />}
-            disabled={['completed', 'failed', 'cancelled', 'publish_failed'].includes(run.status)}
+            disabled={['completed', 'failed', 'cancelled'].includes(run.status)}
           >
             Stop
           </Button>
