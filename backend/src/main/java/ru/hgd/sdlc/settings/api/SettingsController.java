@@ -2,6 +2,7 @@ package ru.hgd.sdlc.settings.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -12,40 +13,25 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ValidationException;
+import ru.hgd.sdlc.settings.application.CatalogService;
 import ru.hgd.sdlc.settings.application.SettingsService;
 
 @RestController
 @RequestMapping("/api/settings")
 public class SettingsController {
-    private final SettingsService settingsService;
 
-    public SettingsController(SettingsService settingsService) {
+    private final SettingsService settingsService;
+    private final CatalogService catalogService;
+
+    public SettingsController(SettingsService settingsService, CatalogService catalogService) {
         this.settingsService = settingsService;
+        this.catalogService = catalogService;
     }
 
     @GetMapping("/runtime")
     public RuntimeSettingsResponse getRuntimeSettings() {
         SettingsService.RuntimeSettings settings = settingsService.getRuntimeSettings();
-        return new RuntimeSettingsResponse(
-                settings.workspaceRoot(),
-                settings.codingAgent(),
-                settings.aiTimeoutSeconds(),
-                settings.promptLanguage(),
-                settings.catalogRepoUrl(),
-                settings.catalogDefaultBranch(),
-                settings.publishMode(),
-                settings.gitSshPrivateKey(),
-                settings.gitSshPublicKey(),
-                settings.gitSshPassphrase(),
-                settings.gitCertificate(),
-                settings.gitCertificateKey(),
-                settings.gitUsername(),
-                settings.gitPasswordOrPat(),
-                settings.localGitUsername(),
-                settings.localGitEmail(),
-                settings.updatedAt(),
-                settings.updatedBy()
-        );
+        return toResponse(settings);
     }
 
     @PutMapping("/runtime")
@@ -69,27 +55,7 @@ public class SettingsController {
                 request.promptLanguage(),
                 user == null ? "system" : user.getUsername()
         );
-        RuntimeSettingsResponse response = new RuntimeSettingsResponse(
-                updated.workspaceRoot(),
-                updated.codingAgent(),
-                updated.aiTimeoutSeconds(),
-                updated.promptLanguage(),
-                updated.catalogRepoUrl(),
-                updated.catalogDefaultBranch(),
-                updated.publishMode(),
-                updated.gitSshPrivateKey(),
-                updated.gitSshPublicKey(),
-                updated.gitSshPassphrase(),
-                updated.gitCertificate(),
-                updated.gitCertificateKey(),
-                updated.gitUsername(),
-                updated.gitPasswordOrPat(),
-                updated.localGitUsername(),
-                updated.localGitEmail(),
-                updated.updatedAt(),
-                updated.updatedBy()
-        );
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        return ResponseEntity.status(HttpStatus.OK).body(toResponse(updated));
     }
 
     @PutMapping("/catalog")
@@ -112,27 +78,7 @@ public class SettingsController {
                 request.localGitEmail(),
                 user == null ? "system" : user.getUsername()
         );
-        RuntimeSettingsResponse response = new RuntimeSettingsResponse(
-                updated.workspaceRoot(),
-                updated.codingAgent(),
-                updated.aiTimeoutSeconds(),
-                updated.promptLanguage(),
-                updated.catalogRepoUrl(),
-                updated.catalogDefaultBranch(),
-                updated.publishMode(),
-                updated.gitSshPrivateKey(),
-                updated.gitSshPublicKey(),
-                updated.gitSshPassphrase(),
-                updated.gitCertificate(),
-                updated.gitCertificateKey(),
-                updated.gitUsername(),
-                updated.gitPasswordOrPat(),
-                updated.localGitUsername(),
-                updated.localGitEmail(),
-                updated.updatedAt(),
-                updated.updatedBy()
-        );
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        return ResponseEntity.status(HttpStatus.OK).body(toResponse(updated));
     }
 
     @PutMapping("/catalog/repair")
@@ -140,29 +86,40 @@ public class SettingsController {
             @RequestBody(required = false) RepairRequest request,
             @AuthenticationPrincipal User user
     ) {
-        SettingsService.RepairResult result = settingsService.repairCatalog(
+        CatalogService.RepairResult result = catalogService.repairCatalog(
                 user == null ? "system" : user.getUsername(),
                 request == null ? null : request.mode()
         );
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(new RepairResponse(
-                        result.status(),
-                        result.message(),
-                        result.startedAt(),
-                        result.finishedAt(),
-                        result.mode(),
-                        result.requestedBy(),
-                        result.scannedRules(),
-                        result.scannedSkills(),
-                        result.scannedFlows(),
-                        result.inserted(),
-                        result.updated(),
-                        result.skipped(),
-                        result.errors() == null ? java.util.List.of() : result.errors().stream()
-                                .map(err -> new RepairErrorItem(err.path(), err.message()))
-                                .toList()
-                ));
+        return ResponseEntity.status(HttpStatus.OK).body(new RepairResponse(
+                result.status(),
+                result.message(),
+                result.startedAt(),
+                result.finishedAt(),
+                result.mode(),
+                result.requestedBy(),
+                result.scannedRules(),
+                result.scannedSkills(),
+                result.scannedFlows(),
+                result.inserted(),
+                result.updated(),
+                result.skipped(),
+                result.errors() == null ? List.of() : result.errors().stream()
+                        .map(err -> new RepairErrorItem(err.path(), err.message()))
+                        .toList()
+        ));
     }
+
+    private RuntimeSettingsResponse toResponse(SettingsService.RuntimeSettings s) {
+        return new RuntimeSettingsResponse(
+                s.workspaceRoot(), s.codingAgent(), s.aiTimeoutSeconds(), s.promptLanguage(),
+                s.catalogRepoUrl(), s.catalogDefaultBranch(), s.publishMode(),
+                s.gitSshPrivateKey(), s.gitSshPublicKey(), s.gitSshPassphrase(),
+                s.gitCertificate(), s.gitCertificateKey(), s.gitUsername(), s.gitPasswordOrPat(),
+                s.localGitUsername(), s.localGitEmail(), s.updatedAt(), s.updatedBy()
+        );
+    }
+
+    // ---- Request / Response types ----
 
     public record RuntimeSettingsRequest(
             @JsonProperty("workspace_root") String workspaceRoot,
@@ -220,7 +177,7 @@ public class SettingsController {
             @JsonProperty("inserted") int inserted,
             @JsonProperty("updated") int updated,
             @JsonProperty("skipped") int skipped,
-            @JsonProperty("errors") java.util.List<RepairErrorItem> errors
+            @JsonProperty("errors") List<RepairErrorItem> errors
     ) {}
 
     public record RepairRequest(
