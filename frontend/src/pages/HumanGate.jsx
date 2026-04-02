@@ -16,7 +16,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
@@ -661,6 +661,17 @@ export default function HumanGate() {
                     return;
                   }
                   setSelectedPath(String(info?.node?.path || keys[0] || ''));
+                }}
+                titleRender={(node) => {
+                  const editable = node.isLeaf && editableArtifacts.some(
+                    (a) => a?.workspace_path && normalizePath(a.workspace_path) === normalizePath(node.path)
+                  );
+                  return (
+                    <span>
+                      {node.title}
+                      {editable && <EditOutlined style={{ marginLeft: 6, opacity: 0.6 }} />}
+                    </span>
+                  );
                 }}
               />
             </Card>
