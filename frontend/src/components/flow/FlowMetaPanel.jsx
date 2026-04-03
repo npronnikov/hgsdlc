@@ -69,7 +69,7 @@ export function FlowMetaPanel({ editor }) {
                 { value: 'claude', label: 'claude' },
               ]}
               placeholder="Select coding agent"
-              title="Для какого coding-agent выполняется flow."
+              title="Which coding agent this flow is executed with."
             />
           </div>
         </div>
@@ -80,7 +80,7 @@ export function FlowMetaPanel({ editor }) {
               value={flowMeta.title}
               disabled={isReadOnly}
               onChange={(event) => updateFlowMeta({ title: event.target.value })}
-              title="Короткое отображаемое имя flow."
+              title="Short display name of the flow."
             />
           </div>
         </div>
@@ -91,7 +91,7 @@ export function FlowMetaPanel({ editor }) {
               value={flowMeta.flowId}
               disabled={isReadOnly || !isCreateMode || versionOptions.length > 0}
               onChange={(event) => handleFlowIdChange(event.target.value)}
-              title="Стабильный идентификатор flow для canonical_name и ссылок."
+              title="Stable flow identifier used for canonical_name and references."
             />
           </div>
         </div>
@@ -103,7 +103,7 @@ export function FlowMetaPanel({ editor }) {
               value={flowMeta.description}
               disabled={isReadOnly}
               onChange={(event) => updateFlowMeta({ description: event.target.value })}
-              title="Краткое описание сценария flow и его назначения."
+              title="Short description of the flow scenario and purpose."
             />
           </div>
         </div>
@@ -114,7 +114,7 @@ export function FlowMetaPanel({ editor }) {
               value={flowMeta.teamCode}
               disabled={isReadOnly}
               onChange={(event) => updateFlowMeta({ teamCode: event.target.value })}
-              title="Код команды-владельца flow."
+              title="Owner team code for this flow."
             />
           </div>
         </div>
@@ -139,7 +139,7 @@ export function FlowMetaPanel({ editor }) {
               onChange={(value) => updateFlowMeta({ platformCode: value })}
               options={platformOptions}
               placeholder="Select platform"
-              title="Платформа применения flow: FRONT, BACK или DATA."
+              title="Flow target platform: FRONT, BACK, or DATA."
             />
           </div>
         </div>
@@ -152,7 +152,7 @@ export function FlowMetaPanel({ editor }) {
               disabled={isReadOnly}
               onChange={(value) => updateFlowMeta({ tags: value })}
               placeholder="Add tags"
-              title="Теги для фильтрации и поиска flow."
+              title="Tags used to filter and search flows."
             />
           </div>
         </div>
@@ -165,7 +165,7 @@ export function FlowMetaPanel({ editor }) {
               onChange={(value) => updateFlowMeta({ flowKind: value })}
               options={flowKindOptions}
               placeholder="Select flow kind"
-              title="Тип flow: analysis, code, delivery, full-cycle."
+              title="Flow type: analysis, code, delivery, or full-cycle."
             />
           </div>
         </div>
@@ -178,7 +178,7 @@ export function FlowMetaPanel({ editor }) {
               onChange={(value) => updateFlowMeta({ riskLevel: value })}
               options={riskLevelOptions}
               placeholder="Select risk level"
-              title="Уровень риска исполнения flow."
+              title="Execution risk level for this flow."
             />
           </div>
         </div>
@@ -196,7 +196,7 @@ export function FlowMetaPanel({ editor }) {
               disabled={isReadOnly}
               onChange={handleStartNodeChange}
               options={nodes.map((node) => ({ value: node.id, label: node.id }))}
-              title="Узел, с которого начинается исполнение flow."
+              title="Node where flow execution starts."
             />
           </div>
         </div>

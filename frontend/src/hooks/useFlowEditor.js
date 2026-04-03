@@ -671,7 +671,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     const publication = (flowMeta.publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (!isCreateMode && isLockedAfterPublicationRequest) {
-      message.error('Редактирование запрещено после отправки на публикацию');
+      message.error('Editing is locked after publication request');
       return false;
     }
     if (!flowMeta.flowId) {
@@ -848,7 +848,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
 
   const startDraftFromPublished = () => {
     if (!latestPublishedVersion) {
-      message.error('Для создания новой версии нужен опубликованный flow');
+      message.error('A published flow is required to create a new version');
       return;
     }
     const sourceVersion = latestPublishedVersion;

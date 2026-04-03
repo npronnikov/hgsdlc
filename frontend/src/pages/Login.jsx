@@ -118,7 +118,7 @@ export default function Login() {
           type="info"
           showIcon
           className="login-test-users"
-          message="Тестовые пользователи"
+          message="Test users"
           description={(
             <div className="login-test-users-list">
               <div className="login-test-user-row"><b>admin</b> / <code>admin</code> <span className="login-test-user-role">(ADMIN)</span></div>

@@ -67,3 +67,5 @@ databaseChangeLog:
       file: db/changelog/038-skill-package-v11.sql
   - include:
       file: db/changelog/039-node-execution-step-summary.sql
+  - include:
+      file: db/changelog/040-publication-request-mode-cleanup.sql

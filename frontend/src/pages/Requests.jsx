@@ -103,7 +103,6 @@ export default function Requests() {
         row.canonical_name,
         row.author,
         row.status,
-        row.requested_mode,
         row.job_status,
         row.branch_name,
         row.commit_sha,
@@ -319,15 +318,10 @@ export default function Requests() {
           expandable={{
             expandedRowRender: (row) => {
               const errorText = row.last_error || row.job_error;
-              const requestedMode = String(row.requested_mode || 'local').toLowerCase();
-              const isLocalMode = requestedMode === 'local';
+              const hasPrData = Boolean(row.pr_url || row.pr_number || row.branch_name);
               return (
                 <div className="requests-expanded">
                   <div className="requests-expanded-grid">
-                    <div className="requests-expanded-item">
-                      <span className="requests-expanded-label">Requested mode</span>
-                      <span><StatusTag value={row.requested_mode || 'local'} /></span>
-                    </div>
                     <div className="requests-expanded-item">
                       <span className="requests-expanded-label">Pipeline status</span>
                       <span>{row.job_status ? <StatusTag value={row.job_status} /> : <Text type="secondary">No job yet</Text>}</span>
@@ -344,13 +338,13 @@ export default function Requests() {
                       <span className="requests-expanded-label">Commit</span>
                       <span className="mono">{row.commit_sha || '—'}</span>
                     </div>
-                    {!isLocalMode && (
+                    {hasPrData && (
                       <div className="requests-expanded-item">
                         <span className="requests-expanded-label">Branch</span>
                         <span className="mono" title={row.branch_name || ''}>{row.branch_name || '—'}</span>
                       </div>
                     )}
-                    {!isLocalMode && (
+                    {hasPrData && (
                       <div className="requests-expanded-item">
                         <span className="requests-expanded-label">Pull request</span>
                         <span>

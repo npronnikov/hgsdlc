@@ -42,9 +42,6 @@ public class PublicationRequest {
     @Column(nullable = false, length = 128)
     private String author;
 
-    @Column(name = "requested_mode", nullable = false, length = 32)
-    private String requestedMode;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private PublicationStatus status;

@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
@@ -15,6 +17,10 @@ import ru.hgd.sdlc.skill.domain.SkillVersion;
 
 @Component
 public class CatalogContentResolver {
+    private static final Logger log = LoggerFactory.getLogger(CatalogContentResolver.class);
+    private static final String TEAM_SCOPE = "team";
+    private static final String ORGANIZATION_SCOPE = "organization";
+
     private final SettingsService settingsService;
     private final WorkspacePort workspacePort;
 
@@ -27,6 +33,9 @@ public class CatalogContentResolver {
         if (flowVersion == null) {
             throw new ValidationException("Flow version is required");
         }
+        if (isTeamScope(flowVersion.getScope())) {
+            return requireContent(flowVersion.getFlowYaml(), "flow_yaml", flowVersion.getCanonicalName());
+        }
         String fallbackPath = "flows/" + flowVersion.getFlowId() + "/" + flowVersion.getVersion();
         return readFromMirror(resolveSourcePath(flowVersion.getSourcePath(), fallbackPath), "FLOW.yaml");
     }
@@ -35,6 +44,9 @@ public class CatalogContentResolver {
         if (ruleVersion == null) {
             throw new ValidationException("Rule version is required");
         }
+        if (isTeamScope(ruleVersion.getScope())) {
+            return requireContent(ruleVersion.getRuleMarkdown(), "rule_markdown", ruleVersion.getCanonicalName());
+        }
         String fallbackPath = "rules/" + ruleVersion.getRuleId() + "/" + ruleVersion.getVersion();
         return readFromMirror(resolveSourcePath(ruleVersion.getSourcePath(), fallbackPath), "RULE.md");
     }
@@ -42,6 +54,9 @@ public class CatalogContentResolver {
     public String resolveSkillMarkdown(SkillVersion skillVersion) {
         if (skillVersion == null) {
             throw new ValidationException("Skill version is required");
+        }
+        if (isTeamScope(skillVersion.getScope())) {
+            return requireContent(skillVersion.getSkillMarkdown(), "skill_markdown", skillVersion.getCanonicalName());
         }
         String fallbackPath = "skills/" + skillVersion.getSkillId() + "/" + skillVersion.getVersion();
         return readFromMirror(resolveSourcePath(skillVersion.getSourcePath(), fallbackPath), "SKILL.md");
@@ -81,6 +96,31 @@ public class CatalogContentResolver {
             throw new ValidationException("source_path is required");
         }
         return fallbackPath;
+    }
+
+    private String requireContent(String content, String fieldName, String canonicalName) {
+        if (content == null || content.isBlank()) {
+            String target = canonicalName == null || canonicalName.isBlank() ? "catalog entity" : canonicalName;
+            throw new ValidationException(fieldName + " is empty for " + target);
+        }
+        return content;
+    }
+
+    private boolean isTeamScope(String scopeRaw) {
+        String scope = normalizeScope(scopeRaw);
+        return TEAM_SCOPE.equals(scope);
+    }
+
+    private String normalizeScope(String scopeRaw) {
+        if (scopeRaw == null || scopeRaw.isBlank()) {
+            log.warn("Catalog entity has blank scope, fallback to organization");
+            return ORGANIZATION_SCOPE;
+        }
+        String normalized = scopeRaw.trim().toLowerCase(Locale.ROOT);
+        if (TEAM_SCOPE.equals(normalized) || ORGANIZATION_SCOPE.equals(normalized)) {
+            return normalized;
+        }
+        throw new ValidationException("scope must be team or organization, got: " + scopeRaw);
     }
 
     private Path resolveCatalogMirrorPath(String workspaceRoot, String repoUrl) {

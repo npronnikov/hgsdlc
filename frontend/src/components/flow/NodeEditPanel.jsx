@@ -64,7 +64,7 @@ export function NodeEditPanel({ editor }) {
             <Input
               value={nodeIdDraft}
               disabled={!canEditNodeId}
-              title="Уникальный идентификатор узла внутри flow."
+              title="Unique node identifier within the flow."
               onChange={(event) => {
                 if (!canEditNodeId) {
                   return;
@@ -92,7 +92,7 @@ export function NodeEditPanel({ editor }) {
             <Input
               value={selectedNode.data.title}
               disabled={isReadOnly}
-              title="Короткое отображаемое имя узла."
+              title="Short display name of the node."
               onChange={(event) => updateSelectedNode({ title: event.target.value })}
             />
           </div>
@@ -104,7 +104,7 @@ export function NodeEditPanel({ editor }) {
               rows={2}
               value={selectedNode.data.description}
               disabled={isReadOnly}
-              title="Описание назначения узла."
+              title="Description of the node purpose."
               onChange={(event) => updateSelectedNode({ description: event.target.value })}
             />
           </div>
@@ -115,7 +115,7 @@ export function NodeEditPanel({ editor }) {
             <Select
               value={selectedNode.data.nodeKind || selectedNode.data.type}
               disabled={isReadOnly}
-              title="Тип узла определяет его поведение в runtime."
+              title="Node type defines runtime behavior."
               onChange={(value) => {
                 updateSelectedNode({
                   nodeKind: value,
@@ -159,7 +159,7 @@ export function NodeEditPanel({ editor }) {
                         value={entry.type}
                         options={EXECUTION_CONTEXT_TYPES}
                         disabled={isReadOnly}
-                        title="Тип входного контекста узла."
+                        title="Input context type for the node."
                         onChange={(value) => updateSelectedNodeList(
                           'executionContext',
                           index,
@@ -182,7 +182,7 @@ export function NodeEditPanel({ editor }) {
                           value={entry.scope || 'run'}
                           options={SCOPE_OPTIONS}
                           disabled={isReadOnly}
-                          title="Область поиска артефакта: run или project."
+                          title="Artifact lookup scope: run or project."
                           onChange={(value) => updateSelectedNodeList('executionContext', index, {
                             scope: value,
                             node_id: value === 'project' ? undefined : entry.node_id,
@@ -193,7 +193,7 @@ export function NodeEditPanel({ editor }) {
                             value={entry.transfer_mode || 'by_ref'}
                             options={TRANSFER_MODE_OPTIONS}
                             disabled={isReadOnly}
-                            title="Режим передачи артефакта в AI-контекст."
+                            title="How artifacts are transferred into AI context."
                             onChange={(value) => updateSelectedNodeList('executionContext', index, {
                               transfer_mode: value,
                             })}
@@ -205,7 +205,7 @@ export function NodeEditPanel({ editor }) {
                             options={nodeIdOptions.filter((opt) => opt.value !== selectedNode.id)}
                             placeholder="source-node"
                             disabled={isReadOnly}
-                            title="Узел-источник артефакта в текущем run."
+                            title="Source node of the artifact in the current run."
                             allowClear
                             popupClassName="node-source-select-dropdown"
                             popupMatchSelectWidth
@@ -218,7 +218,7 @@ export function NodeEditPanel({ editor }) {
                           value={entry.path || ''}
                           placeholder="file name"
                           disabled={isReadOnly}
-                          title="Путь к входному артефакту."
+                          title="Path to the input artifact."
                           onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
                         />
                       </div>
@@ -255,7 +255,7 @@ export function NodeEditPanel({ editor }) {
                   rows={3}
                   value={selectedNode.data.instruction}
                   disabled={isReadOnly}
-                  title="Инструкция для AI-узла."
+                  title="Instruction for the AI node."
                   onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                 />
               </div>
@@ -300,7 +300,7 @@ export function NodeEditPanel({ editor }) {
                 rows={3}
                 value={selectedNode.data.instruction}
                 disabled={isReadOnly}
-                title="Текст инструкции, которую увидит пользователь на human gate шаге."
+                title="Instruction text shown to the user at the human gate step."
                 onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
               />
             </div>
@@ -318,7 +318,7 @@ export function NodeEditPanel({ editor }) {
                   value={selectedNode.data.instruction}
                   placeholder={'#!/usr/bin/env bash\nset -euo pipefail\necho "Hello"'}
                   disabled={isReadOnly}
-                  title="Команды, выполняемые command-узлом."
+                  title="Commands executed by the command node."
                   onChange={(event) => updateSelectedNode({ instruction: event.target.value })}
                 />
               </div>
@@ -433,14 +433,14 @@ export function NodeEditPanel({ editor }) {
                         value={entry.scope || 'run'}
                         options={SCOPE_OPTIONS}
                         disabled={isReadOnly}
-                        title="Область, где будет создан артефакт."
+                        title="Scope where the artifact will be created."
                         onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
                       />
                       <Select
                         value={entry.modifiable === true ? 'yes' : 'no'}
                         options={MODIFIABLE_OPTIONS}
                         disabled={isReadOnly}
-                        title="Можно ли редактировать артефакт на human_input шаге."
+                        title="Whether the artifact can be edited at the human_input step."
                         onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { modifiable: value === 'yes' })}
                       />
                       <Input
@@ -448,7 +448,7 @@ export function NodeEditPanel({ editor }) {
                         value={entry.path || ''}
                         placeholder="path"
                         disabled={isReadOnly}
-                        title="Путь создаваемого артефакта."
+                        title="Path of the produced artifact."
                         onChange={(event) =>
                           updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
                         }
@@ -481,14 +481,14 @@ export function NodeEditPanel({ editor }) {
                           value={entry.scope || 'project'}
                           options={SCOPE_OPTIONS}
                           disabled={isReadOnly}
-                          title="Область применения ожидаемого изменения."
+                          title="Scope where the expected change should happen."
                           onChange={(value) => updateSelectedNodeList('expectedMutations', index, { scope: value })}
                         />
                         <Input
                           value={entry.path || ''}
                           placeholder="path"
                           disabled={isReadOnly}
-                          title="Путь файла, который должен быть изменён."
+                          title="Path of the file that must be changed."
                           onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
                         />
                         <Button
@@ -529,7 +529,7 @@ export function NodeEditPanel({ editor }) {
                         allowClear
                         options={nodeIdOptions}
                         placeholder="Select node"
-                        title="Узел перехода при успешном завершении."
+                        title="Transition node on success."
                         onChange={(value) => updateSelectedNode({ onSuccess: value || '' })}
                       />
                     </div>
@@ -543,7 +543,7 @@ export function NodeEditPanel({ editor }) {
                         allowClear
                         options={nodeIdOptions}
                         placeholder="Select node"
-                        title="Узел перехода при ошибке."
+                        title="Transition node on failure."
                         onChange={(value) => updateSelectedNode({ onFailure: value || '' })}
                       />
                     </div>
@@ -560,7 +560,7 @@ export function NodeEditPanel({ editor }) {
                       allowClear
                       options={nodeIdOptions}
                       placeholder="Select node"
-                      title="Узел перехода после пользовательского ввода."
+                      title="Transition node after user input."
                       onChange={(value) => updateSelectedNode({ onSubmit: value || '' })}
                     />
                   </div>
@@ -577,7 +577,7 @@ export function NodeEditPanel({ editor }) {
                         allowClear
                         options={nodeIdOptions}
                         placeholder="Select node"
-                        title="Узел перехода после approve."
+                        title="Transition node after approve."
                         onChange={(value) => updateSelectedNode({ onApprove: value || '' })}
                       />
                     </div>
@@ -591,7 +591,7 @@ export function NodeEditPanel({ editor }) {
                         allowClear
                         options={nodeIdOptions}
                         placeholder="Select node"
-                        title="Узел перехода при rework."
+                        title="Transition node on rework."
                         onChange={(value) => {
                           const current = selectedNode.data.onRework || DEFAULT_REWORK;
                           updateSelectedNode({

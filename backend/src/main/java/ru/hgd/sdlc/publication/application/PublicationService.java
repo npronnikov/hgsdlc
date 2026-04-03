@@ -10,16 +10,13 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.Role;
@@ -54,7 +51,7 @@ import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 public class PublicationService {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String TEAM_SCOPE = "team";
-    private static final String ORGANIZATION_SCOPE = "organization";
+    private static final String DB_SOURCE_REF = "db";
 
     private final PublicationRequestRepository publicationRequestRepository;
     private final PublicationApprovalRepository publicationApprovalRepository;
@@ -105,7 +102,6 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(skill.getCanonicalName());
-        request.setRequestedMode(resolvePublishModeForScope(skill.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -129,7 +125,6 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(rule.getCanonicalName());
-        request.setRequestedMode(resolvePublishModeForScope(rule.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -153,7 +148,6 @@ public class PublicationService {
                         .createdAt(now)
                         .build());
         request.setCanonicalName(flow.getCanonicalName());
-        request.setRequestedMode(resolvePublishModeForScope(flow.getScope()));
         request.setStatus(PublicationStatus.PENDING_APPROVAL);
         request.setLastError(null);
         request.setUpdatedAt(now);
@@ -667,48 +661,25 @@ public class PublicationService {
     }
 
     private PublishResult publish(SkillVersion skill, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
+        if (isTeamScope(skill.getScope())) {
+            job.setStep("db_finalize");
+            job.setBranchName(null);
+            publicationJobRepository.save(job);
+            return new PublishResult(null, null, null, DB_SOURCE_REF, false);
+        }
+
         CatalogGitSettings settings = loadCatalogGitSettings();
         String sourceDir = "skills/" + skill.getSkillId() + "/" + skill.getVersion();
-        if (isTeamScope(skill.getScope())) {
-            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
-            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
-            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
-            configureGitIdentity(mirrorRepoPath);
-            job.setStep("git_prepare");
-            job.setBranchName(settings.defaultBranch());
-            publicationJobRepository.save(job);
-
-            writeSkillFiles(mirrorRepoPath, sourceDir, skill, settings.defaultBranch());
-            job.setStep("git_commit");
-            publicationJobRepository.save(job);
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(skill-team): " + skill.getCanonicalName()));
-            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
-            return new PublishResult(commitSha, null, null, commitSha, false);
-        }
 
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String branchName;
-        String mode = resolvePublishModeForScope(skill.getScope());
-        if ("pr".equals(mode)) {
-            branchName = "publish/skill/" + skill.getSkillId() + "/" + skill.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
-        } else {
-            branchName = settings.defaultBranch();
-        }
+        String branchName = "publish/skill/" + skill.getSkillId() + "/" + skill.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         job.setStep("git_prepare");
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        if ("pr".equals(mode)) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
-        } else {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-            if (!branchName.equals(settings.defaultBranch())) {
-                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
-            }
-        }
+        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
         configureGitIdentity(repoPath);
 
         writeSkillFiles(repoPath, sourceDir, skill, settings.defaultBranch());
@@ -722,60 +693,33 @@ public class PublicationService {
         String pushUrl = authenticatedRepoUrl(settings.repoUrl(), settings.gitUsername(), settings.gitPasswordOrPat());
         runGit(List.of("git", "-C", repoPath.toString(), "push", pushUrl, branchName));
 
-        if ("pr".equals(mode)) {
-            job.setStep("create_pr");
-            publicationJobRepository.save(job);
-            PrResult prResult = createPullRequest(settings, branchName, skill.getCanonicalName());
-            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
-            return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
-        }
-        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
-        return new PublishResult(commitSha, null, null, commitSha, false);
+        job.setStep("create_pr");
+        publicationJobRepository.save(job);
+        PrResult prResult = createPullRequest(settings, branchName, skill.getCanonicalName());
+        checkoutOrCreateBranch(repoPath, settings.defaultBranch());
+        return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
     }
 
     private PublishResult publishRule(RuleVersion rule, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
+        if (isTeamScope(rule.getScope())) {
+            job.setStep("db_finalize");
+            job.setBranchName(null);
+            publicationJobRepository.save(job);
+            return new PublishResult(null, null, null, DB_SOURCE_REF, false);
+        }
+
         CatalogGitSettings settings = loadCatalogGitSettings();
         String sourceDir = "rules/" + rule.getRuleId() + "/" + rule.getVersion();
-        if (isTeamScope(rule.getScope())) {
-            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
-            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
-            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
-            configureGitIdentity(mirrorRepoPath);
-            job.setStep("git_prepare");
-            job.setBranchName(settings.defaultBranch());
-            publicationJobRepository.save(job);
-
-            writeRuleFiles(mirrorRepoPath, sourceDir, rule, settings.defaultBranch());
-            job.setStep("git_commit");
-            publicationJobRepository.save(job);
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(rule-team): " + rule.getCanonicalName()));
-            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
-            return new PublishResult(commitSha, null, null, commitSha, false);
-        }
 
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String branchName;
-        String mode = resolvePublishModeForScope(rule.getScope());
-        if ("pr".equals(mode)) {
-            branchName = "publish/rule/" + rule.getRuleId() + "/" + rule.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
-        } else {
-            branchName = settings.defaultBranch();
-        }
+        String branchName = "publish/rule/" + rule.getRuleId() + "/" + rule.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         job.setStep("git_prepare");
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        if ("pr".equals(mode)) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
-        } else {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-            if (!branchName.equals(settings.defaultBranch())) {
-                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
-            }
-        }
+        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
         configureGitIdentity(repoPath);
 
         writeRuleFiles(repoPath, sourceDir, rule, settings.defaultBranch());
@@ -788,60 +732,33 @@ public class PublicationService {
         String pushUrl = authenticatedRepoUrl(settings.repoUrl(), settings.gitUsername(), settings.gitPasswordOrPat());
         runGit(List.of("git", "-C", repoPath.toString(), "push", pushUrl, branchName));
 
-        if ("pr".equals(mode)) {
-            job.setStep("create_pr");
-            publicationJobRepository.save(job);
-            PrResult prResult = createPullRequest(settings, branchName, rule.getCanonicalName());
-            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
-            return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
-        }
-        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
-        return new PublishResult(commitSha, null, null, commitSha, false);
+        job.setStep("create_pr");
+        publicationJobRepository.save(job);
+        PrResult prResult = createPullRequest(settings, branchName, rule.getCanonicalName());
+        checkoutOrCreateBranch(repoPath, settings.defaultBranch());
+        return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
     }
 
     private PublishResult publishFlow(FlowVersion flow, PublicationRequest request, PublicationJob job) throws IOException, InterruptedException {
+        if (isTeamScope(flow.getScope())) {
+            job.setStep("db_finalize");
+            job.setBranchName(null);
+            publicationJobRepository.save(job);
+            return new PublishResult(null, null, null, DB_SOURCE_REF, false);
+        }
+
         CatalogGitSettings settings = loadCatalogGitSettings();
         String sourceDir = "flows/" + flow.getFlowId() + "/" + flow.getVersion();
-        if (isTeamScope(flow.getScope())) {
-            Path mirrorRepoPath = resolveRuntimeMirrorPath(settings.workspaceRoot(), settings.repoUrl());
-            syncMirror(settings.repoUrl(), settings.defaultBranch(), mirrorRepoPath);
-            checkoutOrCreateBranch(mirrorRepoPath, settings.defaultBranch());
-            configureGitIdentity(mirrorRepoPath);
-            job.setStep("git_prepare");
-            job.setBranchName(settings.defaultBranch());
-            publicationJobRepository.save(job);
-
-            writeFlowFiles(mirrorRepoPath, sourceDir, flow, settings.defaultBranch());
-            job.setStep("git_commit");
-            publicationJobRepository.save(job);
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "add", sourceDir));
-            runGit(List.of("git", "-C", mirrorRepoPath.toString(), "commit", "-m", "publish(flow-team): " + flow.getCanonicalName()));
-            String commitSha = runGitWithOutput(List.of("git", "-C", mirrorRepoPath.toString(), "rev-parse", "HEAD")).trim();
-            return new PublishResult(commitSha, null, null, commitSha, false);
-        }
 
         Path repoPath = resolvePublishRepoPath(settings.workspaceRoot(), settings.repoUrl());
         syncMirror(settings.repoUrl(), settings.defaultBranch(), repoPath);
 
-        String branchName;
-        String mode = resolvePublishModeForScope(flow.getScope());
-        if ("pr".equals(mode)) {
-            branchName = "publish/flow/" + flow.getFlowId() + "/" + flow.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
-        } else {
-            branchName = settings.defaultBranch();
-        }
+        String branchName = "publish/flow/" + flow.getFlowId() + "/" + flow.getVersion().replace('.', '-') + "/" + Instant.now().toEpochMilli();
         job.setStep("git_prepare");
         job.setBranchName(branchName);
         publicationJobRepository.save(job);
 
-        if ("pr".equals(mode)) {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
-        } else {
-            runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", settings.defaultBranch(), "origin/" + settings.defaultBranch()));
-            if (!branchName.equals(settings.defaultBranch())) {
-                runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName));
-            }
-        }
+        runGit(List.of("git", "-C", repoPath.toString(), "checkout", "-B", branchName, "origin/" + settings.defaultBranch()));
         configureGitIdentity(repoPath);
 
         writeFlowFiles(repoPath, sourceDir, flow, settings.defaultBranch());
@@ -854,15 +771,11 @@ public class PublicationService {
         String pushUrl = authenticatedRepoUrl(settings.repoUrl(), settings.gitUsername(), settings.gitPasswordOrPat());
         runGit(List.of("git", "-C", repoPath.toString(), "push", pushUrl, branchName));
 
-        if ("pr".equals(mode)) {
-            job.setStep("create_pr");
-            publicationJobRepository.save(job);
-            PrResult prResult = createPullRequest(settings, branchName, flow.getCanonicalName());
-            checkoutOrCreateBranch(repoPath, settings.defaultBranch());
-            return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
-        }
-        syncRuntimeMirrorContent(settings.workspaceRoot(), settings.repoUrl(), repoPath, sourceDir);
-        return new PublishResult(commitSha, null, null, commitSha, false);
+        job.setStep("create_pr");
+        publicationJobRepository.save(job);
+        PrResult prResult = createPullRequest(settings, branchName, flow.getCanonicalName());
+        checkoutOrCreateBranch(repoPath, settings.defaultBranch());
+        return new PublishResult(commitSha, prResult.url(), prResult.number(), branchName, true);
     }
 
     private void writeSkillFiles(Path repoPath, String sourceDir, SkillVersion skill, String baseBranch) throws IOException {
@@ -1119,13 +1032,6 @@ public class PublicationService {
         return value.trim();
     }
 
-    private String resolvePublishModeForScope(String scope) {
-        if (isTeamScope(scope)) {
-            return "local";
-        }
-        return "pr";
-    }
-
     private boolean isTeamScope(String scope) {
         if (scope == null || scope.isBlank()) {
             return false;
@@ -1169,45 +1075,6 @@ public class PublicationService {
         String email = valueOrDefault(SettingsService.CATALOG_LOCAL_GIT_EMAIL_KEY, SettingsService.DEFAULT_LOCAL_GIT_EMAIL);
         runGit(List.of("git", "-C", repoPath.toString(), "config", "user.name", username));
         runGit(List.of("git", "-C", repoPath.toString(), "config", "user.email", email));
-    }
-
-    private void syncRuntimeMirrorContent(String workspaceRoot, String repoUrl, Path publishRepoPath, String sourceDir) throws IOException {
-        Path mirrorRoot = resolveRuntimeMirrorPath(workspaceRoot, repoUrl);
-        Path sourcePath = publishRepoPath.resolve(sourceDir).normalize();
-        Path targetPath = mirrorRoot.resolve(sourceDir).normalize();
-        if (sourcePath.equals(targetPath)) {
-            return;
-        }
-        if (!Files.exists(sourcePath)) {
-            throw new ValidationException("Published source directory not found: " + sourcePath);
-        }
-        copyDirectory(sourcePath, targetPath);
-    }
-
-    private void copyDirectory(Path source, Path target) throws IOException {
-        Files.createDirectories(target);
-        try (Stream<Path> stream = Files.walk(source)) {
-            stream.sorted()
-                    .forEach(path -> {
-                        try {
-                            Path relative = source.relativize(path);
-                            Path destination = target.resolve(relative);
-                            if (Files.isDirectory(path)) {
-                                Files.createDirectories(destination);
-                            } else {
-                                Files.createDirectories(destination.getParent());
-                                Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                            }
-                        } catch (IOException ex) {
-                            throw new RuntimeException(ex);
-                        }
-                    });
-        } catch (RuntimeException ex) {
-            if (ex.getCause() instanceof IOException ioEx) {
-                throw ioEx;
-            }
-            throw ex;
-        }
     }
 
     private String authenticatedRepoUrl(String repoUrl, String username, String passwordOrPat) {

@@ -80,7 +80,7 @@ public class CatalogService {
             );
         }
 
-        if (mode == RepairMode.FROM_SCRATCH) {
+        if (mode == RepairMode.FULL_REPAIR) {
             try {
                 purgeCatalogIndex();
             } catch (Exception ex) {
@@ -430,8 +430,8 @@ public class CatalogService {
     public record RepairError(String path, String message) {}
 
     public enum RepairMode {
-        UPSERT("upsert"),
-        FROM_SCRATCH("from_scratch");
+        PULL_REMOTE("pull_remote"),
+        FULL_REPAIR("full_repair");
 
         private final String apiValue;
 
@@ -445,13 +445,13 @@ public class CatalogService {
 
         public static RepairMode from(String raw) {
             if (raw == null || raw.isBlank()) {
-                return UPSERT;
+                return PULL_REMOTE;
             }
             String normalized = raw.trim().toLowerCase(Locale.ROOT);
             return switch (normalized) {
-                case "upsert" -> UPSERT;
-                case "from_scratch", "from-scratch", "scratch", "reset" -> FROM_SCRATCH;
-                default -> throw new ValidationException("repair mode must be upsert or from_scratch");
+                case "pull_remote", "pull-remote", "pull", "upsert" -> PULL_REMOTE;
+                case "full_repair", "full-repair", "from_scratch", "from-scratch", "scratch", "reset" -> FULL_REPAIR;
+                default -> throw new ValidationException("repair mode must be pull_remote or full_repair");
             };
         }
     }

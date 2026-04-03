@@ -323,7 +323,7 @@ export default function RuleEditor() {
     const publication = (publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedRuleId && isLockedAfterPublicationRequest) {
-      message.error('Редактирование запрещено после отправки на публикацию');
+      message.error('Editing is locked after publication request');
       return false;
     }
     if (!ruleId) {
@@ -465,7 +465,7 @@ export default function RuleEditor() {
 
   const startDraftFromPublished = () => {
     if (!latestPublishedVersion) {
-      message.error('Для создания новой версии нужен опубликованный rule');
+      message.error('A published rule is required to create a new version');
       return;
     }
     const sourceVersion = latestPublishedVersion;
@@ -679,7 +679,7 @@ export default function RuleEditor() {
               onChange={handleCodingAgentChange}
               options={codingAgentOptions}
               placeholder="Select coding agent"
-              title="Для какого coding-agent будет выполняться правило."
+              title="Which coding agent this rule is executed with."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -690,7 +690,7 @@ export default function RuleEditor() {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Project rule"
-              title="Короткое отображаемое имя правила."
+              title="Short display name of the rule."
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
@@ -702,7 +702,7 @@ export default function RuleEditor() {
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Briefly describe the purpose of the rule"
               rows={2}
-              title="Кратко объясняет, когда и зачем использовать правило."
+              title="Briefly explains when and why to use the rule."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -713,7 +713,7 @@ export default function RuleEditor() {
               value={ruleId}
               onChange={(event) => handleRuleIdChange(event.target.value)}
               placeholder="project-rule"
-              title="Стабильный идентификатор правила для canonical_name и ссылок."
+              title="Stable rule identifier used for canonical_name and references."
               style={{ marginTop: 4 }}
               disabled={!isEditing || !!selectedRuleId}
             />
@@ -724,7 +724,7 @@ export default function RuleEditor() {
               value={teamCode}
               onChange={(event) => setTeamCode(event.target.value)}
               placeholder="platform-team"
-              title="Код команды-владельца правила."
+              title="Owner team code for this rule."
               style={{ marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -736,7 +736,7 @@ export default function RuleEditor() {
               onChange={setPlatformCode}
               options={platformOptions}
               placeholder="Select platform"
-              title="Платформа применения правила: FRONT, BACK или DATA."
+              title="Rule target platform: FRONT, BACK, or DATA."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -748,7 +748,7 @@ export default function RuleEditor() {
               value={tags}
               onChange={(nextTags) => setTags(nextTags)}
               placeholder="Add tags"
-              title="Теги для поиска и фильтрации."
+              title="Tags used for search and filtering."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -760,7 +760,7 @@ export default function RuleEditor() {
               onChange={setRuleKind}
               options={ruleKindOptions}
               placeholder="Select rule kind"
-              title="Категория правила (архитектура, безопасность и т.п.)."
+              title="Rule category (architecture, security, etc.)."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />
@@ -772,7 +772,7 @@ export default function RuleEditor() {
               onChange={handleScopeChange}
               options={scopeOptions}
               placeholder="Select scope"
-              title="Область действия правила: team или organization."
+              title="Rule scope: team or organization."
               style={{ width: '100%', marginTop: 4 }}
               disabled={!isEditing}
             />

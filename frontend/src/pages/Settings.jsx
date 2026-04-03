@@ -10,7 +10,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [initialValues, setInitialValues] = useState(null);
-  const [repairMode, setRepairMode] = useState('upsert');
+  const [repairMode, setRepairMode] = useState('pull_remote');
 
   const load = async () => {
     setLoading(true);
@@ -103,8 +103,9 @@ export default function Settings() {
       });
       const summary = [
         `Status: ${result?.status || 'unknown'}`,
+        `Mode: ${result?.mode || 'unknown'}`,
         `Scanned: rules=${result?.scanned_rules ?? 0}, skills=${result?.scanned_skills ?? 0}, flows=${result?.scanned_flows ?? 0}`,
-        `Upsert: inserted=${result?.inserted ?? 0}, updated=${result?.updated ?? 0}, skipped=${result?.skipped ?? 0}`,
+        `Merge: inserted=${result?.inserted ?? 0}, updated=${result?.updated ?? 0}, skipped=${result?.skipped ?? 0}`,
       ];
       const errors = Array.isArray(result?.errors) ? result.errors : [];
       if (errors.length > 0) {
@@ -131,17 +132,17 @@ export default function Settings() {
   };
 
   const handleRepair = async () => {
-    if (repairMode === 'from_scratch') {
+    if (repairMode === 'full_repair') {
       Modal.confirm({
-        title: 'Warning: rebuild catalog from scratch?',
-        content: 'Catalog index entries (rules/skills/flows) will be deleted and rebuilt again from the git repository.',
-        okText: 'Run from scratch',
+        title: 'Run Full Repair?',
+        content: 'Full Repair will delete all local catalog items (team/non-remote), then rebuild the index from the remote git mirror.',
+        okText: 'Run Full Repair',
         okButtonProps: { danger: true },
-        onOk: () => runRepair('from_scratch'),
+        onOk: () => runRepair('full_repair'),
       });
       return;
     }
-    await runRepair('upsert');
+    await runRepair('pull_remote');
   };
 
   return (
@@ -212,8 +213,8 @@ export default function Settings() {
               value={repairMode}
               onChange={setRepairMode}
               options={[
-                { value: 'upsert', label: 'Upsert' },
-                { value: 'from_scratch', label: 'From scratch' },
+                { value: 'pull_remote', label: 'Pull Remote' },
+                { value: 'full_repair', label: 'Full Repair' },
               ]}
             />
             <Button onClick={handleRepair} loading={saving}>Repair catalog</Button>

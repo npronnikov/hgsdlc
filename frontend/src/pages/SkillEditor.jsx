@@ -467,11 +467,11 @@ export default function SkillEditor() {
   const confirmCreateFolder = () => {
     const folderPath = normalizePath(newFolderPath);
     if (!isValidPath(folderPath) || !isAllowedFolderPath(folderPath)) {
-      message.error('Некорректный путь папки');
+      message.error('Invalid folder path');
       return;
     }
     if (packageFiles.some((item) => item.path === folderPath)) {
-      message.error('Папка конфликтует с файлом');
+      message.error('Folder conflicts with an existing file');
       return;
     }
     const next = new Set(folderPaths);
@@ -497,23 +497,23 @@ export default function SkillEditor() {
   const confirmCreateFile = () => {
     const path = normalizePath(newFilePath);
     if (!isValidPath(path) || !isAllowedFilePath(path)) {
-      message.error('Некорректный путь файла');
+      message.error('Invalid file path');
       return;
     }
     if (path === 'SKILL.md') {
-      message.error('SKILL.md уже существует и находится в корне');
+      message.error('SKILL.md already exists at the root');
       return;
     }
     if (packageFiles.some((item) => item.path === path)) {
-      message.error('Файл уже существует');
+      message.error('File already exists');
       return;
     }
     if (folderPaths.includes(path)) {
-      message.error('Файл конфликтует с папкой');
+      message.error('File conflicts with an existing folder');
       return;
     }
     if (packageFiles.length >= MAX_FILES) {
-      message.error(`Лимит файлов превышен (макс ${MAX_FILES})`);
+      message.error(`File limit exceeded (max ${MAX_FILES})`);
       return;
     }
     const parent = getParentPath(path);
@@ -537,7 +537,7 @@ export default function SkillEditor() {
     if (selectedTreeKey.startsWith('file:')) {
       const filePath = selectedTreeKey.slice('file:'.length);
       if (filePath === 'SKILL.md') {
-        message.error('SKILL.md нельзя удалять');
+        message.error('SKILL.md cannot be deleted');
         return;
       }
       const nextFiles = packageFiles.filter((item) => item.path !== filePath);
@@ -562,7 +562,7 @@ export default function SkillEditor() {
     const publication = (publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedSkillId && isLockedAfterPublicationRequest) {
-      message.error('Редактирование запрещено после отправки на публикацию');
+      message.error('Editing is locked after publication request');
       return false;
     }
     if (!skillId) {
@@ -800,7 +800,7 @@ export default function SkillEditor() {
 
   const startDraftFromPublished = () => {
     if (!latestPublishedVersion) {
-      message.error('Для создания новой версии нужен опубликованный skill');
+      message.error('A published skill is required to create a new version');
       return;
     }
     const sourceVersion = latestPublishedVersion;
@@ -1012,21 +1012,21 @@ export default function SkillEditor() {
                   icon={<FolderAddOutlined />}
                   onClick={openCreateFolderDialog}
                   disabled={!isEditing}
-                  title="Создать папку"
+                  title="Create folder"
                 />
                 <Button
                   size="small"
                   icon={<FileAddOutlined />}
                   onClick={openCreateFileDialog}
                   disabled={!isEditing}
-                  title="Создать файл"
+                  title="Create file"
                 />
                 <Button
                   size="small"
                   icon={<DeleteOutlined />}
                   onClick={removeSelectedNode}
                   disabled={!isEditing || selectedTreeKey === 'file:SKILL.md'}
-                  title="Удалить выбранный файл или папку"
+                  title="Delete selected file or folder"
                 />
               </Space>
             </div>
@@ -1071,7 +1071,7 @@ export default function SkillEditor() {
                 onChange={handleCodingAgentChange}
                 options={codingAgentOptions}
                 placeholder="Select coding agent"
-                title="Для какого coding-agent будет выполняться skill."
+                title="Which coding agent this skill is executed with."
                 style={{ width: '100%', marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1082,7 +1082,7 @@ export default function SkillEditor() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Update requirements"
-                title="Короткое отображаемое имя skill в каталоге."
+                title="Short display name of the skill in the catalog."
                 style={{ marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1093,7 +1093,7 @@ export default function SkillEditor() {
                 value={skillId}
                 onChange={(event) => handleSkillIdChange(event.target.value)}
                 placeholder="update-requirements"
-                title="Стабильный идентификатор skill, используется в canonical_name и ссылках."
+                title="Stable skill identifier used in canonical_name and references."
                 style={{ marginTop: 4 }}
                 disabled={!isEditing || !!selectedSkillId}
               />
@@ -1105,7 +1105,7 @@ export default function SkillEditor() {
                 onChange={(event) => setDescription(event.target.value)}
                 rows={4}
                 placeholder="Brief description of the Skill purpose"
-                title="Краткое описание назначения skill для поиска и карточки."
+                title="Short skill purpose description for search and cards."
                 style={{ marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1116,7 +1116,7 @@ export default function SkillEditor() {
                 value={teamCode}
                 onChange={(event) => setTeamCode(event.target.value)}
                 placeholder="platform-team"
-                title="Код команды-владельца skill."
+                title="Owner team code for this skill."
                 style={{ marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1139,7 +1139,7 @@ export default function SkillEditor() {
                 onChange={setPlatformCode}
                 options={platformOptions}
                 placeholder="Select platform"
-                title="Платформа применения skill: FRONT, BACK или DATA."
+                title="Skill target platform: FRONT, BACK, or DATA."
                 style={{ width: '100%', marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1152,7 +1152,7 @@ export default function SkillEditor() {
                 onChange={(nextTags) => setTags(nextTags)}
                 options={tagOptions}
                 placeholder="Add tags"
-                title="Теги для фильтрации и поиска."
+                title="Tags used for filtering and search."
                 style={{ width: '100%', marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1164,7 +1164,7 @@ export default function SkillEditor() {
                 onChange={setSkillKind}
                 options={skillKindOptions}
                 placeholder="Select skill kind"
-                title="Тип skill (analysis/code/review/refactor/qa/ops)."
+                title="Skill type (analysis/code/review/refactor/qa/ops)."
                 style={{ width: '100%', marginTop: 4 }}
                 disabled={!isEditing}
               />
@@ -1181,17 +1181,17 @@ export default function SkillEditor() {
         </div>
       </div>
       <Modal
-        title="Создать папку"
+        title="Create folder"
         open={createFolderModalOpen}
         onCancel={() => {
           setCreateFolderModalOpen(false);
           setNewFolderPath('');
         }}
         onOk={confirmCreateFolder}
-        okText="Создать"
-        cancelText="Отмена"
+        okText="Create"
+        cancelText="Cancel"
       >
-        <Text className="muted">Путь папки (только `scripts/*`, `templates/*`, `assets/*`)</Text>
+        <Text className="muted">Folder path (only `scripts/*`, `templates/*`, `assets/*`)</Text>
         <Input
           value={newFolderPath}
           onChange={(event) => setNewFolderPath(event.target.value)}
@@ -1201,17 +1201,17 @@ export default function SkillEditor() {
         />
       </Modal>
       <Modal
-        title="Создать файл"
+        title="Create file"
         open={createFileModalOpen}
         onCancel={() => {
           setCreateFileModalOpen(false);
           setNewFilePath('');
         }}
         onOk={confirmCreateFile}
-        okText="Создать"
-        cancelText="Отмена"
+        okText="Create"
+        cancelText="Cancel"
       >
-        <Text className="muted">Путь файла (`SKILL.md` в корне уже существует)</Text>
+        <Text className="muted">File path (`SKILL.md` already exists at root)</Text>
         <Input
           value={newFilePath}
           onChange={(event) => setNewFilePath(event.target.value)}
