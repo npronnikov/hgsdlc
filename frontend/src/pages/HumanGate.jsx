@@ -252,6 +252,9 @@ export default function HumanGate() {
     const selectedNormalized = normalizePath(selectedPath);
     return changes.find((item) => normalizePath(item.path) === selectedNormalized) || null;
   }, [changes, selectedPath]);
+  const selectedGitStatus = String(selectedGitChange?.status || 'modified').toLowerCase();
+  const isNewFileChange = selectedGitStatus === 'added' || selectedGitStatus === 'untracked';
+  const renderSideBySideDiff = isApproval && !isNewFileChange;
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
@@ -683,7 +686,7 @@ export default function HumanGate() {
             title={selectedPath ? (
               <div className="human-gate-editor-title">
                 <span className="human-gate-editor-path">{selectedPath}</span>
-                <span className="human-gate-editor-status">{String(selectedGitChange?.status || 'modified').toLowerCase()}</span>
+                <span className="human-gate-editor-status">{selectedGitStatus}</span>
               </div>
             ) : 'Diff viewer'}
             loading={loadingDiff}
@@ -740,7 +743,7 @@ export default function HumanGate() {
                   }}
                   options={{
                     readOnly: true,
-                    renderSideBySide: isApproval,
+                    renderSideBySide: renderSideBySideDiff,
                     useInlineViewWhenSpaceIsLimited: false,
                     contextmenu: false,
                     glyphMargin: true,

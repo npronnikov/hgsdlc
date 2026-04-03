@@ -19,6 +19,8 @@ const MODIFIABLE_OPTIONS = [
   { value: 'no', label: 'Modifiable: NO' },
   { value: 'yes', label: 'Modifiable: YES' },
 ];
+const SHOW_AI_RESPONSE_SCHEMA_EDITOR = false;
+const SHOW_EXPECTED_CHANGES_EDITOR = false;
 
 const requiredLabel = (label) => `${label} *`;
 
@@ -258,33 +260,35 @@ export function NodeEditPanel({ editor }) {
                 />
               </div>
             </div>
-            <div>
-              <Text className="muted">Response schema (optional, JSON)</Text>
-              <div className="field-control schema-editor-wrap">
-                <Editor
-                  height="120px"
-                  defaultLanguage="json"
-                  beforeMount={configureMonacoThemes}
-                  theme={monacoTheme}
-                  value={selectedNode.data.responseSchema || ''}
-                  onChange={(value) => updateSelectedNode({ responseSchema: value ?? '' })}
-                  options={{
-                    readOnly: isReadOnly,
-                    minimap: { enabled: false },
-                    lineNumbers: 'off',
-                    scrollBeyondLastLine: false,
-                    folding: false,
-                    fontSize: 12,
-                    tabSize: 2,
-                    automaticLayout: true,
-                    wordWrap: 'on',
-                    overviewRulerLanes: 0,
-                    hideCursorInOverviewRuler: true,
-                    scrollbar: { vertical: 'auto', horizontal: 'hidden' },
-                  }}
-                />
+            {SHOW_AI_RESPONSE_SCHEMA_EDITOR && (
+              <div>
+                <Text className="muted">Response schema (optional, JSON)</Text>
+                <div className="field-control schema-editor-wrap">
+                  <Editor
+                    height="120px"
+                    defaultLanguage="json"
+                    beforeMount={configureMonacoThemes}
+                    theme={monacoTheme}
+                    value={selectedNode.data.responseSchema || ''}
+                    onChange={(value) => updateSelectedNode({ responseSchema: value ?? '' })}
+                    options={{
+                      readOnly: isReadOnly,
+                      minimap: { enabled: false },
+                      lineNumbers: 'off',
+                      scrollBeyondLastLine: false,
+                      folding: false,
+                      fontSize: 12,
+                      tabSize: 2,
+                      automaticLayout: true,
+                      wordWrap: 'on',
+                      overviewRulerLanes: 0,
+                      hideCursorInOverviewRuler: true,
+                      scrollbar: { vertical: 'auto', horizontal: 'hidden' },
+                    }}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
 
@@ -467,43 +471,47 @@ export function NodeEditPanel({ editor }) {
                 </Button>
               </div>
 
-              <Text className="muted" style={{ marginTop: 12 }}>Expected changes</Text>
-              <div className="context-list">
-                {(selectedNode.data.expectedMutations || []).map((entry, index) => (
-                  <div key={`mutation-${index}`} className="mutation-row">
-                    <Select
-                      value={entry.scope || 'project'}
-                      options={SCOPE_OPTIONS}
-                      disabled={isReadOnly}
-                      title="Область применения ожидаемого изменения."
-                      onChange={(value) => updateSelectedNodeList('expectedMutations', index, { scope: value })}
-                    />
-                    <Input
-                      value={entry.path || ''}
-                      placeholder="path"
-                      disabled={isReadOnly}
-                      title="Путь файла, который должен быть изменён."
-                      onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
-                    />
+              {SHOW_EXPECTED_CHANGES_EDITOR && (
+                <>
+                  <Text className="muted" style={{ marginTop: 12 }}>Expected changes</Text>
+                  <div className="context-list">
+                    {(selectedNode.data.expectedMutations || []).map((entry, index) => (
+                      <div key={`mutation-${index}`} className="mutation-row">
+                        <Select
+                          value={entry.scope || 'project'}
+                          options={SCOPE_OPTIONS}
+                          disabled={isReadOnly}
+                          title="Область применения ожидаемого изменения."
+                          onChange={(value) => updateSelectedNodeList('expectedMutations', index, { scope: value })}
+                        />
+                        <Input
+                          value={entry.path || ''}
+                          placeholder="path"
+                          disabled={isReadOnly}
+                          title="Путь файла, который должен быть изменён."
+                          onChange={(event) => updateSelectedNodeList('expectedMutations', index, { path: event.target.value })}
+                        />
+                        <Button
+                          size="small"
+                          type="default"
+                          danger
+                          icon={<DeleteOutlined />}
+                          disabled={isReadOnly}
+                          onClick={() => removeSelectedNodeListItem('expectedMutations', index)}
+                        />
+                      </div>
+                    ))}
                     <Button
-                      size="small"
                       type="default"
-                      danger
-                      icon={<DeleteOutlined />}
+                      icon={<PlusOutlined />}
                       disabled={isReadOnly}
-                      onClick={() => removeSelectedNodeListItem('expectedMutations', index)}
-                    />
+                      onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true, scope: 'project' })}
+                    >
+                      Add change
+                    </Button>
                   </div>
-                ))}
-                <Button
-                  type="default"
-                  icon={<PlusOutlined />}
-                  disabled={isReadOnly}
-                  onClick={() => addSelectedNodeListItem('expectedMutations', { path: '', required: true, scope: 'project' })}
-                >
-                  Add change
-                </Button>
-              </div>
+                </>
+              )}
             </div>
 
             <Divider />

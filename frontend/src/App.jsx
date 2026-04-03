@@ -23,7 +23,7 @@ import AuditReview from './pages/AuditReview.jsx';
 import PromptPackage from './pages/PromptPackage.jsx';
 import Artifacts from './pages/Artifacts.jsx';
 import DeltaSummary from './pages/DeltaSummary.jsx';
-import Versions from './pages/Versions.jsx';
+import Users from './pages/Users.jsx';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 
 function RequireAuth({ children }) {
@@ -37,6 +37,14 @@ function RequireAuth({ children }) {
   }
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+function RequireRole({ role, children }) {
+  const { user } = useAuth();
+  if (!user?.roles?.includes(role)) {
+    return <Navigate to="/overview" replace />;
   }
   return children;
 }
@@ -84,7 +92,14 @@ export default function App() {
             <Route path="prompt-package" element={<PromptPackage />} />
             <Route path="artifacts" element={<Artifacts />} />
             <Route path="delta-summary" element={<DeltaSummary />} />
-            <Route path="versions" element={<Versions />} />
+            <Route
+              path="users"
+              element={
+                <RequireRole role="ADMIN">
+                  <Users />
+                </RequireRole>
+              }
+            />
             <Route path="publication-queue" element={<Navigate to="/requests" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />

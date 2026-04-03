@@ -1,5 +1,6 @@
 import { MarkerType } from 'reactflow';
 import { parse as parseYaml } from 'yaml';
+import dagre from 'dagre';
 
 export const DEFAULT_REWORK = { nextNode: '' };
 
@@ -96,13 +97,41 @@ export function parseFlowYaml(flowYaml, startNodeId) {
   }
   try {
     const parsed = parseYaml(flowYaml);
-    const nodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
-    return nodes.map((node, index) => ({
+    const rawNodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
+    const nodes = rawNodes.map((node, index) => ({
       id: node.id || `node-${index + 1}`,
       type: 'flowNode',
-      position: { x: 80 + index * 320, y: 120 },
+      position: { x: index * 220, y: 0 },
       data: toNodeData(node, node.id === startNodeId),
     }));
+    const edges = buildEdges(nodes);
+    if (nodes.length === 0) {
+      return nodes;
+    }
+
+    const NODE_WIDTH = 220;
+    const NODE_HEIGHT = 90;
+    const graph = new dagre.graphlib.Graph();
+    graph.setDefaultEdgeLabel(() => ({}));
+    graph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 140 });
+    nodes.forEach((node) => {
+      graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    });
+    edges.forEach((edge) => {
+      graph.setEdge(edge.source, edge.target);
+    });
+    dagre.layout(graph);
+
+    return nodes.map((node) => {
+      const layout = graph.node(node.id);
+      return {
+        ...node,
+        position: {
+          x: layout.x - NODE_WIDTH / 2,
+          y: layout.y - NODE_HEIGHT / 2,
+        },
+      };
+    });
   } catch (err) {
     return [];
   }

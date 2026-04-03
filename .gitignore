@@ -123,6 +123,7 @@ docker-compose.override.yml
 
 # Catalog repository
 /catalog-repo/*
+/demo/*
 
 
 # ============================================

@@ -5,7 +5,6 @@ import {
   ApartmentOutlined,
   AuditOutlined,
   DeploymentUnitOutlined,
-  FileTextOutlined,
   GithubOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -16,6 +15,7 @@ import {
   RobotOutlined,
   SettingOutlined,
   SunOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -24,7 +24,7 @@ import { useThemeMode } from '../theme/ThemeContext.jsx';
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-const navItems = [
+const BASE_NAV_ITEMS = [
   { key: '/overview', icon: <AppstoreOutlined />, label: 'Overview' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
   { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
@@ -34,7 +34,6 @@ const navItems = [
   { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
   { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
-  { key: '/versions', icon: <FileTextOutlined />, label: 'Versions / Snapshots' },
 ];
 
 const routeMeta = {
@@ -60,7 +59,7 @@ const routeMeta = {
   '/prompt-package': { title: 'Prompt Package', menuKey: '/run-console' },
   '/artifacts': { title: 'Artifacts', menuKey: '/run-console' },
   '/delta-summary': { title: 'Delta Summary', menuKey: '/run-console' },
-  '/versions': { title: 'Versions / Snapshots', menuKey: '/versions' },
+  '/users': { title: 'Users', menuKey: '/users' },
 };
 
 export default function AppShell() {
@@ -69,6 +68,12 @@ export default function AppShell() {
   const { user, logout } = useAuth();
   const { isDark, toggleMode } = useThemeMode();
   const [collapsed, setCollapsed] = useState(true);
+  const navItems = [
+    ...BASE_NAV_ITEMS,
+    ...(user?.roles?.includes('ADMIN')
+      ? [{ key: '/users', icon: <TeamOutlined />, label: 'Users' }]
+      : []),
+  ];
   const ruleIdFromPath = location.pathname.startsWith('/rules/') ? location.pathname.split('/')[2] : null;
   const skillIdFromPath = location.pathname.startsWith('/skills/') ? location.pathname.split('/')[2] : null;
   const flowIdFromPath = location.pathname.startsWith('/flows/') ? location.pathname.split('/')[2] : null;
