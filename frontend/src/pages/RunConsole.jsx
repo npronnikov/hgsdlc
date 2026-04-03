@@ -291,6 +291,11 @@ function renderResolvedContextSection(resolvedContext) {
           );
         }
         const transferMode = entry.transfer_mode || 'by_ref';
+        const inlineTokensApprox = typeof entry.size_tokens_approx === 'number'
+          ? entry.size_tokens_approx
+          : (typeof entry.size_bytes === 'number' && entry.size_bytes > 0
+            ? Math.max(1, Math.round(entry.size_bytes / 4))
+            : null);
         return (
           <Card key={`context-${index}`} size="small">
             <Space direction="vertical" size={6} style={{ width: '100%' }}>
@@ -305,8 +310,11 @@ function renderResolvedContextSection(resolvedContext) {
               </Space>
               {entry.path && <Text type="secondary">Path: <span className="mono">{entry.path}</span></Text>}
               {entry.source_node_id && <Text type="secondary">Source node: <span className="mono">{entry.source_node_id}</span></Text>}
-              {transferMode === 'by_value' && typeof entry.size_bytes === 'number' && (
-                <Text type="secondary">Inline size: {entry.size_bytes} B</Text>
+              {transferMode === 'by_value' && inlineTokensApprox !== null && (
+                <Text type="secondary">
+                  Inline size: ~{inlineTokensApprox} tokens
+                  {typeof entry.size_bytes === 'number' ? ` (${entry.size_bytes} B)` : ''}
+                </Text>
               )}
             </Space>
           </Card>

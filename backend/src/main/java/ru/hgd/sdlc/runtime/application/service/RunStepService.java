@@ -62,7 +62,8 @@ import ru.hgd.sdlc.settings.application.SettingsService;
 public class RunStepService {
     private static final Logger log = LoggerFactory.getLogger(RunStepService.class);
     private static final int DEFAULT_MAX_TICK_ITERATIONS = 128;
-    private static final long MAX_INLINE_ARTIFACT_BYTES = 64 * 1024;
+    private static final int DEFAULT_MAX_INLINE_ARTIFACT_TOKENS = 16_384;
+    private static final int APPROX_BYTES_PER_TOKEN = 4;
     private static final Set<String> FAILURE_TRANSITIONS = Set.of("on_failure");
     private static final String REWORK_REASON_TARGET_MISSING = "rework_target_missing";
     private static final String REWORK_REASON_TARGET_KIND_UNSUPPORTED = "rework_target_kind_unsupported";
@@ -84,6 +85,8 @@ public class RunStepService {
     private final RunPublishService runPublishService;
     private final Map<String, CodingAgentStrategy> codingAgentStrategiesByAgentId;
     private final int maxTickIterations;
+    private final int maxInlineArtifactTokens;
+    private final long maxInlineArtifactBytes;
 
     public RunStepService(
             RunRepository runRepository,
@@ -100,7 +103,8 @@ public class RunStepService {
             ClockPort clockPort,
             RunPublishService runPublishService,
             List<CodingAgentStrategy> codingAgentStrategies,
-            @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations
+            @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations,
+            @Value("${runtime.max-inline-artifact-tokens:16384}") Integer maxInlineArtifactTokens
     ) {
         this.runRepository = runRepository;
         this.nodeExecutionRepository = nodeExecutionRepository;
@@ -123,6 +127,8 @@ public class RunStepService {
                         (left, right) -> left
                 ));
         this.maxTickIterations = maxTickIterations == null ? DEFAULT_MAX_TICK_ITERATIONS : maxTickIterations;
+        this.maxInlineArtifactTokens = normalizeMaxInlineArtifactTokens(maxInlineArtifactTokens);
+        this.maxInlineArtifactBytes = toApproxBytes(this.maxInlineArtifactTokens);
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -611,6 +617,29 @@ public class RunStepService {
         }
     }
 
+    private String readInlineArtifactContent(Path path) {
+        if (path == null || !workspacePort.exists(path) || workspacePort.isDirectory(path)) {
+            return "";
+        }
+        try {
+            String content = workspacePort.readString(path, StandardCharsets.UTF_8);
+            return content == null ? "" : content;
+        } catch (IOException ex) {
+            log.warn("Failed to read inline artifact content: path={}", path, ex);
+            return "";
+        }
+    }
+
+    private Map<String, Object> byRefArtifactContext(Path path, String artifactKey, String sourceNodeId) {
+        return Map.of(
+                "type", "artifact_ref",
+                "artifact_key", artifactKey,
+                "path", path.toString(),
+                "source_node_id", sourceNodeId,
+                "transfer_mode", "by_ref"
+        );
+    }
+
     private RunStatus resolveTerminalStatus(UUID runId) {
         return auditEventRepository.findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(runId, "transition_applied")
                 .map(event -> {
@@ -840,6 +869,7 @@ public class RunStepService {
 
     private List<Map<String, Object>> resolveExecutionContext(RunEntity run, NodeModel node) {
         List<Map<String, Object>> resolved = new ArrayList<>();
+        List<InlineArtifactContext> inlineCandidates = new ArrayList<>();
         List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of() : node.getExecutionContext();
         for (ExecutionContextEntry entry : entries) {
             if (entry == null || entry.getType() == null || entry.getType().isBlank()) {
@@ -864,47 +894,50 @@ public class RunStepService {
                     String transferMode = normalizeTransferMode(entry.getTransferMode());
                     if ("by_value".equals(transferMode)) {
                         long sizeBytes = fileSize(path);
-                        if (sizeBytes > MAX_INLINE_ARTIFACT_BYTES) {
-                            log.warn(
-                                    "artifact_ref by_value exceeds max size ({} bytes) for path={}, falling back to by_ref",
-                                    MAX_INLINE_ARTIFACT_BYTES, entry.getPath()
-                            );
-                            resolved.add(Map.of(
-                                    "type", "artifact_ref",
-                                    "artifact_key", artifactKeyForPath(entry.getPath()),
-                                    "path", path.toString(),
-                                    "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
-                                    "transfer_mode", "by_ref"
-                            ));
-                        } else {
-                            String content = readFileContent(path);
-                            if (content == null) {
-                                content = "";
-                            }
-                            resolved.add(Map.of(
-                                    "type", "artifact_ref",
-                                    "artifact_key", artifactKeyForPath(entry.getPath()),
-                                    "path", path.toString(),
-                                    "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
-                                    "transfer_mode", "by_value",
-                                    "content", content,
-                                    "content_checksum", ChecksumUtil.sha256(content),
-                                    "size_bytes", sizeBytes
-                            ));
-                        }
-                    } else {
-                        resolved.add(Map.of(
-                                "type", "artifact_ref",
-                                "artifact_key", artifactKeyForPath(entry.getPath()),
-                                "path", path.toString(),
-                                "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
-                                "transfer_mode", "by_ref"
+                        inlineCandidates.add(new InlineArtifactContext(
+                                artifactKeyForPath(entry.getPath()),
+                                path,
+                                entry.getNodeId() == null ? "" : entry.getNodeId(),
+                                sizeBytes
                         ));
+                    } else {
+                        resolved.add(byRefArtifactContext(path, artifactKeyForPath(entry.getPath()), entry.getNodeId() == null ? "" : entry.getNodeId()));
                     }
                 }
                 default -> {
                 }
             }
+        }
+
+        long totalInlineBytes = inlineCandidates.stream().mapToLong(InlineArtifactContext::sizeBytes).sum();
+        boolean inlineOverflow = totalInlineBytes > maxInlineArtifactBytes;
+        if (inlineOverflow) {
+            log.warn(
+                    "artifact_ref by_value total exceeds limit: requested={} bytes (~{} tokens), limit={} tokens (~{} bytes). Fallback to by_ref for {} artifact(s)",
+                    totalInlineBytes,
+                    approxTokens(totalInlineBytes),
+                    maxInlineArtifactTokens,
+                    maxInlineArtifactBytes,
+                    inlineCandidates.size()
+            );
+        }
+        for (InlineArtifactContext candidate : inlineCandidates) {
+            if (inlineOverflow) {
+                resolved.add(byRefArtifactContext(candidate.path(), candidate.artifactKey(), candidate.sourceNodeId()));
+                continue;
+            }
+            String content = readInlineArtifactContent(candidate.path());
+            resolved.add(Map.of(
+                    "type", "artifact_ref",
+                    "artifact_key", candidate.artifactKey(),
+                    "path", candidate.path().toString(),
+                    "source_node_id", candidate.sourceNodeId(),
+                    "transfer_mode", "by_value",
+                    "content", content,
+                    "content_checksum", ChecksumUtil.sha256(content),
+                    "size_bytes", candidate.sizeBytes(),
+                    "size_tokens_approx", approxTokens(candidate.sizeBytes())
+            ));
         }
         return resolved;
     }
@@ -1688,6 +1721,24 @@ public class RunStepService {
         return "by_ref";
     }
 
+    private int normalizeMaxInlineArtifactTokens(Integer configuredValue) {
+        if (configuredValue == null || configuredValue <= 0) {
+            return DEFAULT_MAX_INLINE_ARTIFACT_TOKENS;
+        }
+        return configuredValue;
+    }
+
+    private long toApproxBytes(int tokenCount) {
+        return (long) tokenCount * APPROX_BYTES_PER_TOKEN;
+    }
+
+    private long approxTokens(long bytes) {
+        if (bytes <= 0) {
+            return 0;
+        }
+        return Math.max(1, Math.round((double) bytes / APPROX_BYTES_PER_TOKEN));
+    }
+
     private String capitalize(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -1716,6 +1767,13 @@ public class RunStepService {
             int added,
             int removed,
             boolean binary
+    ) {}
+
+    private record InlineArtifactContext(
+            String artifactKey,
+            Path path,
+            String sourceNodeId,
+            long sizeBytes
     ) {}
 
     private record HumanInputEditableArtifact(

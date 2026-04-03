@@ -280,9 +280,15 @@ public class AgentPromptBuilder {
                     if ("by_value".equals(transferMode)) {
                         String content = trimToNull(asString(contextEntry.get("content")));
                         String sizeBytes = String.valueOf(asLong(contextEntry.get("size_bytes")));
+                        long sizeTokensApprox = asLong(contextEntry.get("size_tokens_approx"));
+                        if (sizeTokensApprox <= 0) {
+                            long bytes = asLong(contextEntry.get("size_bytes"));
+                            sizeTokensApprox = bytes <= 0 ? 0 : Math.max(1, Math.round((double) bytes / 4));
+                        }
                         inputs.add(texts.useUpstreamArtifactByValue()
                                 .replace("{artifact_key}", artifactKey == null ? "artifact" : artifactKey)
                                 .replace("{path}", path == null ? "path is not provided" : path)
+                                .replace("{size_tokens_approx}", String.valueOf(sizeTokensApprox))
                                 .replace("{size_bytes}", sizeBytes)
                                 .replace("{content}", content == null ? "" : content));
                     } else {

@@ -1,45 +1,69 @@
 # Human Guided SDLC
 
-## О проекте
-Human Guided SDLC — это рабочая попытка построить контролируемую абстракцию над кодинг‑агентом. Идея в том, что энтерпрайз‑среде нужен управляемый рантайм: наблюдаемый, воспроизводимый и ограничиваемый по правилам выполнения. Этот проект делает шаг в эту сторону, комбинируя декларативные описания флоу, правила, навыки и аудит действий.
+Human Guided SDLC — платформа для управляемого выполнения задач кодинг-агентом: через версии `flows`, `rules`, `skills`, публикационный pipeline и runtime с аудитом.
 
-## Архитектура
-Проект разделён на два компонента:
-- Backend: Spring Boot (Java 21), REST API, хранение версий и статусов (draft/published), валидации и проверки.
-- Frontend: React + Vite, UI для редакторов `flows`, `rules`, `skills` и управления версиями.
+## Что в репозитории
 
-## Запуск (dev)
-### Общие требования
-- На компьютере должен быть установлен coding-agent Qwen Coder (`Qwen Code`): https://github.com/QwenLM/qwen-code#installation
+- `backend/` — Spring Boot (Java 21), REST API, Liquibase, JPA.
+- `frontend/` — React + Vite UI.
+- `infra/docker/compose.yml` — локальный PostgreSQL.
+- `docs/` — проектная документация.
 
-### Backend
-Требования: Java 21.
-1. `cd /Users/nick/IdeaProjects/human-guided-development/backend`
-2. `./gradlew bootRun`
+## Быстрый старт (H2 in-memory)
 
-По умолчанию API доступен на `http://localhost:8080`, база — H2 in‑memory (см. `backend/src/main/resources/application.yml`).
+1. Запустить backend:
 
-### Frontend
-Требования: Node.js 18+ (или совместимый LTS).
-1. `cd /Users/nick/IdeaProjects/human-guided-development/frontend`
-2. `npm install`
-3. `npm run dev`
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development/backend
+./gradlew bootRun
+```
 
-Vite проксирует `/api` на `http://localhost:8080` (см. `frontend/vite.config.js`).
+2. Запустить frontend (в отдельном терминале):
 
-## Сборка
-### Backend
-1. `cd /Users/nick/IdeaProjects/human-guided-development/backend`
-2. `./gradlew build`
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development/frontend
+npm install
+npm run dev
+```
 
-### Frontend
-1. `cd /Users/nick/IdeaProjects/human-guided-development/frontend`
-2. `npm run build`
+3. Открыть приложение:
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8080`
+- Health check: `http://localhost:8080/actuator/health`
+
+Примечание: при таком запуске используется in-memory H2, данные не сохраняются между перезапусками backend.
+
+## Полная инструкция установки
+
+См. подробный гайд: [docs/installation.md](docs/installation.md)
 
 ## Конфигурация
-Ключевые параметры можно задавать через переменные окружения:
-- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` для подключения к БД.
 
-## Ключевая идея
-Энтерпрайзу нужен управляемый рантайм. Этот проект — практическая попытка построить контролируемую абстракцию над кодинг‑агентом, чтобы обеспечить прозрачность, контроль версий и безопасное выполнение сценариев.
-Также такой рантайм может содержать ноды вызовов других ИИ‑агентов, что позволяет строить сложные графы исполнения.
+Backend читает параметры БД из переменных окружения:
+
+- `DB_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+
+Если не задавать их, backend стартует на in-memory H2 (подходит для локальных быстрых запусков, но не основной режим разработки).
+
+## Дефолтный доступ
+
+- Seed-пользователь (backend): `admin / admin`
+
+## Полезные команды
+
+Сборка backend:
+
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development/backend
+./gradlew build
+```
+
+Сборка frontend:
+
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development/frontend
+npm run build
+```

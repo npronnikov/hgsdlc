@@ -60,5 +60,5 @@ inputs:
   use_upstream_artifact_by_path: "{path}"
   # Added for artifact_ref when artifact_key is known. Placeholders: {artifact_key}, {path}
   use_upstream_artifact_by_key_and_path: "{artifact_key}: {path}"
-  # Added for artifact_ref with transfer_mode=by_value. Placeholders: {artifact_key}, {path}, {size_bytes}, {content}
-  use_upstream_artifact_by_value: "{artifact_key} ({size_bytes} байт):\n```text\n{content}\n```"
+  # Added for artifact_ref with transfer_mode=by_value. Placeholders: {artifact_key}, {path}, {size_tokens_approx}, {size_bytes}, {content}
+  use_upstream_artifact_by_value: "{artifact_key} (~{size_tokens_approx} токенов, {size_bytes} байт):\n```text\n{content}\n```"

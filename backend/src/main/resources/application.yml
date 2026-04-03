@@ -22,6 +22,24 @@ spring:
 
 auth:
   session-ttl-seconds: 86400
-  seed-username: admin
-  seed-password: admin
-  seed-role: ADMIN
+  seed-users:
+    - username: admin
+      display-name: All Roles
+      password: admin
+      roles: [ADMIN, FLOW_CONFIGURATOR, PRODUCT_OWNER, TECH_APPROVER]
+    - username: flow_configurator
+      display-name: Flow Configurator
+      password: admin
+      roles: [FLOW_CONFIGURATOR]
+    - username: product_owner
+      display-name: Product Owner
+      password: admin
+      roles: [PRODUCT_OWNER]
+    - username: tech_approver
+      display-name: Tech Approver
+      password: admin
+      roles: [TECH_APPROVER]
+
+runtime:
+  # Approximate budget for all execution_context artifact_ref entries with transfer_mode=by_value per node run.
+  max-inline-artifact-tokens: 16384
