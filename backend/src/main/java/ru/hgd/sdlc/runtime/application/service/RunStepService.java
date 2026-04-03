@@ -865,26 +865,33 @@ public class RunStepService {
                     if ("by_value".equals(transferMode)) {
                         long sizeBytes = fileSize(path);
                         if (sizeBytes > MAX_INLINE_ARTIFACT_BYTES) {
-                            throw new NodeFailureException(
-                                    "EXECUTION_CONTEXT_TOO_LARGE",
-                                    "artifact_ref by_value exceeds max size (" + MAX_INLINE_ARTIFACT_BYTES + " bytes): " + entry.getPath(),
-                                    false
+                            log.warn(
+                                    "artifact_ref by_value exceeds max size ({} bytes) for path={}, falling back to by_ref",
+                                    MAX_INLINE_ARTIFACT_BYTES, entry.getPath()
                             );
+                            resolved.add(Map.of(
+                                    "type", "artifact_ref",
+                                    "artifact_key", artifactKeyForPath(entry.getPath()),
+                                    "path", path.toString(),
+                                    "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
+                                    "transfer_mode", "by_ref"
+                            ));
+                        } else {
+                            String content = readFileContent(path);
+                            if (content == null) {
+                                content = "";
+                            }
+                            resolved.add(Map.of(
+                                    "type", "artifact_ref",
+                                    "artifact_key", artifactKeyForPath(entry.getPath()),
+                                    "path", path.toString(),
+                                    "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
+                                    "transfer_mode", "by_value",
+                                    "content", content,
+                                    "content_checksum", ChecksumUtil.sha256(content),
+                                    "size_bytes", sizeBytes
+                            ));
                         }
-                        String content = readFileContent(path);
-                        if (content == null) {
-                            content = "";
-                        }
-                        resolved.add(Map.of(
-                                "type", "artifact_ref",
-                                "artifact_key", artifactKeyForPath(entry.getPath()),
-                                "path", path.toString(),
-                                "source_node_id", entry.getNodeId() == null ? "" : entry.getNodeId(),
-                                "transfer_mode", "by_value",
-                                "content", content,
-                                "content_checksum", ChecksumUtil.sha256(content),
-                                "size_bytes", sizeBytes
-                        ));
                     } else {
                         resolved.add(Map.of(
                                 "type", "artifact_ref",
