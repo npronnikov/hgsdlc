@@ -49,8 +49,8 @@ sections:
   # Inserted when required expected_mutations or project-scope produced_artifacts exist.
   project_changes_header: "Ожидаемые файлы для создания в проекте:"
 
-  # Always inserted before footer. Placeholders: {step_id}, {attempt_no}
-  structured_output: "После выполнения работы выведи итог шага в следующем формате:\n\nSTEP_SUMMARY:\n```json\n{\n  \"step_id\": \"{step_id}\",\n  \"attempt\": {attempt_no},\n  \"status\": \"done\",\n  \"actions\": [\"опиши каждое выполненное действие\"],\n  \"output_files\": [\"relative/path/to/produced/file\"],\n  \"project_changes\": [\"relative/path/to/changed/file\"],\n  \"issues\": []\n}\n```"
+  # Always inserted before footer. Placeholders: {step_id}, {attempt_no}, {step_summary_path}
+  structured_output: "После выполнения работы сохрани итог шага в файл `{step_summary_path}` в формате JSON:\n\n```json\n{\n  \"step_id\": \"{step_id}\",\n  \"attempt\": {attempt_no},\n  \"status\": \"done\",\n  \"actions\": [\"опиши каждое выполненное действие\"],\n  \"output_files\": [\"relative/path/to/produced/file\"],\n  \"project_changes\": [\"relative/path/to/changed/file\"],\n  \"issues\": []\n}\n```\n\nЗапиши в файл только JSON-объект без дополнительного текста."
 
   # Always last.
   footer: "Используй правила репозитория и доступные навыки."

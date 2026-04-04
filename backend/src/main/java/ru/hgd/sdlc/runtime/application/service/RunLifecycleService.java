@@ -710,6 +710,7 @@ public class RunLifecycleService {
                     "!.hgsdlc/nodes/**",
                     ".hgsdlc/nodes/**/*.log",
                     ".hgsdlc/nodes/**/prompt.md",
+                    ".hgsdlc/nodes/**/step-summary.json",
                     ".qwen/",
                     ".claude/",
                     ".cursor/"
@@ -729,6 +730,7 @@ public class RunLifecycleService {
             desiredManagedPatterns.add("!.hgsdlc/nodes/**");
             desiredManagedPatterns.add(".hgsdlc/nodes/**/*.log");
             desiredManagedPatterns.add(".hgsdlc/nodes/**/prompt.md");
+            desiredManagedPatterns.add(".hgsdlc/nodes/**/step-summary.json");
             if (runtimeAgent != null && runtimeAgent.matches("[a-z0-9_-]+")) {
                 desiredManagedPatterns.add("." + runtimeAgent + "/");
             }

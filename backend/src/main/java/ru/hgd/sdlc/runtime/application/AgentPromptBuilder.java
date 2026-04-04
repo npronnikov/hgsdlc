@@ -214,7 +214,16 @@ public class AgentPromptBuilder {
         return texts.structuredOutput()
                 .replace("{step_id}", stepId != null ? stepId : "")
                 .replace("{attempt_no}", String.valueOf(attemptNo))
+                .replace("{step_summary_path}", buildStepSummaryPath(stepId, attemptNo))
                 .stripTrailing() + "\n\n";
+    }
+
+    private String buildStepSummaryPath(String stepId, int attemptNo) {
+        String normalizedStepId = trimToNull(stepId);
+        if (normalizedStepId == null) {
+            normalizedStepId = "node";
+        }
+        return ".hgsdlc/nodes/" + normalizedStepId + "/attempt-" + attemptNo + "/step-summary.json";
     }
 
     private String buildFooterSection(List<String> skills, PromptTexts texts) {

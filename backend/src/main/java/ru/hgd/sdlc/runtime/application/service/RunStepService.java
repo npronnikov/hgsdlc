@@ -69,6 +69,7 @@ public class RunStepService {
     private static final String REWORK_REASON_TARGET_KIND_UNSUPPORTED = "rework_target_kind_unsupported";
     private static final String REWORK_REASON_TARGET_CHECKPOINT_DISABLED = "rework_target_checkpoint_disabled";
     private static final String REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND = "target_checkpoint_not_found";
+    private static final String STEP_SUMMARY_FILE_NAME = "step-summary.json";
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -290,12 +291,15 @@ public class RunStepService {
                 )
         );
 
-        String stepSummaryJson = extractStepSummary(agentResult.stdout());
+        String stepSummaryJson = extractStepSummary(run, execution, agentResult.stdout());
         if (stepSummaryJson == null) {
             runtimeStepTxService.appendAudit(
                     run.getId(), execution.getId(), null,
                     "step_summary_missing", ActorType.SYSTEM, "runtime",
-                    Map.of("node_id", node.getId())
+                    Map.of(
+                            "node_id", node.getId(),
+                            "step_summary_path", resolveStepSummaryPath(run, execution).toString()
+                    )
             );
         }
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), stepSummaryJson);
@@ -1862,7 +1866,29 @@ public class RunStepService {
         return null;
     }
 
-    private String extractStepSummary(String stdout) {
+    private String extractStepSummary(RunEntity run, NodeExecutionEntity execution, String stdout) {
+        String fileSummary = extractStepSummaryFromFile(run, execution);
+        if (fileSummary != null) {
+            return fileSummary;
+        }
+        return extractStepSummaryFromStdout(stdout);
+    }
+
+    private String extractStepSummaryFromFile(RunEntity run, NodeExecutionEntity execution) {
+        Path summaryPath = resolveStepSummaryPath(run, execution);
+        if (!workspacePort.exists(summaryPath) || workspacePort.isDirectory(summaryPath)) {
+            return null;
+        }
+        try {
+            String raw = workspacePort.readString(summaryPath, StandardCharsets.UTF_8);
+            return parseAndValidateStepSummary(raw);
+        } catch (IOException ex) {
+            log.warn("Failed to read step summary file at {}: {}", summaryPath, ex.getMessage());
+            return null;
+        }
+    }
+
+    private String extractStepSummaryFromStdout(String stdout) {
         if (stdout == null) {
             return null;
         }
@@ -1885,6 +1911,18 @@ public class RunStepService {
             return null;
         }
         String json = after.substring(contentStart, jsonEnd).trim();
+        return parseAndValidateStepSummary(json);
+    }
+
+    private Path resolveStepSummaryPath(RunEntity run, NodeExecutionEntity execution) {
+        return resolveNodeExecutionRoot(run, execution).resolve(STEP_SUMMARY_FILE_NAME);
+    }
+
+    private String parseAndValidateStepSummary(String rawJson) {
+        String json = trimToNull(rawJson);
+        if (json == null) {
+            return null;
+        }
         try {
             JsonNode root = objectMapper.readTree(json);
             if (root.path("step_id").isMissingNode()
@@ -1894,7 +1932,7 @@ public class RunStepService {
                 return null;
             }
             return json;
-        } catch (Exception e) {
+        } catch (Exception ignored) {
             return null;
         }
     }
