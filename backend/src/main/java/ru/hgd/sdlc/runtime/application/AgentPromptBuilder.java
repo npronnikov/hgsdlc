@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
@@ -89,6 +90,7 @@ public class AgentPromptBuilder {
                 projectChangePaths,
                 hasProjectChanges,
                 workflowProgress == null ? List.of() : workflowProgress,
+                summarizeNodeSkills(node),
                 node.getId(),
                 execution.getAttemptNo()
         );
@@ -105,7 +107,7 @@ public class AgentPromptBuilder {
                 .replace(INPUTS_SECTION_TOKEN,            buildInputsSection(a.inputs(), texts))
                 .replace(EXPECTED_OUTPUTS_SECTION_TOKEN,  buildExpectedOutputsSection(a.outputFiles(), a.projectChangePaths(), a.hasProjectChanges(), texts))
                 .replace(STRUCTURED_OUTPUT_SECTION_TOKEN, buildStructuredOutputSection(a.stepId(), a.attemptNo(), texts))
-                .replace(FOOTER_SECTION_TOKEN,            texts.footer() + "\n");
+                .replace(FOOTER_SECTION_TOKEN,            buildFooterSection(a.skills(), texts));
         return normalizePrompt(rendered);
     }
 
@@ -215,6 +217,21 @@ public class AgentPromptBuilder {
                 .stripTrailing() + "\n\n";
     }
 
+    private String buildFooterSection(List<String> skills, PromptTexts texts) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(texts.footer()).append("\n");
+        if (skills == null || skills.isEmpty()) {
+            sb.append(texts.skillsListEmpty()).append("\n");
+            return sb.append("\n").toString();
+        }
+        sb.append(texts.skillsListHeader()).append("\n");
+        for (String skill : skills) {
+            sb.append("- ").append(skill).append("\n");
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
     private String normalizePrompt(String prompt) {
         String normalized = prompt.replace("\r\n", "\n");
         return normalized.replaceAll("\n{3,}", "\n\n");
@@ -247,6 +264,8 @@ public class AgentPromptBuilder {
                     text(root, "/sections/project_changes_header"),
                     text(root, "/sections/structured_output"),
                     text(root, "/sections/footer"),
+                    text(root, "/sections/skills_list_header"),
+                    text(root, "/sections/skills_list_empty"),
                     text(root, "/inputs/use_upstream_artifact_by_path"),
                     text(root, "/inputs/use_upstream_artifact_by_key_and_path"),
                     text(root, "/inputs/use_upstream_artifact_by_value")
@@ -353,6 +372,18 @@ public class AgentPromptBuilder {
         return paths.stream().distinct().toList();
     }
 
+    private List<String> summarizeNodeSkills(NodeModel node) {
+        if (node == null || node.getSkillRefs() == null) {
+            return List.of();
+        }
+        return node.getSkillRefs().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
+    }
+
     private boolean hasRequiredMutations(List<PathRequirement> mutations) {
         if (mutations == null) {
             return false;
@@ -420,6 +451,7 @@ public class AgentPromptBuilder {
             List<String> projectChangePaths,
             boolean hasProjectChanges,
             List<WorkflowProgressEntry> workflowProgress,
+            List<String> skills,
             String stepId,
             int attemptNo
     ) {}
@@ -441,6 +473,8 @@ public class AgentPromptBuilder {
             String projectChangesHeader,
             String structuredOutput,
             String footer,
+            String skillsListHeader,
+            String skillsListEmpty,
             String useUpstreamArtifactByPath,
             String useUpstreamArtifactByKeyAndPath,
             String useUpstreamArtifactByValue

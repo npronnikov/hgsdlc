@@ -54,6 +54,8 @@ sections:
 
   # Always last.
   footer: "Используй правила репозитория и доступные навыки."
+  skills_list_header: "Навыки этой AI-ноды:"
+  skills_list_empty: "Навыки этой AI-ноды: не указаны."
 
 inputs:
   # Added for artifact_ref when artifact key cannot be resolved. Placeholder: {path}

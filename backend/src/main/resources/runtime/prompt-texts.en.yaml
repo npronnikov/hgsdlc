@@ -54,6 +54,8 @@ sections:
 
   # Always last.
   footer: "Use repository rules and available skills."
+  skills_list_header: "Skills for this AI node:"
+  skills_list_empty: "Skills for this AI node: not specified."
 
 inputs:
   # Added for artifact_ref when artifact key cannot be resolved. Placeholder: {path}

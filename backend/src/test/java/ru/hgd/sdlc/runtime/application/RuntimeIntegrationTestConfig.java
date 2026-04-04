@@ -69,6 +69,7 @@ public class RuntimeIntegrationTestConfig {
                         List.of(),
                         false,
                         request.workflowProgress() == null ? List.of() : request.workflowProgress(),
+                        request.node().getSkillRefs() == null ? List.of() : request.node().getSkillRefs(),
                         request.node().getId(),
                         request.execution().getAttemptNo()
                 );
