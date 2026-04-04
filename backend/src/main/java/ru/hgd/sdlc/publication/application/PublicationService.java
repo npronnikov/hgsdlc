@@ -1015,11 +1015,17 @@ public class PublicationService {
     }
 
     private CatalogGitSettings loadCatalogGitSettings() {
-        String repoUrl = valueOrDefault(SettingsService.CATALOG_REPO_URL_KEY, "https://github.com/npronnikov/catalog.git");
-        String branch = valueOrDefault(SettingsService.CATALOG_DEFAULT_BRANCH_KEY, "main");
+        String repoUrl = valueOrDefault(SettingsService.CATALOG_REPO_URL_KEY, "");
+        String branch = valueOrDefault(SettingsService.CATALOG_DEFAULT_BRANCH_KEY, "");
         String username = valueOrDefault(SettingsService.CATALOG_GIT_USERNAME_KEY, "");
         String password = valueOrDefault(SettingsService.CATALOG_GIT_PASSWORD_KEY, "");
         String workspaceRoot = valueOrDefault(SettingsService.WORKSPACE_ROOT_KEY, "/tmp/workspace");
+        if (repoUrl.isBlank()) {
+            throw new ValidationException("catalog_repo_url is required");
+        }
+        if (branch.isBlank()) {
+            throw new ValidationException("catalog_default_branch is required");
+        }
         return new CatalogGitSettings(repoUrl, branch, username, password, workspaceRoot);
     }
 

@@ -88,12 +88,12 @@ public abstract class RuntimeIntegrationTestBase {
         }
     }
 
-    protected void configureRuntime(Path workspaceRoot) {
+    protected void configureRuntime(Path workspaceRoot, String catalogRepoUrl) {
         settingsService.updateWorkspaceRoot(workspaceRoot.toAbsolutePath().toString(), "test");
         settingsService.updateRuntimeCodingAgent("stub", "test");
         settingsService.updateAiTimeoutSeconds(60, "test");
         settingsService.updateCatalogSettings(
-                "",
+                catalogRepoUrl == null ? "" : catalogRepoUrl,
                 "main",
                 "pr",
                 "",

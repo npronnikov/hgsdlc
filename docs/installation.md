@@ -28,11 +28,8 @@ cd /Users/nick/IdeaProjects/human-guided-development
 
 ## 3. Поднять PostgreSQL (рекомендуемый путь)
 
-В репозитории есть готовый compose: `infra/docker/compose.yml`.
-
-```bash
-docker compose -f infra/docker/compose.yml up -d postgres
-```
+В репозитории есть production compose: `deploy/compose.prod.yml`.
+Для локального запуска можно использовать отдельный docker compose с сервисом postgres.
 
 Проверить, что контейнер запущен:
 
@@ -95,13 +92,13 @@ curl -fsS http://localhost:8080/actuator/health
 Остановить PostgreSQL:
 
 ```bash
-docker compose -f infra/docker/compose.yml down
+docker compose down
 ```
 
 Удалить volume с данными БД (опционально, осторожно):
 
 ```bash
-docker compose -f infra/docker/compose.yml down -v
+docker compose down -v
 ```
 
 ## 8. Альтернатива: запуск без PostgreSQL (H2)

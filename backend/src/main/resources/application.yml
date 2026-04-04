@@ -40,6 +40,11 @@ auth:
       password: admin
       roles: [TECH_APPROVER]
 
+catalog:
+  seed:
+    repo-url: https://github.com/npronnikov/catalog.git
+    default-branch: main
+
 runtime:
   # Approximate budget for all execution_context artifact_ref entries with transfer_mode=by_value per node run.
   max-inline-artifact-tokens: 16384

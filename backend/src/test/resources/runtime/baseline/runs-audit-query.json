@@ -11,7 +11,7 @@
       "terminal_status" : "completed"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 25
+    "sequence_no" : 24
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -24,7 +24,7 @@
       "publish_commit_sha" : "<hex>"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 24
+    "sequence_no" : 23
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -33,9 +33,11 @@
     "event_type" : "publish_started",
     "gate_id" : null,
     "node_execution_id" : null,
-    "payload" : { },
+    "payload" : {
+      "publish_mode" : "local"
+    },
     "run_id" : "<uuid>",
-    "sequence_no" : 23
+    "sequence_no" : 22
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -49,7 +51,7 @@
       "work_branch" : "run/<uuid>"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 22
+    "sequence_no" : 21
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -59,10 +61,11 @@
     "gate_id" : null,
     "node_execution_id" : "<uuid>",
     "payload" : {
-      "node_id" : "complete"
+      "node_id" : "complete",
+      "node_kind" : "terminal"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 21
+    "sequence_no" : 20
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -77,7 +80,7 @@
       "node_kind" : "terminal"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 20
+    "sequence_no" : 19
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -91,7 +94,7 @@
       "transition" : "on_approve"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 19
+    "sequence_no" : 18
   }, {
     "actor_id" : "runtime",
     "actor_type" : "system",
@@ -101,10 +104,11 @@
     "gate_id" : null,
     "node_execution_id" : "<uuid>",
     "payload" : {
-      "node_id" : "review-change"
+      "node_id" : "review-change",
+      "node_kind" : "human_approval"
     },
     "run_id" : "<uuid>",
-    "sequence_no" : 18
+    "sequence_no" : 17
   }, {
     "actor_id" : "test",
     "actor_type" : "human",
@@ -114,19 +118,9 @@
     "gate_id" : "<uuid>",
     "node_execution_id" : "<uuid>",
     "payload" : {
-      "comment" : "Looks good"
+      "comment" : "Looks good",
+      "reviewed_artifact_version_ids" : [ ]
     },
-    "run_id" : "<uuid>",
-    "sequence_no" : 17
-  }, {
-    "actor_id" : "runtime",
-    "actor_type" : "system",
-    "event_id" : "<uuid>",
-    "event_time" : "<instant>",
-    "event_type" : "run_waiting_gate",
-    "gate_id" : "<uuid>",
-    "node_execution_id" : "<uuid>",
-    "payload" : { },
     "run_id" : "<uuid>",
     "sequence_no" : 16
   }, {
@@ -181,7 +175,8 @@
     "gate_id" : null,
     "node_execution_id" : "<uuid>",
     "payload" : {
-      "node_id" : "implement-change"
+      "node_id" : "implement-change",
+      "node_kind" : "command"
     },
     "run_id" : "<uuid>",
     "sequence_no" : 12
@@ -215,6 +210,7 @@
       "artifact_version_id" : "<uuid>",
       "kind" : "mutation",
       "path" : "<path>/workspace/<uuid>/README.md",
+      "scope" : "project",
       "version_no" : 1
     },
     "run_id" : "<uuid>",
@@ -232,6 +228,7 @@
       "artifact_version_id" : "<uuid>",
       "kind" : "produced",
       "path" : "<path>/workspace/<uuid>/.hgsdlc/nodes/implement-change/attempt-1/summary.md",
+      "scope" : "run",
       "version_no" : 1
     },
     "run_id" : "<uuid>",
@@ -280,7 +277,27 @@
     },
     "run_id" : "<uuid>",
     "sequence_no" : 6
+  }, {
+    "actor_id" : "runtime",
+    "actor_type" : "system",
+    "event_id" : "<uuid>",
+    "event_time" : "<instant>",
+    "event_type" : "checkout_finished",
+    "gate_id" : null,
+    "node_execution_id" : null,
+    "payload" : {
+      "head" : "<hex>",
+      "project_root" : "<path>/workspace/<uuid>",
+      "stderr" : "Cloning into '<path>/workspace/<uuid>'...\n",
+      "stderr_path" : "<path>/workspace/<uuid>.checkout.stderr.log",
+      "stdout" : "",
+      "stdout_path" : "<path>/workspace/<uuid>.checkout.stdout.log",
+      "target_branch" : "main",
+      "work_branch" : "run/<uuid>"
+    },
+    "run_id" : "<uuid>",
+    "sequence_no" : 5
   } ],
   "has_more" : true,
-  "next_cursor" : 6
+  "next_cursor" : 5
 }

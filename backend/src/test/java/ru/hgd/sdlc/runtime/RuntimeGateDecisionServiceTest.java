@@ -51,9 +51,11 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
     @BeforeEach
     void setUp() throws Exception {
         resetRuntimeData();
-        configureRuntime(tempDir.resolve("workspace"));
+        var remoteRepo = initGitRemoteRepo();
+        String repoUrl = remoteRepo.toUri().toString();
+        configureRuntime(tempDir.resolve("workspace"), repoUrl);
         token = loginAsTestUser();
-        project = createProject(initGitRemoteRepo().toUri().toString());
+        project = createProject(repoUrl);
         flowConfigurator = User.builder()
                 .id(UUID.randomUUID())
                 .username("flow-configurator")

@@ -82,7 +82,7 @@ public class PublicationPrPollService {
         }
 
         String token = valueOrDefault(SettingsService.CATALOG_GIT_PASSWORD_KEY, "");
-        String defaultBranch = valueOrDefault(SettingsService.CATALOG_DEFAULT_BRANCH_KEY, "main");
+        String defaultBranch = valueOrDefault(SettingsService.CATALOG_DEFAULT_BRANCH_KEY, "");
         for (PublicationRequest request : publishing) {
             Optional<String> prUrlOpt = latestPrUrl(request.getId());
             if (prUrlOpt.isEmpty()) {
@@ -258,6 +258,9 @@ public class PublicationPrPollService {
     }
 
     private void syncLocalCatalogRepo(String defaultBranch) {
+        if (defaultBranch == null || defaultBranch.isBlank()) {
+            return;
+        }
         String repoUrl = valueOrDefault(SettingsService.CATALOG_REPO_URL_KEY, "");
         if (repoUrl.isBlank()) {
             return;

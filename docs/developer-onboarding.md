@@ -1005,9 +1005,6 @@ classDiagram
 ## Быстрый старт
 
 ```bash
-# База данных
-cd infra/docker && docker compose up -d
-
 # Backend
 cd backend && ./gradlew bootRun
 
@@ -1026,5 +1023,5 @@ cd frontend && npm install && npm run dev
 | Материализация workspace | [QwenCodingAgentStrategy.java](../backend/src/main/java/ru/hgd/sdlc/runtime/application/QwenCodingAgentStrategy.java) |
 | Gate decisions | [GateDecisionService.java](../backend/src/main/java/ru/hgd/sdlc/runtime/application/service/GateDecisionService.java) |
 | Publish pipeline | [RunPublishService.java](../backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunPublishService.java) |
-| Механика переходов (детально) | [docs/runtime-prompt-and-transitions.md](runtime-prompt-and-transitions.md) |
+| Механика переходов (детально) | [docs/refactoring-run-step-service.md](refactoring/refactoring-run-step-service.md) |
 | Реальный flow | [catalog-repo/.../FLOW.yaml](../catalog-repo/flows/restore-architecture-flow/1.0/FLOW.yaml) |

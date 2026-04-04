@@ -33,8 +33,8 @@ public class SettingsService {
     private static final String DEFAULT_CODING_AGENT = "qwen";
     private static final int DEFAULT_AI_TIMEOUT_SECONDS = 900;
     private static final String DEFAULT_PROMPT_LANGUAGE = "en";
-    private static final String DEFAULT_CATALOG_REPO_URL = "https://github.com/npronnikov/catalog.git";
-    private static final String DEFAULT_CATALOG_DEFAULT_BRANCH = "main";
+    private static final String DEFAULT_CATALOG_REPO_URL = "";
+    private static final String DEFAULT_CATALOG_DEFAULT_BRANCH = "";
     private static final String DEFAULT_CATALOG_PUBLISH_MODE = "pr";
 
     private final SystemSettingRepository repository;

@@ -160,6 +160,7 @@ public class RuntimeStepTxService {
         if (run.getStatus() == RunStatus.COMPLETED || run.getStatus() == RunStatus.FAILED || run.getStatus() == RunStatus.CANCELLED) {
             return run;
         }
+        RunStatus fromStatus = run.getStatus();
         run.setStatus(RunStatus.CANCELLED);
         run.setFinishedAt(Instant.now());
         run.setPublishStatus(RunPublishStatus.SKIPPED);
@@ -184,7 +185,8 @@ public class RuntimeStepTxService {
             nodeExecutionRepository.save(execution);
         }
 
-        appendAuditInternal(runId, null, null, "run_cancelled", ActorType.HUMAN, actorId, Map.of());
+        appendAuditInternal(runId, null, null, "run_cancelled", ActorType.HUMAN, actorId,
+                mapOf("from_status", fromStatus.name().toLowerCase(Locale.ROOT)));
         return run;
     }
 
@@ -289,7 +291,7 @@ public class RuntimeStepTxService {
                 "node_execution_succeeded",
                 ActorType.SYSTEM,
                 "runtime",
-                Map.of("node_id", nodeId)
+                Map.of("node_id", nodeId, "node_kind", execution.getNodeKind())
         );
         return execution;
     }
@@ -358,7 +360,6 @@ public class RuntimeStepTxService {
                         "assignee_role", assigneeRole
                 )
         );
-        appendAuditInternal(runId, executionId, gate.getId(), "run_waiting_gate", ActorType.SYSTEM, "runtime", Map.of());
         return gate;
     }
 
@@ -428,7 +429,10 @@ public class RuntimeStepTxService {
                 "gate_approved",
                 ActorType.HUMAN,
                 actorId,
-                mapOf("comment", comment)
+                mapOf(
+                        "comment", comment,
+                        "reviewed_artifact_version_ids", reviewedArtifactVersionIds == null ? List.of() : reviewedArtifactVersionIds
+                )
         );
         return gate;
     }
@@ -461,7 +465,12 @@ public class RuntimeStepTxService {
                 "gate_rework_requested",
                 ActorType.HUMAN,
                 actorId,
-                mapOf("mode", mode, "comment", comment, "instruction", instruction)
+                mapOf(
+                        "mode", mode,
+                        "comment", comment,
+                        "instruction", instruction,
+                        "reviewed_artifact_version_ids", reviewedArtifactVersionIds == null ? List.of() : reviewedArtifactVersionIds
+                )
         );
         return gate;
     }
@@ -585,7 +594,7 @@ public class RuntimeStepTxService {
                 "node_execution_succeeded",
                 ActorType.SYSTEM,
                 "runtime",
-                Map.of("node_id", nodeId)
+                Map.of("node_id", nodeId, "node_kind", execution.getNodeKind())
         );
 
         run.setStatus(terminalStatus);
@@ -624,7 +633,7 @@ public class RuntimeStepTxService {
                 "node_execution_succeeded",
                 ActorType.SYSTEM,
                 "runtime",
-                Map.of("node_id", nodeId)
+                Map.of("node_id", nodeId, "node_kind", execution.getNodeKind())
         );
 
         run.setStatus(RunStatus.WAITING_PUBLISH);
@@ -687,7 +696,8 @@ public class RuntimeStepTxService {
         run.setErrorCode(null);
         run.setErrorMessage(null);
         runRepository.save(run);
-        appendAuditInternal(runId, null, null, "publish_started", ActorType.SYSTEM, "runtime", Map.of());
+        appendAuditInternal(runId, null, null, "publish_started", ActorType.SYSTEM, "runtime",
+                mapOf("publish_mode", run.getPublishMode() == null ? null : run.getPublishMode().name().toLowerCase(Locale.ROOT)));
         return run;
     }
 
@@ -732,7 +742,8 @@ public class RuntimeStepTxService {
         run.setPushStatus(RunPublishStatus.SUCCEEDED);
         run.setPublishStatus(RunPublishStatus.RUNNING);
         runRepository.save(run);
-        appendAuditInternal(runId, null, null, "publish_push_succeeded", ActorType.SYSTEM, "runtime", Map.of());
+        appendAuditInternal(runId, null, null, "publish_push_succeeded", ActorType.SYSTEM, "runtime",
+                mapOf("work_branch", run.getWorkBranch()));
         return run;
     }
 
@@ -828,6 +839,7 @@ public class RuntimeStepTxService {
         if (run.getStatus() != RunStatus.PUBLISH_FAILED && run.getStatus() != RunStatus.WAITING_PUBLISH) {
             return run;
         }
+        String failedStep = run.getPublishErrorStep();
         run.setStatus(RunStatus.WAITING_PUBLISH);
         run.setPublishStatus(RunPublishStatus.PENDING);
         if (run.getPushStatus() == RunPublishStatus.FAILED) {
@@ -848,7 +860,7 @@ public class RuntimeStepTxService {
                 "publish_retry_requested",
                 ActorType.HUMAN,
                 trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
-                Map.of()
+                mapOf("failed_step", failedStep)
         );
         return run;
     }
@@ -937,6 +949,7 @@ public class RuntimeStepTxService {
                         "artifact_version_id", artifact.getId(),
                         "artifact_key", artifact.getArtifactKey(),
                         "path", artifact.getPath(),
+                        "scope", artifact.getScope().name().toLowerCase(Locale.ROOT),
                         "kind", artifact.getKind().name().toLowerCase(Locale.ROOT),
                         "version_no", artifact.getVersionNo()
                 )

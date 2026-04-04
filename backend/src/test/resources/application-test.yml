@@ -11,6 +11,13 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
 
 auth:
-  seed-username: test
-  seed-password: test
-  seed-role: FLOW_CONFIGURATOR
+  seed-users:
+    - username: test
+      display-name: Test User
+      password: test
+      roles: [FLOW_CONFIGURATOR]
+
+catalog:
+  seed:
+    repo-url: https://github.com/npronnikov/catalog.git
+    default-branch: main
