@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +37,7 @@ public class ProjectController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR','PRODUCT_OWNER')")
     public ProjectResponse create(@RequestBody ProjectCreateRequest request) {
         return ProjectResponse.from(projectService.create(request));
     }

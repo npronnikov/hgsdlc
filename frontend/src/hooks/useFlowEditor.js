@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodesState } from 'reactflow';
 import { Modal, message } from 'antd';
 import { apiRequest } from '../api/request.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { toRussianError } from '../utils/errorMessages.js';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
@@ -42,6 +43,8 @@ const emptyFlow = {
 };
 
 export function useFlowEditor({ flowId, isCreateMode }) {
+  const { user } = useAuth();
+  const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
   const { isDark } = useThemeMode();
   const monacoTheme = getMonacoThemeName(isDark);
 
@@ -96,7 +99,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   const selectedNodeKind = selectedNode?.data?.nodeKind || selectedNode?.data?.type || '';
   const showExecutionContextEditor = ['ai', 'human_approval', 'human_input'].includes(selectedNodeKind);
   const validationErrors = validateFlow(nodes, flowMeta, rulesCatalog, skillsCatalog);
-  const isReadOnly = !isEditing;
+  const isReadOnly = !isEditing || !canManageCatalog;
   const canEditNodeId = currentStatus === 'draft' && isEditing;
 
   const filteredRules = rulesCatalog.filter(
@@ -119,8 +122,13 @@ export function useFlowEditor({ flowId, isCreateMode }) {
 
   const publicationStatusValue = (flowMeta.publicationStatus || '').toLowerCase();
   const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
-  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
-  const canDeleteDraft = !isCreateMode && !!flowMeta.flowId && !!flowVersion && currentStatus === 'draft' && !hasPublicationRequest;
+  const canEditCurrentDraft = canManageCatalog && currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = canManageCatalog
+    && !isCreateMode
+    && !!flowMeta.flowId
+    && !!flowVersion
+    && currentStatus === 'draft'
+    && !hasPublicationRequest;
 
   const updateSelectedNode = (updates) => {
     if (!selectedNodeId) {
@@ -668,6 +676,10 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   };
 
   const saveFlow = async ({ publish, release = false }) => {
+    if (!canManageCatalog) {
+      message.error('Only ADMIN and FLOW_CONFIGURATOR can edit flows');
+      return false;
+    }
     const publication = (flowMeta.publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (!isCreateMode && isLockedAfterPublicationRequest) {
@@ -783,7 +795,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       setCurrentStatus('draft');
       setResourceVersion(0);
       setVersionOptions([]);
-      setIsEditing(true);
+      setIsEditing(canManageCatalog);
       return;
     }
     if (!flowId) {
@@ -794,7 +806,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     setIsEditing(false);
     loadFlow(flowId);
     loadFlowVersions(flowId);
-  }, [flowId, isCreateMode, setNodes]);
+  }, [flowId, isCreateMode, canManageCatalog, setNodes]);
 
   useEffect(() => {
     loadRulesCatalog();
@@ -847,6 +859,9 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   };
 
   const startDraftFromPublished = () => {
+    if (!canManageCatalog) {
+      return;
+    }
     if (!latestPublishedVersion) {
       message.error('A published flow is required to create a new version');
       return;
@@ -977,6 +992,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     skillsCatalog,
     monacoTheme,
     isCreateMode,
+    canManageCatalog,
     // version labels
     flowVersionLabel,
     publishLabel,

@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Button, Card, Dropdown, Form, Input, Modal, Typography, message } from 'antd';
 import { EditOutlined, InboxOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import StatusTag from '../components/StatusTag.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title } = Typography;
+const canCreateProject = (role) => role === 'ADMIN' || role === 'FLOW_CONFIGURATOR' || role === 'PRODUCT_OWNER';
 
 export default function Projects() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -141,7 +144,9 @@ export default function Projects() {
     <div className="cards-page">
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Projects</Title>
-        <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>
+        {canCreateProject(user?.role) ? (
+          <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>
+        ) : null}
       </div>
       <div className="cards-fullscreen">
         {loading ? (

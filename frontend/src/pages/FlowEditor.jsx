@@ -38,6 +38,7 @@ export default function FlowEditor() {
     flowVersionLabel,
     validationErrors,
     canEditCurrentDraft, canDeleteDraft,
+    canManageCatalog,
     nextDraftVersion, currentStatus,
     getRouteOptions, applyConnection, removeConnection,
     addNode, removeNodeById,
@@ -50,7 +51,7 @@ export default function FlowEditor() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Flow editor</Title>
         <Space>
-          {!isEditing && (
+          {canManageCatalog && !isEditing && (
             currentStatus === 'draft' ? (
               <>
                 <Button type="default" onClick={() => setIsEditing(true)} disabled={!canEditCurrentDraft}>
@@ -71,7 +72,7 @@ export default function FlowEditor() {
               </Button>
             )
           )}
-          {isEditing && (
+          {canManageCatalog && isEditing && (
             <>
               <Button
                 type="default"

@@ -36,6 +36,13 @@ const BASE_NAV_ITEMS = [
   { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
 ];
 
+const NAV_ITEM_ALLOWED_ROLES = {
+  '/rules': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
+  '/skills': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
+  '/requests': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
+  '/settings': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
+};
+
 const routeMeta = {
   '/overview': { title: 'Overview', menuKey: '/overview' },
   '/projects': { title: 'Projects', menuKey: '/projects' },
@@ -68,9 +75,16 @@ export default function AppShell() {
   const { user, logout } = useAuth();
   const { isDark, toggleMode } = useThemeMode();
   const [collapsed, setCollapsed] = useState(true);
+  const userRoles = user?.roles || [];
   const navItems = [
-    ...BASE_NAV_ITEMS,
-    ...(user?.roles?.includes('ADMIN')
+    ...BASE_NAV_ITEMS.filter((item) => {
+      const allowedRoles = NAV_ITEM_ALLOWED_ROLES[item.key];
+      if (!allowedRoles) {
+        return true;
+      }
+      return allowedRoles.some((role) => userRoles.includes(role));
+    }),
+    ...(userRoles.includes('ADMIN')
       ? [{ key: '/users', icon: <TeamOutlined />, label: 'Users' }]
       : []),
   ];

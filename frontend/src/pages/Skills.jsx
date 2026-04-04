@@ -3,6 +3,7 @@ import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 
 import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
@@ -32,6 +33,8 @@ export default function Skills() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
 
   const loadSkills = async ({ cursor = null, append = false } = {}) => {
     if (append) {
@@ -127,7 +130,9 @@ export default function Skills() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Skills</Title>
         <Space>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/skills/create')}>New Skill</Button>
+          {canManageCatalog ? (
+            <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/skills/create')}>New Skill</Button>
+          ) : null}
           <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>

@@ -3,6 +3,7 @@ import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 
 import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
@@ -29,6 +30,8 @@ export default function Flows() {
     hasDescription: null,
   };
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -149,7 +152,9 @@ export default function Flows() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Flows</Title>
         <Space>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/flows/create')}>New Flow</Button>
+          {canManageCatalog ? (
+            <Button type="default" icon={<PlusOutlined />} onClick={() => navigate('/flows/create')}>New Flow</Button>
+          ) : null}
           <Button type="default" icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>Filter</Button>
         </Space>
       </div>

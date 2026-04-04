@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../api/request.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
@@ -126,6 +127,8 @@ const getDraftForMajor = (versions, major) => (
 const requiredLabel = (label) => `${label} *`;
 
 export default function RuleEditor() {
+  const { user } = useAuth();
+  const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
   const { isDark } = useThemeMode();
   const monacoTheme = getMonacoThemeName(isDark);
   const { ruleId: ruleIdParam } = useParams();
@@ -253,6 +256,9 @@ export default function RuleEditor() {
   };
 
   const beginEditDraft = () => {
+    if (!canManageCatalog) {
+      return;
+    }
     setIsEditing(true);
   };
 
@@ -320,6 +326,10 @@ export default function RuleEditor() {
   };
 
   const saveRule = async ({ publish, release = false }) => {
+    if (!canManageCatalog) {
+      message.error('Only ADMIN and FLOW_CONFIGURATOR can edit rules');
+      return false;
+    }
     const publication = (publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedRuleId && isLockedAfterPublicationRequest) {
@@ -428,7 +438,7 @@ export default function RuleEditor() {
     setVersionOptions([]);
     setFrontmatterSummary([]);
     setIsNewRule(true);
-    setIsEditing(true);
+    setIsEditing(canManageCatalog);
     setHasDraft(false);
   };
 
@@ -460,10 +470,17 @@ export default function RuleEditor() {
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
   const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
-  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
-  const canDeleteDraft = !!selectedRuleId && !!ruleVersion && currentStatus === 'draft' && !hasPublicationRequest;
+  const canEditCurrentDraft = canManageCatalog && currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = canManageCatalog
+    && !!selectedRuleId
+    && !!ruleVersion
+    && currentStatus === 'draft'
+    && !hasPublicationRequest;
 
   const startDraftFromPublished = () => {
+    if (!canManageCatalog) {
+      return;
+    }
     if (!latestPublishedVersion) {
       message.error('A published rule is required to create a new version');
       return;
@@ -536,7 +553,7 @@ export default function RuleEditor() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Rule editor</Title>
         <Space>
-          {!isEditing && (
+          {canManageCatalog && !isEditing && (
             currentStatus === 'draft' ? (
               <>
                 <Button type="default" onClick={beginEditDraft} disabled={!canEditCurrentDraft}>Edit</Button>
@@ -551,7 +568,7 @@ export default function RuleEditor() {
               </Button>
             )
           )}
-          {isEditing && (
+          {canManageCatalog && isEditing && (
             <>
               <Button type="default" disabled={!canEditCurrentDraft && currentStatus === 'draft'} onClick={() => saveRule({ publish: false })}>Save</Button>
               <Button type="default" disabled={!canEditCurrentDraft && currentStatus === 'draft'} onClick={openPublishDialog}>Request publication</Button>

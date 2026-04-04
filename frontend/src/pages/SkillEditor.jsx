@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DeleteOutlined, FileAddOutlined, FileOutlined, FolderAddOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { apiRequest } from '../api/request.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { toRussianError } from '../utils/errorMessages.js';
 import { useLocation, useParams } from 'react-router-dom';
 import StatusTag, { formatStatusLabel } from '../components/StatusTag.jsx';
@@ -171,6 +172,8 @@ const collectFoldersFromFiles = (files) => {
 };
 
 export default function SkillEditor() {
+  const { user } = useAuth();
+  const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
   const { isDark } = useThemeMode();
   const monacoTheme = getMonacoThemeName(isDark);
   const { skillId: skillIdParam } = useParams();
@@ -364,6 +367,9 @@ export default function SkillEditor() {
   };
 
   const beginEditDraft = () => {
+    if (!canManageCatalog) {
+      return;
+    }
     setIsEditing(true);
   };
 
@@ -559,6 +565,10 @@ export default function SkillEditor() {
   };
 
   const saveSkill = async ({ publish, release = false }) => {
+    if (!canManageCatalog) {
+      message.error('Only ADMIN and FLOW_CONFIGURATOR can edit skills');
+      return false;
+    }
     const publication = (publicationStatus || '').toLowerCase();
     const isLockedAfterPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publication);
     if (selectedSkillId && isLockedAfterPublicationRequest) {
@@ -699,7 +709,7 @@ export default function SkillEditor() {
     setVersionOptions([]);
     setFrontmatterSummary([]);
     setIsNewSkill(true);
-    setIsEditing(true);
+    setIsEditing(canManageCatalog);
     setHasDraft(false);
     setCurrentStatus('');
   };
@@ -795,10 +805,17 @@ export default function SkillEditor() {
   const releaseLabel = `Breaking update (major) -> ${releaseVersion}`;
   const publicationStatusValue = (publicationStatus || '').toLowerCase();
   const hasPublicationRequest = LOCKED_PUBLICATION_STATUSES.has(publicationStatusValue);
-  const canEditCurrentDraft = currentStatus === 'draft' && !hasPublicationRequest;
-  const canDeleteDraft = !!selectedSkillId && !!skillVersion && currentStatus === 'draft' && !hasPublicationRequest;
+  const canEditCurrentDraft = canManageCatalog && currentStatus === 'draft' && !hasPublicationRequest;
+  const canDeleteDraft = canManageCatalog
+    && !!selectedSkillId
+    && !!skillVersion
+    && currentStatus === 'draft'
+    && !hasPublicationRequest;
 
   const startDraftFromPublished = () => {
+    if (!canManageCatalog) {
+      return;
+    }
     if (!latestPublishedVersion) {
       message.error('A published skill is required to create a new version');
       return;
@@ -874,7 +891,7 @@ export default function SkillEditor() {
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Skill editor</Title>
         <Space>
-          {!isEditing && (
+          {canManageCatalog && !isEditing && (
             currentStatus === 'draft' ? (
               <>
                 <Button type="default" onClick={beginEditDraft} disabled={!canEditCurrentDraft}>Edit</Button>
@@ -889,7 +906,7 @@ export default function SkillEditor() {
               </Button>
             )
           )}
-          {isEditing && (
+          {canManageCatalog && isEditing && (
             <>
               <Button type="default" onClick={() => saveSkill({ publish: false })}>Save</Button>
               <Button type="default" onClick={openPublishDialog}>Request publication</Button>

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -105,6 +106,7 @@ public class FlowController {
     }
 
     @DeleteMapping("/{flowId}/versions/{version}/draft")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
     public ResponseEntity<Void> deleteDraft(
             @PathVariable String flowId,
             @PathVariable String version,
@@ -115,6 +117,7 @@ public class FlowController {
     }
 
     @PostMapping("/{flowId}/save")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
     public FlowResponse save(
             @PathVariable String flowId,
             @RequestBody FlowSaveRequest request,

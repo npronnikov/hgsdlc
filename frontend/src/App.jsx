@@ -49,6 +49,15 @@ function RequireRole({ role, children }) {
   return children;
 }
 
+function RequireAnyRole({ roles, children }) {
+  const { user } = useAuth();
+  const hasAllowedRole = roles.some((role) => user?.roles?.includes(role));
+  if (!hasAllowedRole) {
+    return <Navigate to="/overview" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -67,15 +76,36 @@ export default function App() {
             <Route path="overview" element={<Overview />} />
             <Route path="projects" element={<Projects />} />
             <Route path="flows" element={<Flows />} />
-            <Route path="flows/create" element={<FlowEditor />} />
+            <Route
+              path="flows/create"
+              element={(
+                <RequireAnyRole roles={['ADMIN', 'FLOW_CONFIGURATOR']}>
+                  <FlowEditor />
+                </RequireAnyRole>
+              )}
+            />
             <Route path="flows/:flowId" element={<FlowEditor />} />
             <Route path="flow-editor" element={<FlowEditor />} />
             <Route path="rules" element={<Rules />} />
-            <Route path="rules/create" element={<RuleEditor />} />
+            <Route
+              path="rules/create"
+              element={(
+                <RequireAnyRole roles={['ADMIN', 'FLOW_CONFIGURATOR']}>
+                  <RuleEditor />
+                </RequireAnyRole>
+              )}
+            />
             <Route path="rules/:ruleId" element={<RuleEditor />} />
             <Route path="rule-editor" element={<RuleEditor />} />
             <Route path="skills" element={<Skills />} />
-            <Route path="skills/create" element={<SkillEditor />} />
+            <Route
+              path="skills/create"
+              element={(
+                <RequireAnyRole roles={['ADMIN', 'FLOW_CONFIGURATOR']}>
+                  <SkillEditor />
+                </RequireAnyRole>
+              )}
+            />
             <Route path="skills/:skillId" element={<SkillEditor />} />
             <Route path="skill-editor" element={<SkillEditor />} />
             <Route path="requests" element={<Requests />} />

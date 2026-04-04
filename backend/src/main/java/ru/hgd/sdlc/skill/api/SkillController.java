@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -107,6 +108,7 @@ public class SkillController {
     }
 
     @DeleteMapping("/{skillId}/versions/{version}/draft")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
     public ResponseEntity<Void> deleteDraft(
             @PathVariable String skillId,
             @PathVariable String version,
@@ -152,6 +154,7 @@ public class SkillController {
     }
 
     @PostMapping("/{skillId}/save")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
     public SkillResponse save(
             @PathVariable String skillId,
             @RequestBody SkillSaveRequest request,
