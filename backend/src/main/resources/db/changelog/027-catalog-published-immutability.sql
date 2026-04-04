@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset catalog:immutability-001 dbms:postgresql
+-- changeset catalog:immutability-001 dbms:postgresql splitStatements:false
 CREATE OR REPLACE FUNCTION forbid_published_catalog_mutation()
 RETURNS trigger
 LANGUAGE plpgsql

@@ -34,6 +34,26 @@ npm run dev
 
 Примечание: при таком запуске используется in-memory H2, данные не сохраняются между перезапусками backend.
 
+## Запуск с PostgreSQL (рекомендуется)
+
+1. Поднять локальный PostgreSQL:
+
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development
+docker compose -f deploy/compose.dev.yaml up -d
+```
+
+2. Запустить backend с профилем `postgres`:
+
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development/backend
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export PATH="$JAVA_HOME/bin:$PATH"
+SPRING_PROFILES_ACTIVE=postgres ./gradlew bootRun
+```
+
+Подробно: [docs/installation.md](docs/installation.md)
+
 ## Полная инструкция установки
 
 См. подробный гайд: [docs/installation.md](docs/installation.md)

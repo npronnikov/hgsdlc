@@ -74,5 +74,9 @@ tasks.withType<Test> {
 }
 
 tasks.withType<BootRun> {
-    systemProperty("spring.profiles.active", "local")
+    val activeProfile = System.getProperty("spring.profiles.active")
+        ?: System.getenv("SPRING_PROFILES_ACTIVE")
+    if (activeProfile.isNullOrBlank()) {
+        systemProperty("spring.profiles.active", "local")
+    }
 }

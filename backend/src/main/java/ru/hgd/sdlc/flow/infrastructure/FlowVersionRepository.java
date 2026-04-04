@@ -57,7 +57,7 @@ public interface FlowVersionRepository extends JpaRepository<FlowVersion, UUID> 
                   OR (:hasDescription = FALSE AND (l.description IS NULL OR BTRIM(l.description) = ''))
               )
               AND (
-                  :cursorSavedAt IS NULL OR :cursorId IS NULL
+                  CAST(:cursorSavedAt AS timestamp) IS NULL OR CAST(:cursorId AS uuid) IS NULL
                   OR (l.saved_at, l.id) < (:cursorSavedAt, :cursorId)
               )
             ORDER BY l.saved_at DESC, l.id DESC

@@ -48,3 +48,16 @@ catalog:
 runtime:
   # Approximate budget for all execution_context artifact_ref entries with transfer_mode=by_value per node run.
   max-inline-artifact-tokens: 16384
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/hgsdlc}
+    username: ${DB_USERNAME:hgsdlc}
+    password: ${DB_PASSWORD:hgsdlc}
+  h2:
+    console:
+      enabled: false

@@ -28,31 +28,34 @@ cd /Users/nick/IdeaProjects/human-guided-development
 
 ## 3. Поднять PostgreSQL (рекомендуемый путь)
 
-В репозитории есть production compose: `deploy/compose.prod.yml`.
-Для локального запуска можно использовать отдельный docker compose с сервисом postgres.
+Для локальной разработки используйте `deploy/compose.dev.yaml`:
+
+```bash
+cd /Users/nick/IdeaProjects/human-guided-development
+docker compose -f deploy/compose.dev.yaml up -d
+```
 
 Проверить, что контейнер запущен:
 
 ```bash
-docker ps --filter name=sdlc-postgres
+docker compose -f deploy/compose.dev.yaml ps
 ```
 
-Параметры БД из compose:
+Параметры БД по умолчанию:
 
 - host: `localhost`
 - port: `5432`
-- database: `sdlc`
-- username: `sdlc`
-- password: `sdlc`
+- database: `hgsdlc`
+- username: `hgsdlc`
+- password: `hgsdlc`
 
 ## 4. Запуск backend с PostgreSQL
 
 ```bash
 cd /Users/nick/IdeaProjects/human-guided-development/backend
-DB_URL=jdbc:postgresql://localhost:5432/sdlc \
-DB_USERNAME=sdlc \
-DB_PASSWORD=sdlc \
-./gradlew bootRun
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export PATH="$JAVA_HOME/bin:$PATH"
+SPRING_PROFILES_ACTIVE=postgres ./gradlew bootRun
 ```
 
 Что важно:
@@ -60,6 +63,7 @@ DB_PASSWORD=sdlc \
 - Liquibase включен и применяет миграции автоматически.
 - API поднимается на `http://localhost:8080`.
 - Seed-пользователь по умолчанию: `admin / admin`.
+- Если `8080` занят, остановите процесс или задайте `SERVER_PORT`.
 
 ## 5. Запуск frontend
 
@@ -92,13 +96,13 @@ curl -fsS http://localhost:8080/actuator/health
 Остановить PostgreSQL:
 
 ```bash
-docker compose down
+docker compose -f deploy/compose.dev.yaml down
 ```
 
 Удалить volume с данными БД (опционально, осторожно):
 
 ```bash
-docker compose down -v
+docker compose -f deploy/compose.dev.yaml down -v
 ```
 
 ## 8. Альтернатива: запуск без PostgreSQL (H2)
@@ -118,3 +122,4 @@ cd /Users/nick/IdeaProjects/human-guided-development/backend
 - Ошибки аутентификации БД: проверить `DB_USERNAME/DB_PASSWORD`.
 - Ошибки Java: убедиться, что активна Java 21.
 - Frontend не видит backend: проверить, что backend доступен на `http://localhost:8080`.
+- Если видите ошибку вида `25.0.2`, убедитесь, что backend запускается на Java 21, а не Java 25.
