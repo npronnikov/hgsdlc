@@ -12,14 +12,16 @@ import {
   Space,
   Switch,
   Tag,
+  Tabs,
   Tree,
   Typography,
   message,
 } from 'antd';
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
+import MarkdownPreview from '../components/MarkdownPreview.jsx';
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
@@ -208,12 +210,15 @@ export default function HumanGate() {
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [requestDraft, setRequestDraft] = useState(EMPTY_REQUEST_DRAFT);
   const [contextMenuState, setContextMenuState] = useState({ open: false, x: 0, y: 0 });
+  const [markdownViewTab, setMarkdownViewTab] = useState('source');
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [keepChanges, setKeepChanges] = useState(true);
   const screens = Grid.useBreakpoint();
 
   const diffEditorRef = useRef(null);
   const modifiedEditorRef = useRef(null);
   const reworkDecorationIdsRef = useRef([]);
+  const previewFullscreenRef = useRef(null);
 
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
@@ -257,6 +262,7 @@ export default function HumanGate() {
   const renderSideBySideDiff = isApproval && !isNewFileChange;
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
+  const useRenderedMarkdownPreview = isApproval && selectedLanguage === 'markdown';
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
   const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;
   const currentEditableContent = selectedEditable
@@ -340,6 +346,23 @@ export default function HumanGate() {
   }, [contextMenuState.open]);
 
   useEffect(() => {
+    if (useRenderedMarkdownPreview) {
+      setMarkdownViewTab('source');
+    }
+  }, [selectedPath, useRenderedMarkdownPreview]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const target = previewFullscreenRef.current;
+      setIsPreviewFullscreen(Boolean(target) && document.fullscreenElement === target);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
     setKeepChanges(gate?.payload?.rework_keep_changes !== false);
   }, [gate?.gate_id, gate?.resource_version, gate?.payload?.rework_keep_changes]);
 
@@ -356,6 +379,22 @@ export default function HumanGate() {
       return;
     }
     setKeepChanges(checked);
+  };
+
+  const togglePreviewFullscreen = async () => {
+    const target = previewFullscreenRef.current;
+    if (!target) {
+      return;
+    }
+    try {
+      if (document.fullscreenElement === target) {
+        await document.exitFullscreen();
+        return;
+      }
+      await target.requestFullscreen();
+    } catch (err) {
+      message.warning(err?.message || 'Failed to switch Preview fullscreen mode');
+    }
   };
 
   const applyReworkDecorations = useCallback(() => {
@@ -643,7 +682,7 @@ export default function HumanGate() {
         </div>
       </Card>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="human-gate-main-row">
         <Col xs={24} lg={6}>
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <Card title="Node instruction" className="human-gate-node-instruction-card">
@@ -681,107 +720,218 @@ export default function HumanGate() {
           </Space>
         </Col>
 
-        <Col xs={24} lg={18}>
+        <Col xs={24} lg={18} className="human-gate-main-col">
           <Card
+            className="human-gate-main-card"
             title={selectedPath ? (
               <div className="human-gate-editor-title">
-                <span className="human-gate-editor-path">{selectedPath}</span>
-                <span className="human-gate-editor-status">{selectedGitStatus}</span>
+                <div className="human-gate-editor-title-main">
+                  <span className="human-gate-editor-path">{selectedPath}</span>
+                  <span className="human-gate-editor-status">{selectedGitStatus}</span>
+                </div>
+                {useRenderedMarkdownPreview && (
+                  <Tabs
+                    activeKey={markdownViewTab}
+                    onChange={setMarkdownViewTab}
+                    className="human-gate-header-tabs"
+                    items={[
+                      { key: 'source', label: 'Source' },
+                      { key: 'preview', label: 'Preview' },
+                    ]}
+                  />
+                )}
               </div>
             ) : 'Diff viewer'}
             loading={loadingDiff}
           >
-            {selectedIsEditable ? (
-              <Editor
-                height="520px"
-                defaultLanguage="markdown"
-                beforeMount={configureMonacoThemes}
-                theme={monacoTheme}
-                value={currentEditableContent}
-                onChange={(value) => {
-                  if (!selectedEditable) return;
-                  if (value === undefined) return;
-                  setEditedByPath((prev) => ({ ...prev, [selectedEditable.path]: value ?? '' }));
-                }}
-                options={{
-                  readOnly: false,
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  mouseWheelScrollSensitivity: 0.6,
-                  fastScrollSensitivity: 1,
-                  automaticLayout: true,
-                }}
-              />
-            ) : (
-              <div
-                onContextMenu={(event) => {
-                  if (!isApproval) {
-                    return;
-                  }
-                  event.preventDefault();
-                  setContextMenuState({ open: true, x: event.clientX, y: event.clientY });
-                }}
-                style={{ position: 'relative' }}
-              >
-                <DiffEditor
-                  key={diffEditorKey}
-                  height="520px"
-                  beforeMount={configureMonacoThemes}
-                  theme={monacoTheme}
-                  original={originalContent}
-                  modified={modifiedContent}
-                  language={selectedLanguage}
-                  onMount={(editorInstance) => {
-                    diffEditorRef.current = editorInstance;
-                    modifiedEditorRef.current = editorInstance.getModifiedEditor();
-                    applyReworkDecorations();
-                  }}
-                  onUnmount={(editorInstance) => {
-                    diffEditorRef.current = null;
-                    modifiedEditorRef.current = null;
-                    reworkDecorationIdsRef.current = [];
-                  }}
-                  options={{
-                    readOnly: true,
-                    renderSideBySide: renderSideBySideDiff,
-                    useInlineViewWhenSpaceIsLimited: false,
-                    contextmenu: false,
-                    glyphMargin: true,
-                    minimap: { enabled: false },
-                    wordWrap: 'on',
-                    mouseWheelScrollSensitivity: 0.6,
-                    fastScrollSensitivity: 1,
-                    automaticLayout: true,
-                  }}
-                />
-                {contextMenuState.open && isApproval && (
-                  <div
-                    style={{
-                      position: 'fixed',
-                      left: contextMenuState.x,
-                      top: contextMenuState.y,
-                      zIndex: 1500,
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      padding: 6,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+            <div className="human-gate-view-body">
+              {selectedIsEditable ? (
+                <div className="human-gate-fill-pane">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="markdown"
+                    beforeMount={configureMonacoThemes}
+                    theme={monacoTheme}
+                    value={currentEditableContent}
+                    onChange={(value) => {
+                      if (!selectedEditable) return;
+                      if (value === undefined) return;
+                      setEditedByPath((prev) => ({ ...prev, [selectedEditable.path]: value ?? '' }));
                     }}
-                  >
-                    <Button
-                      type="text"
-                      danger
-                      onClick={() => {
-                        setContextMenuState({ open: false, x: 0, y: 0 });
-                        openAddRequestModalFromSelection();
+                    options={{
+                      readOnly: false,
+                      minimap: { enabled: false },
+                      wordWrap: 'on',
+                      mouseWheelScrollSensitivity: 0.6,
+                      fastScrollSensitivity: 1,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+              ) : useRenderedMarkdownPreview ? (
+                <div
+                  className="human-gate-fill-pane"
+                  onContextMenu={(event) => {
+                    if (!isApproval) {
+                      return;
+                    }
+                    event.preventDefault();
+                    setContextMenuState({ open: true, x: event.clientX, y: event.clientY });
+                  }}
+                >
+                  {markdownViewTab === 'source' ? (
+                    <div className="human-gate-markdown-tab-body">
+                      <Editor
+                        height="100%"
+                        beforeMount={configureMonacoThemes}
+                        theme={monacoTheme}
+                        language={selectedLanguage}
+                        value={modifiedContent}
+                        onMount={(editorInstance) => {
+                          diffEditorRef.current = null;
+                          modifiedEditorRef.current = editorInstance;
+                          applyReworkDecorations();
+                        }}
+                        onUnmount={() => {
+                          modifiedEditorRef.current = null;
+                          reworkDecorationIdsRef.current = [];
+                        }}
+                        options={{
+                          readOnly: true,
+                          contextmenu: false,
+                          glyphMargin: true,
+                          minimap: { enabled: false },
+                          wordWrap: 'on',
+                          mouseWheelScrollSensitivity: 0.6,
+                          fastScrollSensitivity: 1,
+                          automaticLayout: true,
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      ref={previewFullscreenRef}
+                      className={`human-gate-markdown-tab-body human-gate-markdown-preview${isPreviewFullscreen ? ' is-browser-fullscreen' : ''}`}
+                    >
+                      <span
+                        className="human-gate-markdown-fullscreen-toggle"
+                        role="button"
+                        tabIndex={0}
+                        title={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
+                        aria-label={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
+                        onClick={togglePreviewFullscreen}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            void togglePreviewFullscreen();
+                          }
+                        }}
+                      >
+                        {isPreviewFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                      </span>
+                      <div className="human-gate-markdown-preview-content">
+                        <MarkdownPreview markdown={modifiedContent || '*No content*'} />
+                      </div>
+                    </div>
+                  )}
+                  {contextMenuState.open && isApproval && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: contextMenuState.x,
+                        top: contextMenuState.y,
+                        zIndex: 1500,
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: 6,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
                       }}
                     >
-                      Request Rework
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+                      <Button
+                        type="text"
+                        danger
+                        onClick={() => {
+                          setContextMenuState({ open: false, x: 0, y: 0 });
+                          openAddRequestModalFromSelection();
+                        }}
+                      >
+                        Request Rework
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="human-gate-fill-pane"
+                  onContextMenu={(event) => {
+                    if (!isApproval) {
+                      return;
+                    }
+                    event.preventDefault();
+                    setContextMenuState({ open: true, x: event.clientX, y: event.clientY });
+                  }}
+                >
+                  <DiffEditor
+                    key={diffEditorKey}
+                    height="100%"
+                    beforeMount={configureMonacoThemes}
+                    theme={monacoTheme}
+                    original={originalContent}
+                    modified={modifiedContent}
+                    language={selectedLanguage}
+                    onMount={(editorInstance) => {
+                      diffEditorRef.current = editorInstance;
+                      modifiedEditorRef.current = editorInstance.getModifiedEditor();
+                      applyReworkDecorations();
+                    }}
+                    onUnmount={(editorInstance) => {
+                      diffEditorRef.current = null;
+                      modifiedEditorRef.current = null;
+                      reworkDecorationIdsRef.current = [];
+                    }}
+                    options={{
+                      readOnly: true,
+                      renderSideBySide: renderSideBySideDiff,
+                      useInlineViewWhenSpaceIsLimited: false,
+                      contextmenu: false,
+                      glyphMargin: true,
+                      minimap: { enabled: false },
+                      wordWrap: 'on',
+                      mouseWheelScrollSensitivity: 0.6,
+                      fastScrollSensitivity: 1,
+                      automaticLayout: true,
+                    }}
+                  />
+                  {contextMenuState.open && isApproval && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: contextMenuState.x,
+                        top: contextMenuState.y,
+                        zIndex: 1500,
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: 6,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+                      }}
+                    >
+                      <Button
+                        type="text"
+                        danger
+                        onClick={() => {
+                          setContextMenuState({ open: false, x: 0, y: 0 });
+                          openAddRequestModalFromSelection();
+                        }}
+                      >
+                        Request Rework
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </Card>
         </Col>
       </Row>

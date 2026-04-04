@@ -2844,12 +2844,15 @@ body {
 }
 
 .human-approval-gate-page {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   gap: 12px;
 }
 
 .human-approval-summary {
   border-radius: var(--radius-sm);
+  flex: 0 0 auto;
 }
 
 .human-approval-summary-row {
@@ -2875,10 +2878,62 @@ body {
   background: transparent;
 }
 
+.human-gate-main-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.human-gate-main-col {
+  display: flex;
+  min-height: 0;
+}
+
+.human-gate-main-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.human-gate-main-card > .ant-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.human-gate-view-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.human-gate-fill-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
 .human-gate-editor-title {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.human-gate-editor-title-main {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
 .human-gate-editor-path {
@@ -2886,6 +2941,7 @@ body {
   font-size: 13px;
   line-height: 1.2;
   color: var(--text);
+  word-break: break-all;
 }
 
 .human-gate-editor-status {
@@ -2894,6 +2950,164 @@ body {
   line-height: 1.2;
   color: var(--text-muted);
   text-transform: lowercase;
+}
+
+.human-gate-header-tabs {
+  margin-left: auto;
+}
+
+.human-gate-header-tabs .ant-tabs-nav {
+  margin: 0;
+}
+
+.human-gate-header-tabs .ant-tabs-content-holder {
+  display: none;
+}
+
+.human-gate-markdown-tab-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.human-gate-markdown-preview .markdown-preview {
+  padding: 12px;
+}
+
+.human-gate-markdown-preview .human-gate-markdown-inline-code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.3em;
+}
+
+.human-gate-markdown-preview .markdown-preview table {
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+}
+
+.human-gate-markdown-preview .markdown-preview th,
+.human-gate-markdown-preview .markdown-preview td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+
+.human-gate-markdown-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.human-gate-markdown-fullscreen-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.human-gate-markdown-fullscreen-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.human-gate-markdown-fullscreen-toggle:focus-visible {
+  outline: 2px solid var(--accent, #1677ff);
+  outline-offset: 1px;
+}
+
+.human-gate-markdown-preview-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 6px;
+}
+
+@media (min-width: 992px) {
+  .human-approval-gate-page {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .human-gate-main-row {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .human-gate-main-col {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .human-gate-main-card {
+    height: 100%;
+  }
+
+  .human-gate-view-body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .human-gate-fill-pane {
+    height: 100%;
+  }
+
+  .human-gate-markdown-tab-body {
+    height: 100%;
+  }
+}
+
+.human-gate-markdown-preview:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.human-gate-markdown-preview:fullscreen .human-gate-markdown-preview-content .markdown-preview {
+  padding: 16px;
+}
+
+.human-gate-markdown-code {
+  margin: 8px 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.human-gate-mermaid {
+  margin: 8px 0;
+  overflow: auto;
+}
+
+.human-gate-mermaid-error {
+  margin: 8px 0;
+}
+
+.human-gate-mermaid-error-text {
+  margin: 0;
+  color: #dc2626;
+  font-size: 12px;
 }
 
 .monaco-editor .human-gate-rework-marker-line {
