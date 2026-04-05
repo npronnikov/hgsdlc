@@ -716,24 +716,6 @@ function RunListView({ navigate }) {
       responsive: ['lg'],
       render: (value) => value ? <StatusTag value={value} /> : '—',
     },
-    {
-      title: '',
-      key: 'action',
-      width: 100,
-      align: 'right',
-      render: (_, record) => (
-        <Button
-          size="small"
-          type="default"
-          onClick={(event) => {
-            event.stopPropagation();
-            navigate(`/run-console?runId=${record.run_id}`);
-          }}
-        >
-          Open
-        </Button>
-      ),
-    },
   ];
 
   return (

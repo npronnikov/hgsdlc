@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Col, Empty, Input, Row, Select, Space, Table, Typography, message } from 'antd';
-import { ArrowRightOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
@@ -210,27 +210,6 @@ export default function GatesInbox() {
       width: 160,
       responsive: ['md'],
       render: (value) => value || '—',
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 120,
-      responsive: ['sm'],
-      render: (_, record) => (
-        <Button
-          size="small"
-          type="default"
-          icon={<ArrowRightOutlined />}
-          className="gates-inbox-open-btn"
-          onClick={(event) => {
-            event.stopPropagation();
-            const gatePath = record.gate_kind === 'human_input' ? '/gate-input' : '/gate-approval';
-            navigate(`${gatePath}?runId=${record.run_id}&gateId=${record.gate_id}&gateKind=${record.gate_kind}`);
-          }}
-        >
-          Open
-        </Button>
-      ),
     },
   ];
 
