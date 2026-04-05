@@ -6,6 +6,7 @@ import {
   Collapse,
   Descriptions,
   Empty,
+  Input,
   List,
   Row,
   Select,
@@ -26,6 +27,8 @@ import {
   LinkOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
+  ReloadOutlined,
+  SearchOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -86,6 +89,17 @@ function formatDate(value) {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(new Date(value));
+}
+
+function shortId(value, length = 8) {
+  if (!value) {
+    return '—';
+  }
+  return String(value).slice(0, length);
+}
+
+function normalizeSearch(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function shortSha(value) {
@@ -552,12 +566,15 @@ function RunListView({ navigate }) {
   const [runs, setRuns] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [projectFilter, setProjectFilter] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const [runsData, projectsData] = await Promise.all([
-        apiRequest('/runs?limit=20'),
+        apiRequest('/runs?limit=200'),
         apiRequest('/projects'),
       ]);
       setRuns(runsData || []);
@@ -581,32 +598,108 @@ function RunListView({ navigate }) {
     return next;
   }, [projects]);
 
+  const rows = useMemo(() => {
+    const query = normalizeSearch(searchText);
+    return runs
+      .map((run) => ({
+        ...run,
+        project_name: projectNames.get(run.project_id) || run.project_id || '—',
+      }))
+      .filter((run) => {
+        if (statusFilter && run.status !== statusFilter) {
+          return false;
+        }
+        if (projectFilter && run.project_id !== projectFilter) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+        const searchable = [
+          run.run_id,
+          run.project_name,
+          run.target_branch,
+          run.flow_canonical_name,
+          run.status,
+          run.publish_status,
+          run.current_node_id,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return searchable.includes(query);
+      });
+  }, [projectFilter, projectNames, runs, searchText, statusFilter]);
+
+  const statusOptions = useMemo(() => {
+    const set = new Set(runs.map((run) => run.status).filter(Boolean));
+    return Array.from(set).map((value) => ({ value, label: formatStatusLabel(value) }));
+  }, [runs]);
+
+  const projectOptions = useMemo(() => projects.map((project) => ({
+    value: project.id,
+    label: project.name,
+  })), [projects]);
+
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const active = rows.filter((run) => ACTIVE_RUN_STATUSES.includes(run.status)).length;
+    const waitingGate = rows.filter((run) => run.status === 'waiting_gate').length;
+    const publishFailed = rows.filter((run) => run.status === 'publish_failed').length;
+    const completed = rows.filter((run) => run.status === 'completed').length;
+    return {
+      total,
+      active,
+      waitingGate,
+      publishFailed,
+      completed,
+    };
+  }, [rows]);
+
   const columns = [
+    {
+      title: 'Run',
+      key: 'run',
+      render: (_, run) => (
+        <div className="run-console-run-cell">
+          <div className="run-console-run-main mono">{shortId(run.run_id, 12)}</div>
+          <div className="run-console-run-meta">
+            <span className="mono">{run.flow_canonical_name || '—'}</span>
+            <span>{run.project_name}</span>
+          </div>
+        </div>
+      ),
+    },
     {
       title: 'Started',
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
+      responsive: ['md'],
       render: (value) => <span className="mono">{formatDate(value)}</span>,
     },
     {
       title: 'Project',
-      dataIndex: 'project_id',
-      key: 'project_id',
-      render: (value) => projectNames.get(value) || value,
+      dataIndex: 'project_name',
+      key: 'project_name',
+      width: 220,
+      responsive: ['xl'],
     },
     {
       title: 'Branch',
       dataIndex: 'target_branch',
       key: 'target_branch',
       width: 140,
-      render: (value) => <span className="mono">{value}</span>,
+      responsive: ['lg'],
+      render: (value) => <span className="mono">{value || '—'}</span>,
     },
     {
-      title: 'Flow',
-      dataIndex: 'flow_canonical_name',
-      key: 'flow_canonical_name',
-      render: (value) => <span className="mono">{value}</span>,
+      title: 'Node',
+      dataIndex: 'current_node_id',
+      key: 'current_node_id',
+      width: 170,
+      responsive: ['xl'],
+      render: (value) => <span className="mono">{value || '—'}</span>,
     },
     {
       title: 'Status',
@@ -616,28 +709,107 @@ function RunListView({ navigate }) {
       render: (value) => <StatusTag value={value} />,
     },
     {
-      title: 'Run ID',
-      dataIndex: 'run_id',
-      key: 'run_id',
-      render: (value) => <span className="mono">{value}</span>,
+      title: 'Publish',
+      dataIndex: 'publish_status',
+      key: 'publish_status',
+      width: 140,
+      responsive: ['lg'],
+      render: (value) => value ? <StatusTag value={value} /> : '—',
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 100,
+      align: 'right',
+      render: (_, record) => (
+        <Button
+          size="small"
+          type="default"
+          onClick={(event) => {
+            event.stopPropagation();
+            navigate(`/run-console?runId=${record.run_id}`);
+          }}
+        >
+          Open
+        </Button>
+      ),
     },
   ];
 
   return (
-    <div>
-      <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Recent Runs</Title>
+    <div className="cards-page run-console-page">
+      <div className="page-header run-console-header">
+        <div className="run-console-title-block">
+          <Title level={3} style={{ margin: 0 }}>Run Console</Title>
+          <Text type="secondary">Monitor execution progress, gates, and publication state across runs.</Text>
+        </div>
+        <Space wrap className="run-console-list-controls">
+          <Input
+            allowClear
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search run id, flow, branch, node"
+            prefix={<SearchOutlined />}
+            style={{ width: 320 }}
+          />
+          <Select
+            allowClear
+            value={statusFilter}
+            onChange={(value) => setStatusFilter(value || null)}
+            options={statusOptions}
+            placeholder="Status"
+            optionFilterProp="label"
+            style={{ width: 180 }}
+          />
+          <Select
+            allowClear
+            value={projectFilter}
+            onChange={(value) => setProjectFilter(value || null)}
+            options={projectOptions}
+            placeholder="Project"
+            optionFilterProp="label"
+            style={{ width: 220 }}
+          />
+          <Button onClick={load} loading={loading} icon={<ReloadOutlined />}>Refresh</Button>
+        </Space>
       </div>
-      <Card>
-        {runs.length === 0 ? (
-          <Empty description="No runs yet" />
+
+      <div className="run-console-summary-grid">
+        <Card className="run-console-summary-card">
+          <div className="card-label">Total Runs</div>
+          <div className="run-console-summary-value">{stats.total}</div>
+        </Card>
+        <Card className="run-console-summary-card run-console-summary-card-active">
+          <div className="card-label">Active</div>
+          <div className="run-console-summary-value">{stats.active}</div>
+        </Card>
+        <Card className="run-console-summary-card run-console-summary-card-waiting">
+          <div className="card-label">Waiting Gate</div>
+          <div className="run-console-summary-value">{stats.waitingGate}</div>
+        </Card>
+        <Card className="run-console-summary-card run-console-summary-card-failed">
+          <div className="card-label">Publish Failed</div>
+          <div className="run-console-summary-value">{stats.publishFailed}</div>
+        </Card>
+        <Card className="run-console-summary-card run-console-summary-card-success">
+          <div className="card-label">Completed</div>
+          <div className="run-console-summary-value">{stats.completed}</div>
+        </Card>
+      </div>
+
+      <Card className="run-console-list-table-card">
+        {rows.length === 0 ? (
+          <Empty description="No runs match current filters" />
         ) : (
           <Table
             rowKey="run_id"
             loading={loading}
             columns={columns}
-            dataSource={runs}
-            pagination={false}
+            dataSource={rows}
+            tableLayout="fixed"
+            scroll={{ x: 1100 }}
+            pagination={{ pageSize: 20, showSizeChanger: false }}
+            rowClassName={(record) => `run-console-row run-console-row-${record.status || 'unknown'}`}
             onRow={(record) => ({
               onClick: () => navigate(`/run-console?runId=${record.run_id}`),
               style: { cursor: 'pointer' },
@@ -926,10 +1098,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   ];
 
   return (
-    <div>
-      <div className="page-header">
-        <Title level={3} style={{ margin: 0 }}>Run Console</Title>
-        <Space>
+    <div className="run-console-page run-console-detail-page">
+      <div className="page-header run-console-header">
+        <div className="run-console-title-block">
+          <Title level={3} style={{ margin: 0 }}>Run Console</Title>
+          <Text type="secondary">
+            Run <span className="mono">{shortId(run.run_id, 12)}</span> · started {formatDate(run.created_at)}
+          </Text>
+        </div>
+        <Space wrap>
+          <Button onClick={() => load()} loading={loading} icon={<ReloadOutlined />}>Refresh</Button>
           {run.status === 'publish_failed' && (
             <Button type="primary" onClick={retryPublish}>
               Retry publish
@@ -947,46 +1125,51 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
           </Button>
         </Space>
       </div>
-      <div className="summary-bar">
-        <div>
-          <Text className="muted">Status</Text>
-          <div><StatusTag value={run.status} /></div>
-        </div>
-        <div>
-          <Text className="muted">Current node</Text>
-          <div className="mono">{run.current_node_id}</div>
-        </div>
-        <div>
-          <Text className="muted">Current gate</Text>
-          <div>{run.current_gate ? <StatusTag value={run.current_gate.status} /> : '—'}</div>
-        </div>
-        <div>
-          <Text className="muted">Workflow</Text>
-          <div className="mono">{run.flow_canonical_name}</div>
-        </div>
-        <div>
-          <Text className="muted">Target branch</Text>
-          <div className="mono">{run.target_branch}</div>
-        </div>
-        <div>
-          <Text className="muted">Working directory</Text>
-          <div className="mono">{run.workspace_root || runtimeSettings?.workspace_root || '—'}</div>
-        </div>
-        <div>
-          <Text className="muted">Coding agent</Text>
-          <div className="mono">{runtimeSettings?.coding_agent || '—'}</div>
-        </div>
+
+      <div className="run-console-summary-grid run-console-detail-summary-grid">
+        <Card className="run-console-summary-card run-console-summary-card-active">
+          <div className="card-label">Run Status</div>
+          <div className="run-console-summary-value"><StatusTag value={run.status} /></div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Current Node</div>
+          <div className="run-console-summary-value mono">{run.current_node_id || '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card run-console-summary-card-waiting">
+          <div className="card-label">Current Gate</div>
+          <div className="run-console-summary-value">{run.current_gate ? <StatusTag value={run.current_gate.status} /> : '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Workflow</div>
+          <div className="run-console-summary-value mono">{run.flow_canonical_name || '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Target Branch</div>
+          <div className="run-console-summary-value mono">{run.target_branch || '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Workspace</div>
+          <div className="run-console-summary-value mono">{run.workspace_root || runtimeSettings?.workspace_root || '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Coding Agent</div>
+          <div className="run-console-summary-value mono">{runtimeSettings?.coding_agent || '—'}</div>
+        </Card>
+        <Card className="run-console-summary-card">
+          <div className="card-label">Audit Events</div>
+          <div className="run-console-summary-value">{auditEventsCount}</div>
+        </Card>
       </div>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={5}>
+      <Row gutter={[16, 16]} className="run-console-detail-grid">
+        <Col xs={24} lg={5} className="run-console-detail-col">
           <Card
             title={<span style={{ fontSize: 13 }}>Node Timeline</span>}
-            className="timeline-card"
+            className="timeline-card run-console-timeline-card"
             size="small"
-            style={{ maxHeight: 600, overflow: 'auto' }}
+            style={{ maxHeight: 640, overflow: 'auto' }}
             extra={selectedNodeId && (
-              <Button type="default" size="small" onClick={() => setSelectedNodeId(null)} style={{ paddingInline: 8, fontSize: 11 }}>
+              <Button type="default" size="small" onClick={() => setSelectedNodeId(null)} className="run-console-clear-btn">
                 Clear
               </Button>
             )}
@@ -1020,8 +1203,8 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
           </Card>
         </Col>
 
-        <Col xs={24} lg={13}>
-          <Card>
+        <Col xs={24} lg={13} className="run-console-detail-col">
+          <Card className="run-console-main-card">
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
@@ -1226,8 +1409,8 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
           </Card>
         </Col>
 
-        <Col xs={24} lg={6}>
-          <Card size="small" title="Human Gate">
+        <Col xs={24} lg={6} className="run-console-detail-col">
+          <Card size="small" title="Human Gate" className="run-console-gate-card">
             {run.current_gate ? (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 <Text>
