@@ -3793,6 +3793,10 @@ body {
 
 .vp-composer-zone.is-idle {
   position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  transition: none;
 }
 
 .vp-composer-zone.is-docked {
