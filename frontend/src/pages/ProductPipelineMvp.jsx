@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Checkbox, Input, Modal, Radio, Select, Spin, Tag, Typography } from 'antd';
-import { AppstoreOutlined, ArrowUpOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Checkbox, Input, Radio, Select, Typography } from 'antd';
+import { AppstoreOutlined, CaretRightOutlined, CloseCircleFilled } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -15,26 +15,6 @@ const APP_STATES = {
   REVIEW: 'REVIEW',
   DEPLOY: 'DEPLOY',
   DONE: 'DONE',
-};
-
-const PIPELINE_STEPS = [
-  { key: 'request', label: 'Request accepted' },
-  { key: 'clarification', label: 'Clarification' },
-  { key: 'planning', label: 'Planning' },
-  { key: 'implementation', label: 'Implementation' },
-  { key: 'review', label: 'Review' },
-  { key: 'deploy', label: 'Deploy to dev' },
-];
-
-const STATE_TO_PIPELINE_INDEX = {
-  [APP_STATES.RUN_STARTED]: 0,
-  [APP_STATES.CLARIFICATION]: 1,
-  [APP_STATES.CONFIRMATION]: 1,
-  [APP_STATES.PLANNING]: 2,
-  [APP_STATES.IMPLEMENTATION]: 3,
-  [APP_STATES.REVIEW]: 4,
-  [APP_STATES.DEPLOY]: 5,
-  [APP_STATES.DONE]: 5,
 };
 
 const MOCK_PROJECTS = [
@@ -58,6 +38,12 @@ const CLARIFICATION_QUESTIONS = {
     required: false,
   },
 };
+
+const RUN_BOOT_PHASES = [
+  'Request accepted',
+  'Project context loaded',
+  'Preparing clarification questions',
+];
 
 const IMPLEMENTATION_PHASES = [
   {
@@ -118,31 +104,26 @@ function normalizeFormats(formats) {
 }
 
 export default function ProductPipelineMvp() {
+  const shellRef = useRef(null);
+  const composerRef = useRef(null);
+  const stopResetTimerRef = useRef(null);
   const [state, setState] = useState(APP_STATES.IDLE);
   const [task, setTask] = useState('');
   const [selectedProject, setSelectedProject] = useState(MOCK_PROJECTS[0]?.id || null);
   const [launching, setLaunching] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stageReady, setStageReady] = useState(false);
+  const [stageGapHeight, setStageGapHeight] = useState(null);
   const [answers, setAnswers] = useState(() => ({ ...INITIAL_ANSWERS }));
-  const [activity, setActivity] = useState([]);
   const [implementationIndex, setImplementationIndex] = useState(0);
   const [deployIndex, setDeployIndex] = useState(0);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [bootIndex, setBootIndex] = useState(0);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
-
-  const appendLog = useCallback((text, tone = 'default') => {
-    setActivity((current) => [
-      ...current,
-      {
-        id: `${Date.now()}-${Math.random()}`,
-        text,
-        tone,
-      },
-    ]);
-  }, []);
 
   const clearRunProgress = useCallback(() => {
     setImplementationIndex(0);
     setDeployIndex(0);
+    setBootIndex(0);
   }, []);
 
   const runSummary = useMemo(() => {
@@ -179,60 +160,78 @@ export default function ProductPipelineMvp() {
     return requiredAudience && requiredFormats;
   }, [answers]);
 
-  const pipelineIndex = state === APP_STATES.IDLE ? -1 : STATE_TO_PIPELINE_INDEX[state] ?? -1;
-  const isInputState = [APP_STATES.CLARIFICATION, APP_STATES.CONFIRMATION, APP_STATES.PLANNING, APP_STATES.REVIEW].includes(state);
+  const isRunningFlow = launching || stopping || state !== APP_STATES.IDLE;
+  const isStageVisible = stageReady && state !== APP_STATES.IDLE;
+
+  const recalcStageGapHeight = useCallback(() => {
+    if (!shellRef.current || !composerRef.current) {
+      return;
+    }
+    const shellRect = shellRef.current.getBoundingClientRect();
+    const composerRect = composerRef.current.getBoundingClientRect();
+    const available = Math.floor(composerRect.top - shellRect.top);
+    setStageGapHeight(Math.max(0, available));
+  }, []);
 
   useEffect(() => {
-    if (isInputState) {
-      setDialogOpen(true);
-      if (state === APP_STATES.CLARIFICATION) {
-        appendLog('⏳ Human input required: clarification', 'pending');
-      }
-      if (state === APP_STATES.CONFIRMATION) {
-        appendLog('⏳ Human input required: confirm understanding', 'pending');
-      }
-      if (state === APP_STATES.PLANNING) {
-        appendLog('⏳ Human input required: approve plan', 'pending');
-      }
-      if (state === APP_STATES.REVIEW) {
-        appendLog('⏳ Human input required: review changes', 'pending');
-      }
-    } else {
-      setDialogOpen(false);
+    if (!isRunningFlow) {
+      setStageGapHeight(null);
+      return undefined;
     }
-  }, [isInputState, state, appendLog]);
+
+    recalcStageGapHeight();
+    const rafId = window.requestAnimationFrame(recalcStageGapHeight);
+    const resizeHandler = () => recalcStageGapHeight();
+    window.addEventListener('resize', resizeHandler);
+
+    const composerElement = composerRef.current;
+    const transitionEndHandler = () => recalcStageGapHeight();
+    composerElement?.addEventListener('transitionend', transitionEndHandler);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resizeHandler);
+      composerElement?.removeEventListener('transitionend', transitionEndHandler);
+    };
+  }, [isRunningFlow, launching, stopping, state, recalcStageGapHeight]);
 
   useEffect(() => {
     if (state !== APP_STATES.RUN_STARTED) {
       return undefined;
     }
-    const timer = window.setTimeout(() => {
-      appendLog('✔ Clarification questions generated', 'success');
+
+    setBootIndex(0);
+    let step = 0;
+    const interval = window.setInterval(() => {
+      step += 1;
+      if (step < RUN_BOOT_PHASES.length) {
+        setBootIndex(step);
+        return;
+      }
+      window.clearInterval(interval);
       setState(APP_STATES.CLARIFICATION);
     }, 900);
-    return () => window.clearTimeout(timer);
-  }, [state, appendLog]);
+
+    return () => window.clearInterval(interval);
+  }, [state]);
 
   useEffect(() => {
     if (state !== APP_STATES.IMPLEMENTATION) {
       return undefined;
     }
+
     setShowPlanDetails(false);
     setImplementationIndex(0);
-    appendLog(`⏳ ${IMPLEMENTATION_PHASES[0].pending}`, 'pending');
     let step = 0;
     let reviewTimer = null;
     const interval = window.setInterval(() => {
-      appendLog(`✔ ${IMPLEMENTATION_PHASES[step].done}`, 'success');
       step += 1;
       if (step < IMPLEMENTATION_PHASES.length) {
         setImplementationIndex(step);
-        appendLog(`⏳ ${IMPLEMENTATION_PHASES[step].pending}`, 'pending');
         return;
       }
       window.clearInterval(interval);
       reviewTimer = window.setTimeout(() => {
-        appendLog('✔ Changes are ready for review', 'success');
         setState(APP_STATES.REVIEW);
       }, 700);
     }, 1200);
@@ -243,28 +242,24 @@ export default function ProductPipelineMvp() {
         window.clearTimeout(reviewTimer);
       }
     };
-  }, [state, appendLog]);
+  }, [state]);
 
   useEffect(() => {
     if (state !== APP_STATES.DEPLOY) {
       return undefined;
     }
+
     setDeployIndex(0);
-    appendLog(`⏳ ${DEPLOY_PHASES[0].pending}`, 'pending');
     let step = 0;
     let doneTimer = null;
     const interval = window.setInterval(() => {
-      appendLog(`✔ ${DEPLOY_PHASES[step].done}`, 'success');
       step += 1;
       if (step < DEPLOY_PHASES.length) {
         setDeployIndex(step);
-        appendLog(`⏳ ${DEPLOY_PHASES[step].pending}`, 'pending');
         return;
       }
       window.clearInterval(interval);
       doneTimer = window.setTimeout(() => {
-        appendLog('✔ PR created', 'success');
-        appendLog('✔ Deploy to dev completed', 'success');
         setState(APP_STATES.DONE);
       }, 700);
     }, 1200);
@@ -275,182 +270,200 @@ export default function ProductPipelineMvp() {
         window.clearTimeout(doneTimer);
       }
     };
-  }, [state, appendLog]);
+  }, [state]);
 
   const startRun = () => {
-    const trimmedTask = task.trim();
-    if (!trimmedTask) {
+    if (!task.trim()) {
       return;
     }
+
+    if (stopResetTimerRef.current) {
+      window.clearTimeout(stopResetTimerRef.current);
+      stopResetTimerRef.current = null;
+    }
+    setStopping(false);
     clearRunProgress();
+    setStageReady(false);
     setAnswers({ ...INITIAL_ANSWERS });
-    setActivity([]);
+    setShowPlanDetails(false);
     setLaunching(true);
+
     window.setTimeout(() => {
       setLaunching(false);
       setState(APP_STATES.RUN_STARTED);
-      appendLog('✔ Request accepted', 'success');
-      appendLog('✔ Workflow selected: Feature delivery', 'success');
-      if (selectedProject) {
-        appendLog(`✔ Project selected: ${MOCK_PROJECTS.find((item) => item.id === selectedProject)?.name || selectedProject}`, 'success');
-      }
-    }, 750);
+      window.setTimeout(() => {
+        setStageReady(true);
+      }, 1700);
+    }, 600);
+  };
+
+  const stopRun = () => {
+    if (stopping) {
+      return;
+    }
+    if (stopResetTimerRef.current) {
+      window.clearTimeout(stopResetTimerRef.current);
+      stopResetTimerRef.current = null;
+    }
+    clearRunProgress();
+    setStageReady(false);
+    setLaunching(false);
+    setShowPlanDetails(false);
+    setAnswers({ ...INITIAL_ANSWERS });
+    setState(APP_STATES.IDLE);
+    setStopping(true);
+    stopResetTimerRef.current = window.setTimeout(() => {
+      setStopping(false);
+      stopResetTimerRef.current = null;
+    }, 2200);
+  };
+
+  const handleComposerEnter = (event) => {
+    if (event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    if (!isRunningFlow && task.trim() && !launching) {
+      startRun();
+    }
   };
 
   const goToConfirmation = () => {
     if (!clarificationValid) {
       return;
     }
-    appendLog('✔ Clarification answers received', 'success');
     setState(APP_STATES.CONFIRMATION);
   };
 
   const confirmUnderstanding = () => {
-    appendLog('✔ Understanding confirmed', 'success');
     setState(APP_STATES.PLANNING);
   };
 
   const editClarification = () => {
-    appendLog('↩ Returned to clarification', 'default');
     setState(APP_STATES.CLARIFICATION);
   };
 
   const approvePlan = () => {
-    appendLog('✔ Implementation plan approved', 'success');
     setState(APP_STATES.IMPLEMENTATION);
   };
 
   const requestPlanChange = () => {
-    appendLog('↩ Plan returned for updates', 'default');
     setState(APP_STATES.CLARIFICATION);
   };
 
   const approveReview = () => {
-    appendLog('✔ Review approved, starting deploy', 'success');
     setState(APP_STATES.DEPLOY);
   };
 
   const sendBackToRework = () => {
     clearRunProgress();
-    appendLog('↩ Sent back for rework', 'default');
     setState(APP_STATES.IMPLEMENTATION);
   };
 
   const startOver = () => {
+    if (stopResetTimerRef.current) {
+      window.clearTimeout(stopResetTimerRef.current);
+      stopResetTimerRef.current = null;
+    }
     setTask('');
     clearRunProgress();
+    setStageReady(false);
+    setStopping(false);
     setAnswers({ ...INITIAL_ANSWERS });
-    setActivity([]);
     setLaunching(false);
+    setShowPlanDetails(false);
     setState(APP_STATES.IDLE);
   };
 
-  const renderEntry = () => (
-    <div className="vp-entry-screen">
-      <div className="vp-entry-card">
-        <Title level={2} className="vp-entry-title">What are we inventing today?</Title>
-        <Text className="vp-entry-subtitle">
-          Describe the business request and the system will drive it to a dev-ready result.
-        </Text>
-        <div className="vp-composer-shell">
-          <TextArea
-            value={task}
-            onChange={(event) => setTask(event.target.value)}
-            placeholder="Ask anything"
-            autoSize={{ minRows: 2, maxRows: 2 }}
-            className="vp-entry-input"
-          />
-          <div className="vp-composer-controls">
-            <div className="vp-tool-row">
-              {MOCK_PROJECTS.length > 1 && (
-                <div className="vp-select-shell">
-                  <AppstoreOutlined />
-                  <Select
-                    value={selectedProject}
-                    options={MOCK_PROJECTS.map((item) => ({ value: item.id, label: item.name }))}
-                    onChange={setSelectedProject}
-                    style={{ width: '100%' }}
-                    className="vp-project-select"
-                    variant="borderless"
-                  />
-                </div>
-              )}
-            </div>
-            <Button
-              type="primary"
-              shape="circle"
-              icon={<ArrowUpOutlined />}
-              className="vp-run-icon-btn"
-              onClick={startRun}
-              disabled={!task.trim()}
-              loading={launching}
-              aria-label="Run"
+  useEffect(() => () => {
+    if (stopResetTimerRef.current) {
+      window.clearTimeout(stopResetTimerRef.current);
+    }
+  }, []);
+
+  const renderStageSkeleton = (title, dynamicText) => (
+    <div className="vp-center-panel vp-center-panel-skeleton">
+      <Text className="vp-stage-kicker">Pipeline status</Text>
+      <Title level={3} className="vp-stage-title">{title}</Title>
+      <div className="vp-skeleton-stack" aria-hidden="true">
+        <span className="vp-skeleton-line vp-skeleton-line-lg" />
+        <span className="vp-skeleton-line" />
+        <span className="vp-skeleton-line vp-skeleton-line-sm" />
+      </div>
+      <Text key={dynamicText} className="vp-stage-live-text">{dynamicText}</Text>
+    </div>
+  );
+
+  const renderClarificationCenter = () => (
+    <div className="vp-center-panel vp-center-panel-question">
+      <Title level={4} className="vp-center-title">We need a few details</Title>
+      <Text className="muted vp-center-subtitle">Answer the questions to continue implementation.</Text>
+
+      <div className="vp-question-scroll">
+        <div className="vp-question-list">
+          <div className="vp-question">
+            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.audience.title}<span className="vp-required-mark">*</span></Text>
+            <Radio.Group
+              value={answers.audience}
+              onChange={(event) => setAnswers((prev) => ({ ...prev, audience: event.target.value }))}
+              className="vp-radio-group"
+            >
+              {CLARIFICATION_QUESTIONS.audience.options.map((item) => (
+                <Radio key={item} value={item}>{item}</Radio>
+              ))}
+            </Radio.Group>
+          </div>
+
+          <div className="vp-question">
+            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.formats.title}<span className="vp-required-mark">*</span></Text>
+            <Checkbox.Group
+              value={answers.formats}
+              onChange={(values) => setAnswers((prev) => ({ ...prev, formats: values }))}
+              className="vp-checkbox-group"
+            >
+              {CLARIFICATION_QUESTIONS.formats.options.map((item) => (
+                <Checkbox key={item} value={item}>{item}</Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+
+          <div className="vp-question">
+            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.constraints.title}</Text>
+            <TextArea
+              value={answers.constraints}
+              onChange={(event) => setAnswers((prev) => ({ ...prev, constraints: event.target.value }))}
+              placeholder="For example: response time should stay below 2 seconds…"
+              autoSize={{ minRows: 3, maxRows: 6 }}
             />
           </div>
         </div>
       </div>
+
+      <div className="vp-actions-row">
+        <Button type="primary" onClick={goToConfirmation} disabled={!clarificationValid}>Continue</Button>
+      </div>
     </div>
   );
 
-  const renderClarificationDialog = () => (
-    <>
-      <Title level={4} style={{ marginTop: 0 }}>We need a few details</Title>
-      <Text className="muted">
-        Answer a few questions so implementation is correct.
-      </Text>
-      <div className="vp-question-list">
-        <div className="vp-question">
-          <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.audience.title}<span className="vp-required-mark">*</span></Text>
-          <Radio.Group
-            value={answers.audience}
-            onChange={(event) => setAnswers((prev) => ({ ...prev, audience: event.target.value }))}
-            className="vp-radio-group"
-          >
-            {CLARIFICATION_QUESTIONS.audience.options.map((item) => (
-              <Radio key={item} value={item}>{item}</Radio>
-            ))}
-          </Radio.Group>
-        </div>
-        <div className="vp-question">
-          <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.formats.title}<span className="vp-required-mark">*</span></Text>
-          <Checkbox.Group
-            value={answers.formats}
-            onChange={(values) => setAnswers((prev) => ({ ...prev, formats: values }))}
-            className="vp-checkbox-group"
-          >
-            {CLARIFICATION_QUESTIONS.formats.options.map((item) => (
-              <Checkbox key={item} value={item}>{item}</Checkbox>
-            ))}
-          </Checkbox.Group>
-        </div>
-        <div className="vp-question">
-          <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.constraints.title}</Text>
-          <TextArea
-            value={answers.constraints}
-            onChange={(event) => setAnswers((prev) => ({ ...prev, constraints: event.target.value }))}
-            placeholder="For example: response time should stay below 2 seconds…"
-            autoSize={{ minRows: 3, maxRows: 6 }}
-          />
-        </div>
-      </div>
-    </>
-  );
-
-  const renderConfirmationDialog = () => (
-    <>
-      <Title level={4} style={{ marginTop: 0 }}>We understood the task as:</Title>
-      <ul className="vp-summary-list">
+  const renderConfirmationCenter = () => (
+    <div className="vp-center-panel vp-center-panel-question">
+      <Title level={4} className="vp-center-title">Please confirm the understanding</Title>
+      <ul className="vp-summary-list vp-question-scroll">
         {runSummary.map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>
-    </>
+      <div className="vp-actions-row">
+        <Button onClick={editClarification}>Edit answers</Button>
+        <Button type="primary" onClick={confirmUnderstanding}>Looks right</Button>
+      </div>
+    </div>
   );
 
-  const renderPlanningDialog = () => (
-    <>
-      <Title level={4} style={{ marginTop: 0 }}>Implementation plan is ready</Title>
-      <ol className="vp-plan-list">
+  const renderPlanningCenter = () => (
+    <div className="vp-center-panel vp-center-panel-question">
+      <Title level={4} className="vp-center-title">Implementation plan is ready</Title>
+      <ol className="vp-plan-list vp-question-scroll">
         {planItems.map((item) => (
           <li key={item}>{item}</li>
         ))}
@@ -488,25 +501,17 @@ export default function ProductPipelineMvp() {
           </div>
         </div>
       )}
-    </>
-  );
-
-  const renderImplementation = () => (
-    <div className="vp-work-content">
-      <Title level={4} style={{ marginTop: 0 }}>Implementing changes</Title>
-      <div className="vp-loader-box">
-        <Spin />
-        <div className="vp-loader-lines">
-          <Text>{IMPLEMENTATION_PHASES[implementationIndex]?.pending || 'Generating changes…'}</Text>
-        </div>
+      <div className="vp-actions-row">
+        <Button onClick={requestPlanChange}>Change plan</Button>
+        <Button type="primary" onClick={approvePlan}>Approve plan</Button>
       </div>
     </div>
   );
 
-  const renderReviewDialog = () => (
-    <>
-      <Title level={4} style={{ marginTop: 0 }}>Changes are ready for review</Title>
-      <div className="vp-review-summary">
+  const renderReviewCenter = () => (
+    <div className="vp-center-panel vp-center-panel-question">
+      <Title level={4} className="vp-center-title">Changes are ready for review</Title>
+      <div className="vp-review-summary vp-question-scroll">
         <p>Added endpoint <code>/reports/export</code></p>
         <p>Implemented PDF generation</p>
         <p>Added export and pagination tests</p>
@@ -516,24 +521,16 @@ export default function ProductPipelineMvp() {
         <div>+ PdfService.js</div>
         <div>+ reports/export.spec.js</div>
       </div>
-    </>
-  );
-
-  const renderDeploy = () => (
-    <div className="vp-work-content">
-      <Title level={4} style={{ marginTop: 0 }}>Deploying to dev stand</Title>
-      <div className="vp-loader-box">
-        <Spin />
-        <div className="vp-loader-lines">
-          <Text>{DEPLOY_PHASES[deployIndex]?.pending || 'Deploying…'}</Text>
-        </div>
+      <div className="vp-actions-row">
+        <Button onClick={sendBackToRework}>Send back</Button>
+        <Button type="primary" onClick={approveReview}>Looks good, create PR</Button>
       </div>
     </div>
   );
 
-  const renderDone = () => (
-    <div className="vp-work-content">
-      <Title level={3} style={{ marginTop: 0 }}>Task delivered</Title>
+  const renderDoneCenter = () => (
+    <div className="vp-center-panel vp-center-panel-question">
+      <Title level={3} className="vp-center-title">Task delivered</Title>
       <div className="vp-review-summary">
         <p>Code is ready</p>
         <p>PR created</p>
@@ -551,129 +548,102 @@ export default function ProductPipelineMvp() {
     </div>
   );
 
-  const renderRunContent = () => {
-    if (isInputState) {
-      return (
-        <div className="vp-work-content">
-          <Title level={4} style={{ marginTop: 0 }}>Waiting for your input</Title>
-          <Text className="muted">
-            This step requires your decision. Open the dialog to continue.
-          </Text>
-          <div className="vp-actions-row">
-            <Button type="primary" onClick={() => setDialogOpen(true)}>Open dialog</Button>
-          </div>
-        </div>
-      );
+  const renderCenterContent = () => {
+    if (!isStageVisible) {
+      return null;
     }
-    if (state === APP_STATES.IMPLEMENTATION) return renderImplementation();
-    if (state === APP_STATES.DEPLOY) return renderDeploy();
-    if (state === APP_STATES.DONE) return renderDone();
 
-    return (
-      <div className="vp-work-content">
-        <Title level={4} style={{ marginTop: 0 }}>Request accepted</Title>
-        <div className="vp-loader-box">
-          <Spin />
-          <Text className="muted">Preparing execution steps…</Text>
-        </div>
-      </div>
-    );
+    if (state === APP_STATES.RUN_STARTED) {
+      return renderStageSkeleton('Spinning up delivery pipeline', RUN_BOOT_PHASES[bootIndex] || RUN_BOOT_PHASES[0]);
+    }
+
+    if (state === APP_STATES.CLARIFICATION) {
+      return renderClarificationCenter();
+    }
+
+    if (state === APP_STATES.CONFIRMATION) {
+      return renderConfirmationCenter();
+    }
+
+    if (state === APP_STATES.PLANNING) {
+      return renderPlanningCenter();
+    }
+
+    if (state === APP_STATES.IMPLEMENTATION) {
+      return renderStageSkeleton('Implementing changes', IMPLEMENTATION_PHASES[implementationIndex]?.pending || 'Generating changes…');
+    }
+
+    if (state === APP_STATES.REVIEW) {
+      return renderReviewCenter();
+    }
+
+    if (state === APP_STATES.DEPLOY) {
+      return renderStageSkeleton('Deploying to dev stand', DEPLOY_PHASES[deployIndex]?.pending || 'Deploying…');
+    }
+
+    return renderDoneCenter();
   };
 
-  if (state === APP_STATES.IDLE) {
-    return renderEntry();
-  }
-
   return (
-    <div className="vp-run-page">
-      <div className="vp-run-grid">
-        <div className="vp-main-column">
-          <Card className="vp-pipeline-card vp-surface-card" bordered={false}>
-            <div className="vp-task-header">
-              <Text className="vp-task-label">Task</Text>
-              {selectedProject && (
-                <Tag bordered={false} color="processing">
-                  {MOCK_PROJECTS.find((item) => item.id === selectedProject)?.name || selectedProject}
-                </Tag>
-              )}
-            </div>
-            <Title level={4} className="vp-task-title">"{shortTask(task)}"</Title>
-            <div className="vp-timeline">
-              {PIPELINE_STEPS.map((item, index) => {
-                const isDone = state === APP_STATES.DONE;
-                let status = 'pending';
-                if (isDone || index < pipelineIndex) {
-                  status = 'completed';
-                } else if (index === pipelineIndex) {
-                  status = 'active';
-                }
-                return (
-                  <div key={item.key} className={`vp-timeline-step vp-timeline-step-${status}`}>
-                    <div className="vp-timeline-node-wrap">
-                      <span className={`vp-timeline-dot ${status === 'active' ? 'is-pulsing' : ''}`} />
-                      {index < PIPELINE_STEPS.length - 1 && <span className="vp-timeline-line" />}
-                    </div>
-                    <span className="vp-timeline-label">{item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card className="vp-work-card vp-surface-card" bordered={false}>
-            {renderRunContent()}
-          </Card>
+    <div className={`vp-pipeline-shell ${isRunningFlow ? 'is-running' : ''}`} ref={shellRef}>
+      <div className="vp-center-zone">
+        <div className={`vp-entry-headline ${isRunningFlow ? 'is-hidden' : ''}`}>
+          <Title level={2} className="vp-entry-title">What are we inventing today?</Title>
+          <Text className="vp-entry-subtitle">
+            Describe the business request and the system will drive it to a dev-ready result.
+          </Text>
         </div>
 
-        <Card className="vp-log-card vp-surface-card" bordered={false} title="Activity log">
-          <div className="vp-log-list">
-            {activity.map((item) => (
-              <div key={item.id} className={`vp-log-item tone-${item.tone}`}>
-                <span className="vp-log-dot" />
-                <span>{item.text}</span>
+        <div
+          className={`vp-stage-center ${isStageVisible ? 'is-visible' : ''}`}
+          style={isRunningFlow && stageGapHeight !== null ? { '--vp-stage-gap-height': `${stageGapHeight}px` } : undefined}
+        >
+          {renderCenterContent()}
+        </div>
+
+        <div className={`vp-composer-zone ${stopping ? 'is-returning' : (isRunningFlow ? 'is-docked' : 'is-idle')}`} ref={composerRef}>
+          <div className={`vp-composer-shell ${isRunningFlow ? 'is-locked' : ''}`}>
+            <TextArea
+              value={task}
+              onChange={(event) => setTask(event.target.value)}
+              onPressEnter={handleComposerEnter}
+              placeholder="Ask anything"
+              autoSize={{ minRows: 2, maxRows: 2 }}
+              className="vp-entry-input"
+              disabled={isRunningFlow}
+            />
+
+            <div className="vp-composer-controls">
+              <div className="vp-tool-row">
+                {MOCK_PROJECTS.length > 1 && (
+                  <div className="vp-select-shell">
+                    <AppstoreOutlined />
+                    <Select
+                      value={selectedProject}
+                      options={MOCK_PROJECTS.map((item) => ({ value: item.id, label: item.name }))}
+                      onChange={setSelectedProject}
+                      style={{ width: '100%' }}
+                      className="vp-project-select"
+                      variant="borderless"
+                      disabled={isRunningFlow}
+                    />
+                  </div>
+                )}
               </div>
-            ))}
+
+              <Button
+                type="primary"
+                shape="circle"
+                icon={isRunningFlow ? <CloseCircleFilled /> : <CaretRightOutlined />}
+                className="vp-run-icon-btn"
+                onClick={isRunningFlow ? stopRun : startRun}
+                disabled={!task.trim() && !isRunningFlow}
+                aria-label={isRunningFlow ? 'Stop' : 'Run'}
+              />
+            </div>
           </div>
-        </Card>
+        </div>
       </div>
-      <Modal
-        title={state === APP_STATES.CLARIFICATION
-          ? 'Clarification'
-          : state === APP_STATES.CONFIRMATION
-            ? 'Confirm understanding'
-            : state === APP_STATES.PLANNING
-              ? 'Planning'
-              : 'Review'}
-        open={dialogOpen && isInputState}
-        onCancel={() => setDialogOpen(false)}
-        className="vp-input-modal"
-        width={760}
-        footer={state === APP_STATES.CLARIFICATION
-          ? [
-            <Button key="continue" type="primary" onClick={goToConfirmation} disabled={!clarificationValid}>
-              Continue
-            </Button>,
-          ]
-          : state === APP_STATES.CONFIRMATION
-            ? [
-              <Button key="fix" onClick={editClarification}>Edit answers</Button>,
-              <Button key="ok" type="primary" onClick={confirmUnderstanding}>Looks right</Button>,
-            ]
-            : state === APP_STATES.PLANNING
-              ? [
-                <Button key="change" onClick={requestPlanChange}>Change plan</Button>,
-                <Button key="approve" type="primary" onClick={approvePlan}>Approve plan</Button>,
-              ]
-              : [
-                <Button key="rework" onClick={sendBackToRework}>Send back</Button>,
-                <Button key="approve-review" type="primary" onClick={approveReview}>Looks good, create PR</Button>,
-              ]}
-      >
-        {state === APP_STATES.CLARIFICATION && renderClarificationDialog()}
-        {state === APP_STATES.CONFIRMATION && renderConfirmationDialog()}
-        {state === APP_STATES.PLANNING && renderPlanningDialog()}
-        {state === APP_STATES.REVIEW && renderReviewDialog()}
-      </Modal>
     </div>
   );
 }
