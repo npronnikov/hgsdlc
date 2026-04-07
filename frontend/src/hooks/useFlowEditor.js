@@ -17,6 +17,7 @@ import {
 } from '../utils/flowVersionUtils.js';
 import { buildEdges, parseFlowYaml, DEFAULT_REWORK } from '../utils/flowSerializer.js';
 import { validateFlow } from '../utils/flowValidator.js';
+import { parse as parseYaml } from 'yaml';
 import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
 
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
@@ -560,9 +561,15 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       `version: "${version}"`,
       `canonical_name: ${canonicalName}`,
       `title: ${flowMeta.title}`,
-      `description: ${flowMeta.description || ''}`,
-      `start_node_id: ${flowMeta.startNodeId}`,
     ];
+    const desc = flowMeta.description || '';
+    if (desc.includes('\n')) {
+      lines.push('description: |');
+      desc.split('\n').forEach((line) => lines.push(`  ${line}`));
+    } else {
+      lines.push(`description: ${desc}`);
+    }
+    lines.push(`start_node_id: ${flowMeta.startNodeId}`);
     lines.push(`fail_on_missing_declared_output: ${!!flowMeta.failOnMissingDeclaredOutput}`);
     lines.push(`fail_on_missing_expected_mutation: ${!!flowMeta.failOnMissingExpectedMutation}`);
     if (flowMeta.ruleRefs.length === 0) {
@@ -584,7 +591,12 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         lines.push(`    title: ${data.title}`);
       }
       if (data.description) {
-        lines.push(`    description: ${data.description}`);
+        if (data.description.includes('\n')) {
+          lines.push('    description: |');
+          data.description.split('\n').forEach((line) => lines.push(`      ${line}`));
+        } else {
+          lines.push(`    description: ${data.description}`);
+        }
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
       if ((data.nodeKind || data.type) !== 'command') {
@@ -942,6 +954,54 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     }
   };
 
+  const importFlowYaml = (yamlString) => {
+    let parsed;
+    try {
+      parsed = parseYaml(yamlString);
+    } catch (err) {
+      message.error(`YAML parse error: ${err.message}`);
+      return false;
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      message.error('Invalid YAML: expected a mapping at the root');
+      return false;
+    }
+    if (!Array.isArray(parsed.nodes) || parsed.nodes.length === 0) {
+      message.error('Invalid flow YAML: "nodes" array is missing or empty');
+      return false;
+    }
+    const startNodeId = parsed.start_node_id || '';
+    const importedNodes = parseFlowYaml(yamlString, startNodeId);
+    if (importedNodes.length === 0) {
+      message.error('Failed to parse nodes from YAML');
+      return false;
+    }
+
+    setFlowMeta((prev) => ({
+      ...prev,
+      flowId: isCreateMode ? (parsed.id || prev.flowId) : prev.flowId,
+      title: parsed.title || prev.title,
+      description: parsed.description || prev.description,
+      startNodeId,
+      codingAgent: parsed.coding_agent || prev.codingAgent,
+      platformCode: parsed.platform_code || prev.platformCode,
+      scope: parsed.scope || prev.scope,
+      flowKind: parsed.flow_kind || prev.flowKind,
+      riskLevel: parsed.risk_level || prev.riskLevel,
+      ruleRefs: Array.isArray(parsed.rule_refs) ? parsed.rule_refs : prev.ruleRefs,
+      failOnMissingDeclaredOutput: parsed.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
+      failOnMissingExpectedMutation: parsed.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
+      responseSchema: parsed.response_schema
+        ? JSON.stringify(parsed.response_schema, null, 2)
+        : prev.responseSchema,
+    }));
+    setNodes(importedNodes);
+    setSelectedNodeId(importedNodes[0]?.id || null);
+
+    message.success(`Imported ${importedNodes.length} nodes from YAML`);
+    return true;
+  };
+
   return {
     // state
     flowMeta,
@@ -1024,5 +1084,6 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     openPublishDialog,
     deleteCurrentDraft,
     confirmPublish,
+    importFlowYaml,
   };
 }
