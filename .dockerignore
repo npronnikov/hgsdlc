@@ -1,0 +1,27 @@
+# Repo root build context for deploy/backend.Dockerfile and deploy/frontend.Dockerfile
+.env
+.env.*
+secrets/
+
+.git
+.github
+.claude
+.cursor
+_bmad
+catalog-repo
+demo
+docs
+*.md
+
+backend/.gradle
+backend/build
+backend/out
+**/*.iml
+
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+.gradle
+**/Thumbs.db
+**/.DS_Store
