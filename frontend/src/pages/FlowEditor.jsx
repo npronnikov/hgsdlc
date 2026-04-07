@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { Background, Controls, ReactFlow } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button, Card, List, Modal, Select, Space, Typography } from 'antd';
+import { PlayCircleOutlined } from '@ant-design/icons';
 import { useLocation, useParams } from 'react-router-dom';
 import { nodeTypes } from '../components/flow/FlowNode.jsx';
 import { FlowMetaPanel } from '../components/flow/FlowMetaPanel.jsx';
 import { NodeEditPanel } from '../components/flow/NodeEditPanel.jsx';
+import { ImportYamlModal } from '../components/flow/ImportYamlModal.jsx';
+import { TestRunModal } from '../components/flow/TestRunModal.jsx';
 import { useFlowEditor } from '../hooks/useFlowEditor.js';
 
 const { Title, Text } = Typography;
@@ -44,7 +48,11 @@ export default function FlowEditor() {
     addNode, removeNodeById,
     saveFlow, openPublishDialog, deleteCurrentDraft, confirmPublish,
     startDraftFromPublished,
+    importFlowYaml,
   } = editor;
+
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [testRunModalOpen, setTestRunModalOpen] = useState(false);
 
   return (
     <div className="flow-editor-page">
@@ -60,6 +68,15 @@ export default function FlowEditor() {
                 <Button type="default" onClick={openPublishDialog} disabled={!canEditCurrentDraft}>
                   Request publication
                 </Button>
+                {flowMeta.canonicalName && (
+                  <Button
+                    type="default"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => setTestRunModalOpen(true)}
+                  >
+                    Test Run
+                  </Button>
+                )}
                 {canDeleteDraft && (
                   <Button danger type="default" onClick={deleteCurrentDraft}>
                     Delete draft
@@ -102,6 +119,14 @@ export default function FlowEditor() {
               <div className="mono">{flowMeta.flowId || 'new-flow'}@{flowVersionLabel}</div>
             </div>
             <Space>
+              {isEditing && (
+                <Button
+                  type="default"
+                  onClick={() => setImportModalOpen(true)}
+                >
+                  Import YAML
+                </Button>
+              )}
               <Button
                 type="default"
                 onClick={() => setShowYaml((prev) => !prev)}
@@ -322,6 +347,16 @@ export default function FlowEditor() {
           style={{ width: '100%' }}
         />
       </Modal>
+      <ImportYamlModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImport={importFlowYaml}
+      />
+      <TestRunModal
+        open={testRunModalOpen}
+        onClose={() => setTestRunModalOpen(false)}
+        canonicalName={flowMeta.canonicalName}
+      />
     </div>
   );
 }

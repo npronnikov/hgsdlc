@@ -91,6 +91,41 @@ export function toNodeData(node, isStart) {
   };
 }
 
+function layoutNodes(rawNodes, startNodeId) {
+  const nodes = rawNodes.map((node, index) => ({
+    id: node.id || `node-${index + 1}`,
+    type: 'flowNode',
+    position: { x: index * 220, y: 0 },
+    data: toNodeData(node, node.id === startNodeId),
+  }));
+  if (nodes.length === 0) {
+    return nodes;
+  }
+  const edges = buildEdges(nodes);
+  const NODE_WIDTH = 220;
+  const NODE_HEIGHT = 90;
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 140 });
+  nodes.forEach((node) => {
+    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  });
+  edges.forEach((edge) => {
+    graph.setEdge(edge.source, edge.target);
+  });
+  dagre.layout(graph);
+  return nodes.map((node) => {
+    const layout = graph.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: layout.x - NODE_WIDTH / 2,
+        y: layout.y - NODE_HEIGHT / 2,
+      },
+    };
+  });
+}
+
 export function parseFlowYaml(flowYaml, startNodeId) {
   if (!flowYaml) {
     return [];
@@ -98,41 +133,21 @@ export function parseFlowYaml(flowYaml, startNodeId) {
   try {
     const parsed = parseYaml(flowYaml);
     const rawNodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
-    const nodes = rawNodes.map((node, index) => ({
-      id: node.id || `node-${index + 1}`,
-      type: 'flowNode',
-      position: { x: index * 220, y: 0 },
-      data: toNodeData(node, node.id === startNodeId),
-    }));
-    const edges = buildEdges(nodes);
-    if (nodes.length === 0) {
-      return nodes;
-    }
-
-    const NODE_WIDTH = 220;
-    const NODE_HEIGHT = 90;
-    const graph = new dagre.graphlib.Graph();
-    graph.setDefaultEdgeLabel(() => ({}));
-    graph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 140 });
-    nodes.forEach((node) => {
-      graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-    });
-    edges.forEach((edge) => {
-      graph.setEdge(edge.source, edge.target);
-    });
-    dagre.layout(graph);
-
-    return nodes.map((node) => {
-      const layout = graph.node(node.id);
-      return {
-        ...node,
-        position: {
-          x: layout.x - NODE_WIDTH / 2,
-          y: layout.y - NODE_HEIGHT / 2,
-        },
-      };
-    });
+    return layoutNodes(rawNodes, startNodeId);
   } catch (err) {
     return [];
   }
+}
+
+export function parseFlowYamlWithMeta(yamlString) {
+  const parsed = parseYaml(yamlString);
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  const rawNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
+  const startNodeId = parsed.start_node_id ?? '';
+  return {
+    meta: parsed,
+    nodes: layoutNodes(rawNodes, startNodeId),
+  };
 }
