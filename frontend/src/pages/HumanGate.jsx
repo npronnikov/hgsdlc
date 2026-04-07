@@ -683,7 +683,7 @@ export default function HumanGate() {
       </Card>
 
       <Row gutter={[16, 16]} className="human-gate-main-row">
-        <Col xs={24} lg={6}>
+        <Col xs={24} lg={6} className="human-gate-sidebar-col">
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <Card title="Node instruction" className="human-gate-node-instruction-card">
               <pre className="human-gate-main-instruction-content">

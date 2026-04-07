@@ -3223,8 +3223,14 @@ body {
   }
 
   .human-gate-main-row {
-    height: 100%;
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
+  }
+
+  .human-gate-sidebar-col {
+    height: 100%;
+    overflow-y: auto;
   }
 
   .human-gate-main-col {
