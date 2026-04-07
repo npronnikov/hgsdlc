@@ -36,6 +36,9 @@ public class CatalogContentResolver {
         if (isTeamScope(flowVersion.getScope())) {
             return requireContent(flowVersion.getFlowYaml(), "flow_yaml", flowVersion.getCanonicalName());
         }
+        if (hasInlineContent(flowVersion.getFlowYaml())) {
+            return flowVersion.getFlowYaml();
+        }
         String fallbackPath = "flows/" + flowVersion.getFlowId() + "/" + flowVersion.getVersion();
         return readFromMirror(resolveSourcePath(flowVersion.getSourcePath(), fallbackPath), "FLOW.yaml");
     }
@@ -47,6 +50,9 @@ public class CatalogContentResolver {
         if (isTeamScope(ruleVersion.getScope())) {
             return requireContent(ruleVersion.getRuleMarkdown(), "rule_markdown", ruleVersion.getCanonicalName());
         }
+        if (hasInlineContent(ruleVersion.getRuleMarkdown())) {
+            return ruleVersion.getRuleMarkdown();
+        }
         String fallbackPath = "rules/" + ruleVersion.getRuleId() + "/" + ruleVersion.getVersion();
         return readFromMirror(resolveSourcePath(ruleVersion.getSourcePath(), fallbackPath), "RULE.md");
     }
@@ -57,6 +63,9 @@ public class CatalogContentResolver {
         }
         if (isTeamScope(skillVersion.getScope())) {
             return requireContent(skillVersion.getSkillMarkdown(), "skill_markdown", skillVersion.getCanonicalName());
+        }
+        if (hasInlineContent(skillVersion.getSkillMarkdown())) {
+            return skillVersion.getSkillMarkdown();
         }
         String fallbackPath = "skills/" + skillVersion.getSkillId() + "/" + skillVersion.getVersion();
         return readFromMirror(resolveSourcePath(skillVersion.getSourcePath(), fallbackPath), "SKILL.md");
@@ -96,6 +105,10 @@ public class CatalogContentResolver {
             throw new ValidationException("source_path is required");
         }
         return fallbackPath;
+    }
+
+    private boolean hasInlineContent(String content) {
+        return content != null && !content.isBlank();
     }
 
     private String requireContent(String content, String fieldName, String canonicalName) {
