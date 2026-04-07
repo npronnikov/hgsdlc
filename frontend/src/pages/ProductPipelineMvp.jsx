@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Checkbox, Input, Radio, Select, Typography } from 'antd';
-import { AppstoreOutlined, CaretRightOutlined, CloseCircleFilled } from '@ant-design/icons';
+import { Button, Input, Select, Typography, message } from 'antd';
+import { ApartmentOutlined, AppstoreOutlined, CaretRightOutlined, CloseCircleFilled } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
+import { parse as parseYaml } from 'yaml';
+import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -8,160 +11,207 @@ const { TextArea } = Input;
 const APP_STATES = {
   IDLE: 'IDLE',
   RUN_STARTED: 'RUN_STARTED',
-  CLARIFICATION: 'CLARIFICATION',
-  CONFIRMATION: 'CONFIRMATION',
-  PLANNING: 'PLANNING',
-  IMPLEMENTATION: 'IMPLEMENTATION',
-  REVIEW: 'REVIEW',
-  DEPLOY: 'DEPLOY',
-  DONE: 'DONE',
 };
 
-const MOCK_PROJECTS = [
-  { id: 'payments-api-v2', name: 'Payments API v2' },
-  { id: 'reporting-core', name: 'Reporting Core' },
+const RUN_ACTIVE_STATUSES = ['created', 'running', 'waiting_gate', 'waiting_publish', 'publish_failed'];
+const HUMAN_GATE_KINDS = ['human_input', 'human_approval'];
+const STAGE_ROTATING_MESSAGES = [
+  'Creating great work...',
+  'Understanding your system context...',
+  'Mapping architecture boundaries...',
+  'Reviewing existing code paths...',
+  'Designing safe implementation steps...',
+  'Preparing maintainable changes...',
+  'Checking edge cases and failure modes...',
+  'Aligning with project conventions...',
+  'Keeping the quality bar high...',
+  'Packaging a dev-ready result...',
 ];
 
-const CLARIFICATION_QUESTIONS = {
-  audience: {
-    title: 'Who will use this feature?',
-    options: ['Only administrators', 'All users', 'External clients'],
-    required: true,
-  },
-  formats: {
-    title: 'Which export formats are required?',
-    options: ['PDF', 'CSV', 'Excel'],
-    required: true,
-  },
-  constraints: {
-    title: 'Any constraints or special requirements?',
-    required: false,
-  },
-};
+const HEADLINE_FADE_MS = 460;
+const COMPOSER_MOVE_MS = 2200;
+const STAGE_PAUSE_MS = 320;
 
-const RUN_BOOT_PHASES = [
-  'Request accepted',
-  'Project context loaded',
-  'Preparing clarification questions',
-];
-
-const IMPLEMENTATION_PHASES = [
-  {
-    pending: 'Creating branch feature/export-pdf…',
-    done: 'Created branch feature/export-pdf',
-  },
-  {
-    pending: 'Analyzing codebase…',
-    done: 'Found reports module and integration points',
-  },
-  {
-    pending: 'Generating changes…',
-    done: 'Generated code changes and updated contracts',
-  },
-  {
-    pending: 'Running tests…',
-    done: 'Tests completed successfully',
-  },
-];
-
-const DEPLOY_PHASES = [
-  {
-    pending: 'Building project…',
-    done: 'Build completed',
-  },
-  {
-    pending: 'Starting container…',
-    done: 'Container started',
-  },
-  {
-    pending: 'Deploying to dev stand…',
-    done: 'Dev stand updated',
-  },
-];
-
-const INITIAL_ANSWERS = {
-  audience: '',
-  formats: [],
-  constraints: '',
-};
-
-function shortTask(task) {
-  const normalized = String(task || '').trim();
-  if (normalized.length <= 86) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 83)}…`;
+function formatRunStatusLabel(status) {
+  return String(status || 'unknown')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function normalizeFormats(formats) {
-  if (!Array.isArray(formats) || formats.length === 0) {
-    return 'PDF';
+function formatDateTime(value) {
+  if (!value) {
+    return '—';
   }
-  if (formats.length === 1) {
-    return formats[0];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
   }
-  return `${formats.slice(0, -1).join(', ')} and ${formats[formats.length - 1]}`;
+  return new Intl.DateTimeFormat('ru-RU', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(date);
+}
+
+function generateIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function buildFlowNodeMeta(flowYaml) {
+  if (!flowYaml) {
+    return {
+      titleById: {},
+      nodeOrder: [],
+    };
+  }
+  try {
+    const parsed = parseYaml(flowYaml);
+    const rawNodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
+    const titleById = {};
+    const nodeOrder = [];
+    for (const node of rawNodes) {
+      const nodeId = node?.id;
+      if (!nodeId) {
+        continue;
+      }
+      titleById[nodeId] = node?.title || node?.name || nodeId;
+      nodeOrder.push(nodeId);
+    }
+    return { titleById, nodeOrder };
+  } catch (_) {
+    return {
+      titleById: {},
+      nodeOrder: [],
+    };
+  }
 }
 
 export default function ProductPipelineMvp() {
+  const navigate = useNavigate();
   const shellRef = useRef(null);
   const composerRef = useRef(null);
+  const launchAttemptRef = useRef(0);
   const stopResetTimerRef = useRef(null);
+  const startDockTimerRef = useRef(null);
+  const startStageTimerRef = useRef(null);
+
   const [state, setState] = useState(APP_STATES.IDLE);
   const [task, setTask] = useState('');
-  const [selectedProject, setSelectedProject] = useState(MOCK_PROJECTS[0]?.id || null);
+  const [projects, setProjects] = useState([]);
+  const [flows, setFlows] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedFlow, setSelectedFlow] = useState(null);
+
+  const [activeRunId, setActiveRunId] = useState(null);
+  const [activeRun, setActiveRun] = useState(null);
+  const [runNodes, setRunNodes] = useState([]);
+  const [flowNodeTitlesById, setFlowNodeTitlesById] = useState({});
+  const [flowNodeOrder, setFlowNodeOrder] = useState([]);
+  const [progressMessageIndex, setProgressMessageIndex] = useState(0);
+
   const [launching, setLaunching] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [composerDocked, setComposerDocked] = useState(false);
+  const [revealHeadlineOnStop, setRevealHeadlineOnStop] = useState(false);
   const [stageReady, setStageReady] = useState(false);
   const [stageGapHeight, setStageGapHeight] = useState(null);
-  const [answers, setAnswers] = useState(() => ({ ...INITIAL_ANSWERS }));
-  const [implementationIndex, setImplementationIndex] = useState(0);
-  const [deployIndex, setDeployIndex] = useState(0);
-  const [bootIndex, setBootIndex] = useState(0);
-  const [showPlanDetails, setShowPlanDetails] = useState(false);
 
-  const clearRunProgress = useCallback(() => {
-    setImplementationIndex(0);
-    setDeployIndex(0);
-    setBootIndex(0);
+  const projectOptions = useMemo(
+    () => projects.map((item) => ({
+      value: item.id,
+      label: <span className="vp-select-option-label" title={item.name || item.id}>{item.name || item.id}</span>,
+    })),
+    [projects]
+  );
+
+  const flowOptions = useMemo(
+    () => flows.map((item) => {
+      const labelText = item.title || item.canonical_name || item.flow_id;
+      return {
+        value: item.flow_id,
+        label: <span className="vp-select-option-label" title={labelText}>{labelText}</span>,
+      };
+    }),
+    [flows]
+  );
+
+  const clearTimers = useCallback(() => {
+    if (stopResetTimerRef.current) {
+      window.clearTimeout(stopResetTimerRef.current);
+      stopResetTimerRef.current = null;
+    }
+    if (startDockTimerRef.current) {
+      window.clearTimeout(startDockTimerRef.current);
+      startDockTimerRef.current = null;
+    }
+    if (startStageTimerRef.current) {
+      window.clearTimeout(startStageTimerRef.current);
+      startStageTimerRef.current = null;
+    }
   }, []);
 
-  const runSummary = useMemo(() => {
-    const items = [];
-    const trimmedTask = shortTask(task);
-    if (trimmedTask) {
-      items.push(trimmedTask);
-    }
-    if (answers.audience) {
-      items.push(`Access: ${answers.audience.toLowerCase()}`);
-    }
-    items.push(`Export formats: ${normalizeFormats(answers.formats)}`);
-    if (answers.constraints?.trim()) {
-      items.push(answers.constraints.trim());
-    } else {
-      items.push('No extra constraints');
-    }
-    return items;
-  }, [task, answers]);
+  const clearRunRuntime = useCallback(() => {
+    setActiveRunId(null);
+    setActiveRun(null);
+    setRunNodes([]);
+    setFlowNodeTitlesById({});
+    setFlowNodeOrder([]);
+    setProgressMessageIndex(0);
+  }, []);
 
-  const planItems = useMemo(() => {
-    const formats = normalizeFormats(answers.formats);
-    return [
-      'Add endpoint /reports/export',
-      `Implement ${formats} generation`,
-      'Add data processing service for large datasets',
-      'Add unit and integration tests',
-    ];
-  }, [answers.formats]);
+  useEffect(() => {
+    let active = true;
+    const loadProjectAndFlowOptions = async () => {
+      try {
+        const [projectData, flowData] = await Promise.all([
+          apiRequest('/projects'),
+          apiRequest('/flows'),
+        ]);
+        if (!active) {
+          return;
+        }
+        const projectList = Array.isArray(projectData) ? projectData : [];
+        const publishedFlows = (Array.isArray(flowData) ? flowData : [])
+          .filter((item) => item?.status === 'published');
 
-  const clarificationValid = useMemo(() => {
-    const requiredAudience = answers.audience.trim().length > 0;
-    const requiredFormats = Array.isArray(answers.formats) && answers.formats.length > 0;
-    return requiredAudience && requiredFormats;
-  }, [answers]);
+        setProjects(projectList);
+        setFlows(publishedFlows);
+        setSelectedProject((current) => (
+          current && projectList.some((item) => item.id === current)
+            ? current
+            : (projectList[0]?.id || null)
+        ));
+        setSelectedFlow((current) => (
+          current && publishedFlows.some((item) => item.flow_id === current)
+            ? current
+            : (publishedFlows[0]?.flow_id || null)
+        ));
+      } catch (err) {
+        if (!active) {
+          return;
+        }
+        setProjects([]);
+        setFlows([]);
+        setSelectedProject(null);
+        setSelectedFlow(null);
+        message.error(err?.message || 'Failed to load projects and flows');
+      }
+    };
 
-  const isRunningFlow = launching || stopping || state !== APP_STATES.IDLE;
+    loadProjectAndFlowOptions();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isRunningFlow = launching || stopping || composerDocked || state !== APP_STATES.IDLE;
+  const isRunLayoutActive = composerDocked || state !== APP_STATES.IDLE || (stopping && !revealHeadlineOnStop);
   const isStageVisible = stageReady && state !== APP_STATES.IDLE;
+  const isHeadlineHidden = launching || state !== APP_STATES.IDLE || (stopping && !revealHeadlineOnStop);
+  const keepHeadlineSpaceOnStop = stopping && !revealHeadlineOnStop;
+  const shouldRenderHeadline = !isRunLayoutActive || keepHeadlineSpaceOnStop;
 
   const recalcStageGapHeight = useCallback(() => {
     if (!shellRef.current || !composerRef.current) {
@@ -195,191 +245,294 @@ export default function ProductPipelineMvp() {
     };
   }, [isRunningFlow, launching, stopping, state, recalcStageGapHeight]);
 
+  useEffect(() => () => {
+    clearTimers();
+  }, [clearTimers]);
+
+  const loadRunRuntime = useCallback(async (runId, { silent = false } = {}) => {
+    if (!runId) {
+      return;
+    }
+    try {
+      const [runResult, nodeResult] = await Promise.allSettled([
+        apiRequest(`/runs/${runId}`),
+        apiRequest(`/runs/${runId}/nodes`),
+      ]);
+
+      const errors = [];
+      if (runResult.status === 'fulfilled') {
+        setActiveRun(runResult.value || null);
+      } else {
+        errors.push(runResult.reason);
+      }
+
+      if (nodeResult.status === 'fulfilled') {
+        setRunNodes(Array.isArray(nodeResult.value) ? nodeResult.value : []);
+      } else {
+        errors.push(nodeResult.reason);
+      }
+
+      if (!silent && errors.length === 2) {
+        message.error(errors[0]?.message || 'Failed to load run data');
+      }
+    } catch (err) {
+      if (!silent) {
+        message.error(err?.message || 'Failed to load run data');
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    if (state !== APP_STATES.RUN_STARTED) {
+    if (!activeRunId || !isRunningFlow) {
       return undefined;
     }
 
-    setBootIndex(0);
-    let step = 0;
-    const interval = window.setInterval(() => {
-      step += 1;
-      if (step < RUN_BOOT_PHASES.length) {
-        setBootIndex(step);
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) {
         return;
       }
-      window.clearInterval(interval);
-      setState(APP_STATES.CLARIFICATION);
-    }, 900);
-
-    return () => window.clearInterval(interval);
-  }, [state]);
-
-  useEffect(() => {
-    if (state !== APP_STATES.IMPLEMENTATION) {
-      return undefined;
-    }
-
-    setShowPlanDetails(false);
-    setImplementationIndex(0);
-    let step = 0;
-    let reviewTimer = null;
-    const interval = window.setInterval(() => {
-      step += 1;
-      if (step < IMPLEMENTATION_PHASES.length) {
-        setImplementationIndex(step);
-        return;
-      }
-      window.clearInterval(interval);
-      reviewTimer = window.setTimeout(() => {
-        setState(APP_STATES.REVIEW);
-      }, 700);
-    }, 1200);
-
-    return () => {
-      window.clearInterval(interval);
-      if (reviewTimer) {
-        window.clearTimeout(reviewTimer);
-      }
+      await loadRunRuntime(activeRunId, { silent: true });
     };
-  }, [state]);
 
-  useEffect(() => {
-    if (state !== APP_STATES.DEPLOY) {
-      return undefined;
+    poll();
+
+    const shouldPoll = !activeRun || RUN_ACTIVE_STATUSES.includes(activeRun.status);
+    if (!shouldPoll) {
+      return () => {
+        cancelled = true;
+      };
     }
 
-    setDeployIndex(0);
-    let step = 0;
-    let doneTimer = null;
-    const interval = window.setInterval(() => {
-      step += 1;
-      if (step < DEPLOY_PHASES.length) {
-        setDeployIndex(step);
-        return;
-      }
-      window.clearInterval(interval);
-      doneTimer = window.setTimeout(() => {
-        setState(APP_STATES.DONE);
-      }, 700);
-    }, 1200);
-
+    const timerId = window.setInterval(poll, 2000);
     return () => {
-      window.clearInterval(interval);
-      if (doneTimer) {
-        window.clearTimeout(doneTimer);
-      }
+      cancelled = true;
+      window.clearInterval(timerId);
     };
-  }, [state]);
+  }, [activeRunId, activeRun?.status, isRunningFlow, loadRunRuntime]);
 
-  const startRun = () => {
+  const startRun = useCallback(async () => {
     if (!task.trim()) {
       return;
     }
 
-    if (stopResetTimerRef.current) {
-      window.clearTimeout(stopResetTimerRef.current);
-      stopResetTimerRef.current = null;
+    const flowRecord = flows.find((item) => item.flow_id === selectedFlow);
+    if (!selectedProject || !selectedFlow || !flowRecord?.canonical_name) {
+      message.warning('Select project and flow before launching run');
+      return;
     }
+
+    const launchAttempt = launchAttemptRef.current + 1;
+    launchAttemptRef.current = launchAttempt;
+
+    clearTimers();
     setStopping(false);
-    clearRunProgress();
+    setComposerDocked(false);
+    setRevealHeadlineOnStop(false);
     setStageReady(false);
-    setAnswers({ ...INITIAL_ANSWERS });
-    setShowPlanDetails(false);
+    clearRunRuntime();
     setLaunching(true);
 
-    window.setTimeout(() => {
-      setLaunching(false);
-      setState(APP_STATES.RUN_STARTED);
-      window.setTimeout(() => {
+    startDockTimerRef.current = window.setTimeout(() => {
+      setComposerDocked(true);
+      startDockTimerRef.current = null;
+      startStageTimerRef.current = window.setTimeout(() => {
+        setState(APP_STATES.RUN_STARTED);
         setStageReady(true);
-      }, 1700);
-    }, 600);
-  };
+        setLaunching(false);
+        startStageTimerRef.current = null;
+      }, COMPOSER_MOVE_MS + STAGE_PAUSE_MS);
+    }, HEADLINE_FADE_MS);
 
-  const stopRun = () => {
+    try {
+      const project = projects.find((item) => item.id === selectedProject);
+      const targetBranch = String(project?.default_branch || 'main').trim() || 'main';
+      const [flowDetails, runResponse] = await Promise.all([
+        apiRequest(`/flows/${selectedFlow}`),
+        apiRequest('/runs', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: selectedProject,
+            target_branch: targetBranch,
+            flow_canonical_name: flowRecord.canonical_name,
+            feature_request: task.trim(),
+            publish_mode: 'branch',
+            idempotency_key: generateIdempotencyKey(),
+          }),
+        }),
+      ]);
+
+      const runId = runResponse?.run_id;
+      if (!runId) {
+        throw new Error('Run id is missing in launch response');
+      }
+      if (launchAttempt !== launchAttemptRef.current) {
+        try {
+          await apiRequest(`/runs/${runId}/cancel`, { method: 'POST' });
+        } catch (_) {
+          // ignore late cancel errors for stale launch attempts
+        }
+        return;
+      }
+
+      const flowNodeMeta = buildFlowNodeMeta(flowDetails?.flow_yaml);
+      setFlowNodeTitlesById(flowNodeMeta.titleById);
+      setFlowNodeOrder(flowNodeMeta.nodeOrder);
+      setActiveRunId(runId);
+      localStorage.setItem('lastRunId', runId);
+      await loadRunRuntime(runId);
+    } catch (err) {
+      clearTimers();
+      clearRunRuntime();
+      setLaunching(false);
+      setStageReady(false);
+      setComposerDocked(false);
+      setStopping(false);
+      setRevealHeadlineOnStop(true);
+      setState(APP_STATES.IDLE);
+      message.error(err?.message || 'Failed to start run');
+    }
+  }, [
+    clearRunRuntime,
+    clearTimers,
+    flows,
+    loadRunRuntime,
+    projects,
+    selectedFlow,
+    selectedProject,
+    task,
+  ]);
+
+  const stopRun = useCallback(() => {
     if (stopping) {
       return;
     }
-    if (stopResetTimerRef.current) {
-      window.clearTimeout(stopResetTimerRef.current);
-      stopResetTimerRef.current = null;
+
+    launchAttemptRef.current += 1;
+    clearTimers();
+
+    message.success({
+      key: 'product-pipeline-run-cancelled',
+      content: 'Run cancelled',
+      duration: 2,
+    });
+
+    if (activeRunId && activeRun && RUN_ACTIVE_STATUSES.includes(activeRun.status)) {
+      apiRequest(`/runs/${activeRunId}/cancel`, { method: 'POST' }).catch(() => {
+        // keep UI responsive: cancel request is best-effort and runs in background
+      });
     }
-    clearRunProgress();
+
+    clearRunRuntime();
     setStageReady(false);
+    setRevealHeadlineOnStop(false);
     setLaunching(false);
-    setShowPlanDetails(false);
-    setAnswers({ ...INITIAL_ANSWERS });
+    setComposerDocked(false);
     setState(APP_STATES.IDLE);
     setStopping(true);
+
     stopResetTimerRef.current = window.setTimeout(() => {
+      setRevealHeadlineOnStop(true);
       setStopping(false);
       stopResetTimerRef.current = null;
-    }, 2200);
-  };
+    }, COMPOSER_MOVE_MS);
+  }, [activeRun, activeRunId, clearRunRuntime, clearTimers, stopping]);
 
   const handleComposerEnter = (event) => {
     if (event.shiftKey) {
       return;
     }
     event.preventDefault();
-    if (!isRunningFlow && task.trim() && !launching) {
+    if (!isRunningFlow && task.trim() && selectedProject && selectedFlow && !launching) {
       startRun();
     }
   };
 
-  const goToConfirmation = () => {
-    if (!clarificationValid) {
+  const currentNodeId = useMemo(() => {
+    if (activeRun?.current_node_id) {
+      return activeRun.current_node_id;
+    }
+    const runningNode = runNodes.find((item) => item.status === 'running');
+    if (runningNode?.node_id) {
+      return runningNode.node_id;
+    }
+    return runNodes[runNodes.length - 1]?.node_id || null;
+  }, [activeRun?.current_node_id, runNodes]);
+
+  const currentNodeTitle = useMemo(() => {
+    if (!currentNodeId) {
+      return null;
+    }
+    const direct = flowNodeTitlesById[currentNodeId];
+    if (direct) {
+      return direct;
+    }
+    const currentExecution = runNodes.find((item) => item.node_id === currentNodeId);
+    return currentExecution?.node_title || currentExecution?.title || currentNodeId;
+  }, [currentNodeId, flowNodeTitlesById, runNodes]);
+
+  const runningStepInfo = useMemo(() => {
+    const uniqueExecutedNodes = Array.from(new Set(runNodes.map((node) => node?.node_id).filter(Boolean)));
+    const totalSteps = Math.max(
+      flowNodeOrder.length,
+      uniqueExecutedNodes.length,
+      1
+    );
+
+    if (!currentNodeId) {
+      return { step: 1, total: totalSteps };
+    }
+
+    const flowIndex = flowNodeOrder.indexOf(currentNodeId);
+    if (flowIndex >= 0) {
+      return { step: flowIndex + 1, total: totalSteps };
+    }
+
+    const executedIndex = uniqueExecutedNodes.indexOf(currentNodeId);
+    if (executedIndex >= 0) {
+      return { step: executedIndex + 1, total: totalSteps };
+    }
+
+    return { step: 1, total: totalSteps };
+  }, [currentNodeId, flowNodeOrder, runNodes]);
+
+  const statusText = useMemo(() => {
+    if (!activeRun) {
+      return 'Waiting for run status…';
+    }
+    if (activeRun.status === 'running') {
+      return `Running step ${runningStepInfo.step} of ${runningStepInfo.total}`;
+    }
+    return `${formatRunStatusLabel(activeRun.status)}${activeRun?.publish_status ? ` · publish ${formatRunStatusLabel(activeRun.publish_status)}` : ''}`;
+  }, [activeRun, runningStepInfo.step, runningStepInfo.total]);
+
+  const currentGate = activeRun?.current_gate || null;
+  const hasHumanGate = currentGate && HUMAN_GATE_KINDS.includes(currentGate.gate_kind);
+  const rotatingProgressMessage = hasHumanGate
+    ? 'Human gate reached. Open the gate to continue.'
+    : STAGE_ROTATING_MESSAGES[progressMessageIndex];
+
+  useEffect(() => {
+    if (!activeRunId || !isStageVisible) {
+      setProgressMessageIndex(0);
+      return undefined;
+    }
+    if (hasHumanGate) {
+      return undefined;
+    }
+    const timerId = window.setInterval(() => {
+      setProgressMessageIndex((value) => ((value + 1) % STAGE_ROTATING_MESSAGES.length));
+    }, 3200);
+    return () => window.clearInterval(timerId);
+  }, [activeRunId, hasHumanGate, isStageVisible]);
+
+  const openHumanGate = () => {
+    if (!currentGate || !activeRunId) {
       return;
     }
-    setState(APP_STATES.CONFIRMATION);
+    const gatePath = currentGate.gate_kind === 'human_input' ? '/gate-input' : '/gate-approval';
+    navigate(`${gatePath}?runId=${activeRunId}&gateId=${currentGate.gate_id}&gateKind=${currentGate.gate_kind}`);
   };
-
-  const confirmUnderstanding = () => {
-    setState(APP_STATES.PLANNING);
-  };
-
-  const editClarification = () => {
-    setState(APP_STATES.CLARIFICATION);
-  };
-
-  const approvePlan = () => {
-    setState(APP_STATES.IMPLEMENTATION);
-  };
-
-  const requestPlanChange = () => {
-    setState(APP_STATES.CLARIFICATION);
-  };
-
-  const approveReview = () => {
-    setState(APP_STATES.DEPLOY);
-  };
-
-  const sendBackToRework = () => {
-    clearRunProgress();
-    setState(APP_STATES.IMPLEMENTATION);
-  };
-
-  const startOver = () => {
-    if (stopResetTimerRef.current) {
-      window.clearTimeout(stopResetTimerRef.current);
-      stopResetTimerRef.current = null;
-    }
-    setTask('');
-    clearRunProgress();
-    setStageReady(false);
-    setStopping(false);
-    setAnswers({ ...INITIAL_ANSWERS });
-    setLaunching(false);
-    setShowPlanDetails(false);
-    setState(APP_STATES.IDLE);
-  };
-
-  useEffect(() => () => {
-    if (stopResetTimerRef.current) {
-      window.clearTimeout(stopResetTimerRef.current);
-    }
-  }, []);
 
   const renderStageSkeleton = (title, dynamicText) => (
     <div className="vp-center-panel vp-center-panel-skeleton">
@@ -394,205 +547,51 @@ export default function ProductPipelineMvp() {
     </div>
   );
 
-  const renderClarificationCenter = () => (
-    <div className="vp-center-panel vp-center-panel-question">
-      <Title level={4} className="vp-center-title">We need a few details</Title>
-      <Text className="muted vp-center-subtitle">Answer the questions to continue implementation.</Text>
+  const renderLiveRunPanel = () => {
+    if (!activeRunId) {
+      return renderStageSkeleton('Spinning up delivery pipeline', 'Submitting run request…');
+    }
 
-      <div className="vp-question-scroll">
-        <div className="vp-question-list">
-          <div className="vp-question">
-            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.audience.title}<span className="vp-required-mark">*</span></Text>
-            <Radio.Group
-              value={answers.audience}
-              onChange={(event) => setAnswers((prev) => ({ ...prev, audience: event.target.value }))}
-              className="vp-radio-group"
-            >
-              {CLARIFICATION_QUESTIONS.audience.options.map((item) => (
-                <Radio key={item} value={item}>{item}</Radio>
-              ))}
-            </Radio.Group>
-          </div>
+    return (
+      <div className="vp-center-panel vp-live-run-panel">
+        <Text className="vp-stage-kicker">Pipeline status</Text>
+        <Title level={3} className="vp-stage-title">{currentNodeTitle || 'Spinning up delivery pipeline'}</Title>
+        <Text className="vp-stage-live-text">{statusText}</Text>
+        <Text className="vp-live-run-meta mono">Run {activeRunId.slice(0, 12)} · started {formatDateTime(activeRun?.created_at)}</Text>
 
-          <div className="vp-question">
-            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.formats.title}<span className="vp-required-mark">*</span></Text>
-            <Checkbox.Group
-              value={answers.formats}
-              onChange={(values) => setAnswers((prev) => ({ ...prev, formats: values }))}
-              className="vp-checkbox-group"
-            >
-              {CLARIFICATION_QUESTIONS.formats.options.map((item) => (
-                <Checkbox key={item} value={item}>{item}</Checkbox>
-              ))}
-            </Checkbox.Group>
-          </div>
-
-          <div className="vp-question">
-            <Text className="vp-question-title">{CLARIFICATION_QUESTIONS.constraints.title}</Text>
-            <TextArea
-              value={answers.constraints}
-              onChange={(event) => setAnswers((prev) => ({ ...prev, constraints: event.target.value }))}
-              placeholder="For example: response time should stay below 2 seconds…"
-              autoSize={{ minRows: 3, maxRows: 6 }}
-            />
-          </div>
+        <div className="vp-live-message-strip">
+          <Text key={hasHumanGate ? 'gate' : progressMessageIndex} className="vp-live-message-text">
+            {rotatingProgressMessage}
+          </Text>
         </div>
-      </div>
 
-      <div className="vp-actions-row">
-        <Button type="primary" onClick={goToConfirmation} disabled={!clarificationValid}>Continue</Button>
-      </div>
-    </div>
-  );
-
-  const renderConfirmationCenter = () => (
-    <div className="vp-center-panel vp-center-panel-question">
-      <Title level={4} className="vp-center-title">Please confirm the understanding</Title>
-      <ul className="vp-summary-list vp-question-scroll">
-        {runSummary.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-      <div className="vp-actions-row">
-        <Button onClick={editClarification}>Edit answers</Button>
-        <Button type="primary" onClick={confirmUnderstanding}>Looks right</Button>
-      </div>
-    </div>
-  );
-
-  const renderPlanningCenter = () => (
-    <div className="vp-center-panel vp-center-panel-question">
-      <Title level={4} className="vp-center-title">Implementation plan is ready</Title>
-      <ol className="vp-plan-list vp-question-scroll">
-        {planItems.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ol>
-      <Button
-        type="text"
-        className="vp-link-btn"
-        onClick={() => setShowPlanDetails((value) => !value)}
-      >
-        {showPlanDetails ? 'Hide details' : 'Show details'}
-      </Button>
-      {showPlanDetails && (
-        <div className="vp-plan-details-grid">
-          <div>
-            <Text strong>Files to change</Text>
-            <ul>
-              <li><code>backend/reports/controller.js</code></li>
-              <li><code>backend/reports/pdf-service.js</code></li>
-              <li><code>backend/reports/export.spec.js</code></li>
-            </ul>
+        {hasHumanGate && (
+          <div className="vp-actions-row">
+            <Button type="primary" onClick={openHumanGate}>Перейти</Button>
           </div>
-          <div>
-            <Text strong>Dependencies</Text>
-            <ul>
-              <li>PDF generation library</li>
-              <li>Report aggregation service</li>
-            </ul>
-          </div>
-          <div>
-            <Text strong>Risks</Text>
-            <ul>
-              <li>Large datasets may increase render time</li>
-              <li>Need memory guardrails for PDF generation</li>
-            </ul>
-          </div>
-        </div>
-      )}
-      <div className="vp-actions-row">
-        <Button onClick={requestPlanChange}>Change plan</Button>
-        <Button type="primary" onClick={approvePlan}>Approve plan</Button>
+        )}
       </div>
-    </div>
-  );
-
-  const renderReviewCenter = () => (
-    <div className="vp-center-panel vp-center-panel-question">
-      <Title level={4} className="vp-center-title">Changes are ready for review</Title>
-      <div className="vp-review-summary vp-question-scroll">
-        <p>Added endpoint <code>/reports/export</code></p>
-        <p>Implemented PDF generation</p>
-        <p>Added export and pagination tests</p>
-      </div>
-      <div className="vp-diff-preview">
-        <div>+ exportPdf(reportId)</div>
-        <div>+ PdfService.js</div>
-        <div>+ reports/export.spec.js</div>
-      </div>
-      <div className="vp-actions-row">
-        <Button onClick={sendBackToRework}>Send back</Button>
-        <Button type="primary" onClick={approveReview}>Looks good, create PR</Button>
-      </div>
-    </div>
-  );
-
-  const renderDoneCenter = () => (
-    <div className="vp-center-panel vp-center-panel-question">
-      <Title level={3} className="vp-center-title">Task delivered</Title>
-      <div className="vp-review-summary">
-        <p>Code is ready</p>
-        <p>PR created</p>
-        <p>Deploy completed</p>
-      </div>
-      <div className="vp-result-links">
-        <Button type="primary" href="https://github.com/example/repo/pull/2481" target="_blank">
-          Open PR
-        </Button>
-        <Button href="https://dev.app/export-test" target="_blank">
-          Open dev
-        </Button>
-        <Button onClick={startOver}>New task</Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderCenterContent = () => {
     if (!isStageVisible) {
       return null;
     }
-
-    if (state === APP_STATES.RUN_STARTED) {
-      return renderStageSkeleton('Spinning up delivery pipeline', RUN_BOOT_PHASES[bootIndex] || RUN_BOOT_PHASES[0]);
-    }
-
-    if (state === APP_STATES.CLARIFICATION) {
-      return renderClarificationCenter();
-    }
-
-    if (state === APP_STATES.CONFIRMATION) {
-      return renderConfirmationCenter();
-    }
-
-    if (state === APP_STATES.PLANNING) {
-      return renderPlanningCenter();
-    }
-
-    if (state === APP_STATES.IMPLEMENTATION) {
-      return renderStageSkeleton('Implementing changes', IMPLEMENTATION_PHASES[implementationIndex]?.pending || 'Generating changes…');
-    }
-
-    if (state === APP_STATES.REVIEW) {
-      return renderReviewCenter();
-    }
-
-    if (state === APP_STATES.DEPLOY) {
-      return renderStageSkeleton('Deploying to dev stand', DEPLOY_PHASES[deployIndex]?.pending || 'Deploying…');
-    }
-
-    return renderDoneCenter();
+    return renderLiveRunPanel();
   };
 
   return (
-    <div className={`vp-pipeline-shell ${isRunningFlow ? 'is-running' : ''}`} ref={shellRef}>
+    <div className={`vp-pipeline-shell ${isRunLayoutActive ? 'is-running' : ''}`} ref={shellRef}>
       <div className="vp-center-zone">
-        <div className={`vp-entry-headline ${isRunningFlow ? 'is-hidden' : ''}`}>
-          <Title level={2} className="vp-entry-title">What are we inventing today?</Title>
-          <Text className="vp-entry-subtitle">
-            Describe the business request and the system will drive it to a dev-ready result.
-          </Text>
-        </div>
+        {shouldRenderHeadline && (
+          <div className={`vp-entry-headline ${isHeadlineHidden ? 'is-hidden' : ''} ${keepHeadlineSpaceOnStop ? 'is-return-prepared' : ''}`}>
+            <Title level={2} className="vp-entry-title">What are we inventing today?</Title>
+            <Text className="vp-entry-subtitle">
+              Describe the business request and the system will drive it to a dev-ready result.
+            </Text>
+          </div>
+        )}
 
         <div
           className={`vp-stage-center ${isStageVisible ? 'is-visible' : ''}`}
@@ -601,7 +600,7 @@ export default function ProductPipelineMvp() {
           {renderCenterContent()}
         </div>
 
-        <div className={`vp-composer-zone ${stopping ? 'is-returning' : (isRunningFlow ? 'is-docked' : 'is-idle')}`} ref={composerRef}>
+        <div className={`vp-composer-zone ${stopping ? 'is-returning' : (composerDocked ? 'is-docked' : 'is-idle')}`} ref={composerRef}>
           <div className={`vp-composer-shell ${isRunningFlow ? 'is-locked' : ''}`}>
             <TextArea
               value={task}
@@ -615,29 +614,47 @@ export default function ProductPipelineMvp() {
 
             <div className="vp-composer-controls">
               <div className="vp-tool-row">
-                {MOCK_PROJECTS.length > 1 && (
-                  <div className="vp-select-shell">
-                    <AppstoreOutlined />
-                    <Select
-                      value={selectedProject}
-                      options={MOCK_PROJECTS.map((item) => ({ value: item.id, label: item.name }))}
-                      onChange={setSelectedProject}
-                      style={{ width: '100%' }}
-                      className="vp-project-select"
-                      variant="borderless"
-                      disabled={isRunningFlow}
-                    />
-                  </div>
-                )}
+                <div className="vp-select-shell vp-select-shell-project">
+                  <AppstoreOutlined />
+                  <Select
+                    value={selectedProject || undefined}
+                    options={projectOptions}
+                    onChange={setSelectedProject}
+                    placeholder="Select project"
+                    style={{ width: '100%' }}
+                    className="vp-inline-select"
+                    popupClassName="vp-select-dropdown"
+                    optionLabelProp="label"
+                    showSearch={false}
+                    variant="borderless"
+                    disabled={isRunningFlow}
+                  />
+                </div>
+                <div className="vp-select-shell vp-select-shell-flow">
+                  <ApartmentOutlined />
+                  <Select
+                    value={selectedFlow || undefined}
+                    options={flowOptions}
+                    onChange={setSelectedFlow}
+                    placeholder="Select flow"
+                    style={{ width: '100%' }}
+                    className="vp-inline-select"
+                    popupClassName="vp-select-dropdown"
+                    optionLabelProp="label"
+                    showSearch={false}
+                    variant="borderless"
+                    disabled={isRunningFlow}
+                  />
+                </div>
               </div>
 
               <Button
                 type="primary"
                 shape="circle"
                 icon={isRunningFlow ? <CloseCircleFilled /> : <CaretRightOutlined />}
-                className="vp-run-icon-btn"
+                className={`vp-run-icon-btn ${isRunningFlow ? 'is-cancel' : 'is-run'}`}
                 onClick={isRunningFlow ? stopRun : startRun}
-                disabled={!task.trim() && !isRunningFlow}
+                disabled={!isRunningFlow && (!task.trim() || !selectedProject || !selectedFlow || launching)}
                 aria-label={isRunningFlow ? 'Stop' : 'Run'}
               />
             </div>
