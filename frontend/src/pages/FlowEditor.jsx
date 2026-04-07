@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Background, Controls, ReactFlow } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Button, Card, Input, List, Modal, Select, Space, Typography } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Button, Card, List, Modal, Select, Space, Typography } from 'antd';
 import { useLocation, useParams } from 'react-router-dom';
 import { nodeTypes } from '../components/flow/FlowNode.jsx';
 import { FlowMetaPanel } from '../components/flow/FlowMetaPanel.jsx';
 import { NodeEditPanel } from '../components/flow/NodeEditPanel.jsx';
+import { ImportYamlModal } from '../components/flow/ImportYamlModal.jsx';
 import { useFlowEditor } from '../hooks/useFlowEditor.js';
 
 const { Title, Text } = Typography;
@@ -50,35 +50,6 @@ export default function FlowEditor() {
   } = editor;
 
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [importYamlText, setImportYamlText] = useState('');
-  const fileInputRef = useRef(null);
-
-  const handleImportConfirm = () => {
-    if (!importYamlText.trim()) {
-      return;
-    }
-    const ok = importFlowYaml(importYamlText);
-    if (ok) {
-      setImportModalOpen(false);
-      setImportYamlText('');
-    }
-  };
-
-  const handleImportFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result;
-      if (typeof text === 'string') {
-        setImportYamlText(text);
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  };
 
   return (
     <div className="flow-editor-page">
@@ -364,47 +335,11 @@ export default function FlowEditor() {
           style={{ width: '100%' }}
         />
       </Modal>
-      <Modal
-        title="Import flow from YAML"
+      <ImportYamlModal
         open={importModalOpen}
-        onCancel={() => {
-          setImportModalOpen(false);
-          setImportYamlText('');
-        }}
-        onOk={handleImportConfirm}
-        okText="Import"
-        cancelText="Cancel"
-        okButtonProps={{ disabled: !importYamlText.trim() }}
-        width={720}
-      >
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Text type="secondary">
-            Paste YAML content or upload a .yaml file. This will replace the current nodes and flow metadata.
-          </Text>
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".yaml,.yml"
-              onChange={handleImportFile}
-              style={{ display: 'none' }}
-            />
-            <Button
-              icon={<UploadOutlined />}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Upload .yaml file
-            </Button>
-          </div>
-          <Input.TextArea
-            rows={18}
-            value={importYamlText}
-            onChange={(e) => setImportYamlText(e.target.value)}
-            placeholder="Paste flow YAML here..."
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-          />
-        </div>
-      </Modal>
+        onClose={() => setImportModalOpen(false)}
+        onImport={importFlowYaml}
+      />
     </div>
   );
 }

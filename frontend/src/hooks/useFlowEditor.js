@@ -15,9 +15,8 @@ import {
   getMaxPublishedMinorForMajor,
   getDraftForMajor,
 } from '../utils/flowVersionUtils.js';
-import { buildEdges, parseFlowYaml, DEFAULT_REWORK } from '../utils/flowSerializer.js';
+import { buildEdges, parseFlowYaml, parseFlowYamlWithMeta, DEFAULT_REWORK } from '../utils/flowSerializer.js';
 import { validateFlow } from '../utils/flowValidator.js';
-import { parse as parseYaml } from 'yaml';
 import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
 
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
@@ -955,23 +954,22 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   };
 
   const importFlowYaml = (yamlString) => {
-    let parsed;
+    let result;
     try {
-      parsed = parseYaml(yamlString);
+      result = parseFlowYamlWithMeta(yamlString);
     } catch (err) {
       message.error(`YAML parse error: ${err.message}`);
       return false;
     }
-    if (!parsed || typeof parsed !== 'object') {
+    if (!result) {
       message.error('Invalid YAML: expected a mapping at the root');
       return false;
     }
+    const { meta: parsed, nodes: importedNodes } = result;
     if (!Array.isArray(parsed.nodes) || parsed.nodes.length === 0) {
       message.error('Invalid flow YAML: "nodes" array is missing or empty');
       return false;
     }
-    const startNodeId = parsed.start_node_id || '';
-    const importedNodes = parseFlowYaml(yamlString, startNodeId);
     if (importedNodes.length === 0) {
       message.error('Failed to parse nodes from YAML');
       return false;
@@ -979,15 +977,15 @@ export function useFlowEditor({ flowId, isCreateMode }) {
 
     setFlowMeta((prev) => ({
       ...prev,
-      flowId: isCreateMode ? (parsed.id || prev.flowId) : prev.flowId,
-      title: parsed.title || prev.title,
-      description: parsed.description || prev.description,
-      startNodeId,
-      codingAgent: parsed.coding_agent || prev.codingAgent,
-      platformCode: parsed.platform_code || prev.platformCode,
-      scope: parsed.scope || prev.scope,
-      flowKind: parsed.flow_kind || prev.flowKind,
-      riskLevel: parsed.risk_level || prev.riskLevel,
+      flowId: isCreateMode ? (parsed.id ?? prev.flowId) : prev.flowId,
+      title: parsed.title ?? prev.title,
+      description: parsed.description ?? prev.description,
+      startNodeId: parsed.start_node_id ?? prev.startNodeId,
+      codingAgent: parsed.coding_agent ?? prev.codingAgent,
+      platformCode: parsed.platform_code ?? prev.platformCode,
+      scope: parsed.scope ?? prev.scope,
+      flowKind: parsed.flow_kind ?? prev.flowKind,
+      riskLevel: parsed.risk_level ?? prev.riskLevel,
       ruleRefs: Array.isArray(parsed.rule_refs) ? parsed.rule_refs : prev.ruleRefs,
       failOnMissingDeclaredOutput: parsed.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
       failOnMissingExpectedMutation: parsed.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
@@ -996,7 +994,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         : prev.responseSchema,
     }));
     setNodes(importedNodes);
-    setSelectedNodeId(importedNodes[0]?.id || null);
+    setSelectedNodeId(importedNodes[0]?.id ?? null);
 
     message.success(`Imported ${importedNodes.length} nodes from YAML`);
     return true;
