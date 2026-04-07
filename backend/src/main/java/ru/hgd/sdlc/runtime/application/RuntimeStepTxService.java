@@ -235,7 +235,8 @@ public class RuntimeStepTxService {
             UUID executionId,
             String errorCode,
             String errorMessage,
-            String auditEventType
+            String auditEventType,
+            Map<String, Object> details
     ) {
         RunEntity run = getRun(runId);
         NodeExecutionEntity execution = getNodeExecution(runId, executionId);
@@ -252,6 +253,12 @@ public class RuntimeStepTxService {
         execution.setErrorMessage(errorMessage);
         execution.setFinishedAt(Instant.now());
         nodeExecutionRepository.save(execution);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("error_code", errorCode);
+        payload.put("error_message", errorMessage);
+        if (details != null && !details.isEmpty()) {
+            payload.putAll(details);
+        }
         appendAuditInternal(
                 runId,
                 executionId,
@@ -259,10 +266,7 @@ public class RuntimeStepTxService {
                 auditEventType,
                 ActorType.SYSTEM,
                 "runtime",
-                Map.of(
-                        "error_code", errorCode,
-                        "error_message", errorMessage
-                )
+                payload
         );
         return execution;
     }
