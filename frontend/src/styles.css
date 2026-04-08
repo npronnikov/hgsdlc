@@ -428,7 +428,16 @@ body {
 .pipeline-run-title {
   font-size: 11px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-run-flow {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -436,7 +445,7 @@ body {
 
 .pipeline-run-meta {
   font-size: 10px;
-  color: #111827;
+  color: var(--text-muted);
   line-height: 1.15;
 }
 
@@ -477,9 +486,16 @@ body {
   color: #94a3b8;
 }
 
-:root[data-theme="dark"] .pipeline-run-title,
-:root[data-theme="dark"] .pipeline-run-meta {
+:root[data-theme="dark"] .pipeline-run-title {
   color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .pipeline-run-flow {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .pipeline-run-meta {
+  color: #94a3b8;
 }
 
 :root[data-theme="dark"] .pipeline-runs-empty {

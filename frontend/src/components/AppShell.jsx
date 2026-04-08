@@ -267,7 +267,8 @@ export default function AppShell() {
                 const status = run?.status || 'unknown';
                 const tone = resolveRunStatusTone(status);
                 const statusLabel = formatRunStatusLabel(status);
-                const title = projectNameById.get(run?.project_id) || run?.project_id || run?.flow_canonical_name || runId;
+                const projectTitle = projectNameById.get(run?.project_id) || run?.project_id || '—';
+                const flowTitle = run?.flow_canonical_name || 'Flow unavailable';
                 const startedTime = formatRunStartedTime(run?.created_at);
                 const indicatorTone = resolveRunIndicatorTone(tone);
                 return (
@@ -278,7 +279,8 @@ export default function AppShell() {
                     onClick={() => navigate(`/run-console?runId=${encodeURIComponent(runId)}`)}
                   >
                     <span className="pipeline-run-main">
-                      <span className="pipeline-run-title" title={title}>{title}</span>
+                      <span className="pipeline-run-title" title={projectTitle}>{projectTitle}</span>
+                      <span className="pipeline-run-flow mono" title={flowTitle}>{flowTitle}</span>
                       <span className="pipeline-run-meta">{statusLabel} · {startedTime}</span>
                     </span>
                     <span className={`pipeline-run-indicator is-${indicatorTone}`} />
