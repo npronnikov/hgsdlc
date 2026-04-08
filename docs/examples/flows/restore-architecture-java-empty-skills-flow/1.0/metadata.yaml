@@ -1,0 +1,29 @@
+entity_type: flow
+id: restore-architecture-java-empty-skills-flow
+version: "1.0"
+canonical_name: restore-architecture-java-empty-skills-flow@1.0
+display_name: "Восстановление архитектурной документации (Java/C4, без skills)"
+description: >
+  Анализирует Java/Spring Boot проект и формирует архитектурную документацию
+  в модели C4 с диаграммами Mermaid (Context, Container, Component).
+  Человек проверяет результат и подтверждает или запрашивает доработки.
+  Этот флоу выполняется без подключения skills.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - architecture
+  - c4
+  - documentation
+flow_kind: analysis
+risk_level: low
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "flows/restore-architecture-java-empty-skills-flow/1.0"
+lifecycle_status: active
+checksum: "8686bd649e4c401a7c4992875edf023312bb19113ada35d57cfb3b4f3c43a5a0"

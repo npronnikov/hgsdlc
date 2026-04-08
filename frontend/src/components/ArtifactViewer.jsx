@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
+import HumanFormViewer, { isHumanForm, validateHumanForm } from './HumanFormViewer.jsx';
 
 const { Text } = Typography;
 
@@ -84,7 +85,14 @@ export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, 
       message.error('Gate context missing for submit');
       return;
     }
-    if (!content || !content.trim()) {
+    const parsedForm = isHumanForm(content);
+    if (parsedForm) {
+      const formError = validateHumanForm(parsedForm);
+      if (formError) {
+        message.warning(formError);
+        return;
+      }
+    } else if (!content || !content.trim()) {
       message.warning('Enter an answer');
       return;
     }
@@ -145,34 +153,48 @@ export default function ArtifactViewer({ runId, artifact, onClose, onSubmitted, 
         <Text type="secondary">Version: <span className="mono">v{artifact.version_no}</span></Text>
         <Text type="secondary">Size: {artifact.size_bytes ? `${artifact.size_bytes} B` : '—'}</Text>
       </Space>
-      {content !== null && (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-          <Editor
-            height="400px"
-            defaultLanguage={language}
-            beforeMount={configureMonacoThemes}
-            theme={monacoTheme}
-            value={content}
-            onChange={(value) => {
-              if (editable) {
-                setContent(value || '');
-              }
-            }}
-            options={{
-              readOnly: !editable,
-              minimap: { enabled: false },
-              lineNumbers: 'on',
-              scrollBeyondLastLine: false,
-              fontSize: 12,
-              wordWrap: 'on',
-              automaticLayout: true,
-              overviewRulerLanes: 0,
-              hideCursorInOverviewRuler: true,
-              scrollbar: { vertical: 'auto', horizontal: 'hidden' },
-            }}
-          />
-        </div>
-      )}
+      {content !== null && (() => {
+        const parsedForm = isHumanForm(content);
+        if (parsedForm) {
+          return (
+            <div style={{ marginTop: 8 }}>
+              <HumanFormViewer
+                formJson={parsedForm}
+                onChange={editable ? setContent : undefined}
+                readOnly={!editable}
+              />
+            </div>
+          );
+        }
+        return (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            <Editor
+              height="400px"
+              defaultLanguage={language}
+              beforeMount={configureMonacoThemes}
+              theme={monacoTheme}
+              value={content}
+              onChange={(value) => {
+                if (editable) {
+                  setContent(value || '');
+                }
+              }}
+              options={{
+                readOnly: !editable,
+                minimap: { enabled: false },
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                fontSize: 12,
+                wordWrap: 'on',
+                automaticLayout: true,
+                overviewRulerLanes: 0,
+                hideCursorInOverviewRuler: true,
+                scrollbar: { vertical: 'auto', horizontal: 'hidden' },
+              }}
+            />
+          </div>
+        );
+      })()}
       {content === null && !loading && (
         <Text type="secondary">Content not available</Text>
       )}

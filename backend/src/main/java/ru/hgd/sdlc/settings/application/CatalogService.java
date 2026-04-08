@@ -309,12 +309,17 @@ public class CatalogService {
     // ---- DB cleanup ----
 
     private void purgePublicationPipelineIndex() {
-        if (tryExecuteCleanup("TRUNCATE TABLE IF EXISTS publication_approvals, publication_jobs, publication_requests CASCADE")) {
+        if (tryExecuteCleanup("TRUNCATE TABLE publication_approvals, publication_jobs, publication_requests CASCADE")) {
             return;
         }
         if (tryExecuteCleanup("TRUNCATE TABLE publication_approvals")
                 && tryExecuteCleanup("TRUNCATE TABLE publication_jobs")
-                && tryExecuteCleanup("TRUNCATE TABLE publication_requests")) {
+                && tryExecuteCleanup("TRUNCATE TABLE publication_requests CASCADE")) {
+            return;
+        }
+        if (tryExecuteCleanup("DELETE FROM publication_approvals")
+                && tryExecuteCleanup("DELETE FROM publication_jobs")
+                && tryExecuteCleanup("DELETE FROM publication_requests")) {
             return;
         }
         throw new ValidationException("Failed to cleanup publication pipeline tables");

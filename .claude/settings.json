@@ -35,7 +35,8 @@
       "Bash(gradle wrapper:*)",
       "Bash(./gradlew check:*)",
       "Bash(./gradlew *)",
-      "Bash(./sed *)"
+      "Bash(./sed *)",
+      "Bash(python3 -c ':*)"
     ],
     "deny": [
       "Read(./.env)",

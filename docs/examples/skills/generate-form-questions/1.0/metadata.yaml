@@ -1,0 +1,27 @@
+entity_type: skill
+id: generate-form-questions
+version: "1.0"
+canonical_name: generate-form-questions@1.0
+display_name: "Генерация уточняющих вопросов в формате human-form"
+description: >
+  Анализирует запрос пользователя и формирует уточняющие вопросы
+  в виде questions.form.json (kind: human-form). Файл открывается в gate UI
+  как интерактивная форма с radio/select/textarea полями.
+  Пользователь выбирает ответы и сабмитит — файл сохраняется с заполненными value.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - clarification
+  - human-form
+  - product-owner
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-08T00:00:00Z"
+published_at: "2026-04-08T00:00:00Z"
+source_ref: main
+source_path: "skills/generate-form-questions/1.0"
+lifecycle_status: active
+checksum: "bc13d47159aea26ae97a2d49632940f3ac47322cd2014c795828d99a4569e5db"
