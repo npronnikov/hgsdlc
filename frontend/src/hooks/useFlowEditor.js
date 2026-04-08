@@ -18,7 +18,8 @@ import {
 import { buildEdges, parseFlowYaml, parseFlowYamlWithMeta, DEFAULT_REWORK } from '../utils/flowSerializer.js';
 import { validateFlow } from '../utils/flowValidator.js';
 import {
-  buildHumanInputArtifactContracts,
+  buildHumanInputExecutionContextSyncContracts,
+  isExecutionContextListEqual,
   isManagedArtifactListEqual,
   normalizeNodeKind,
 } from '../utils/humanInputArtifacts.js';
@@ -27,17 +28,24 @@ import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
 
 function syncHumanInputManagedOutputs(nodes) {
-  const contractsByNode = buildHumanInputArtifactContracts(nodes);
+  const contractsByNode = buildHumanInputExecutionContextSyncContracts(nodes);
   let hasChanges = false;
   const nextNodes = nodes.map((node) => {
     const data = node.data || {};
     if (normalizeNodeKind(data) !== 'human_input') {
       return node;
     }
-    const contract = contractsByNode.get(node.id) || { expectedArtifacts: [] };
+    const contract = contractsByNode.get(node.id) || {
+      syncedExecutionContext: [],
+      expectedArtifacts: [],
+    };
+    const expectedExecutionContext = contract.syncedExecutionContext || [];
     const expectedArtifacts = contract.expectedArtifacts || [];
+    const currentExecutionContext = data.executionContext || [];
     const currentArtifacts = data.producedArtifacts || [];
-    if (isManagedArtifactListEqual(currentArtifacts, expectedArtifacts)) {
+    const executionContextMatches = isExecutionContextListEqual(currentExecutionContext, expectedExecutionContext);
+    const outputsMatch = isManagedArtifactListEqual(currentArtifacts, expectedArtifacts);
+    if (executionContextMatches && outputsMatch) {
       return node;
     }
     hasChanges = true;
@@ -45,6 +53,7 @@ function syncHumanInputManagedOutputs(nodes) {
       ...node,
       data: {
         ...data,
+        executionContext: expectedExecutionContext,
         producedArtifacts: expectedArtifacts,
       },
     };
@@ -633,7 +642,8 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         }
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
-      if ((data.nodeKind || data.type) !== 'command') {
+      const nodeKind = data.nodeKind || data.type || '';
+      if (nodeKind !== 'command') {
         if (data.executionContext && data.executionContext.length > 0) {
           lines.push('    execution_context:');
           data.executionContext.forEach((entry) => {
@@ -651,6 +661,9 @@ export function useFlowEditor({ flowId, isCreateMode }) {
             if (entry.path) {
               lines.push(`        path: ${entry.path}`);
             }
+            if (nodeKind === 'human_input' && entry.type === 'artifact_ref') {
+              lines.push(`        modifiable: ${entry.modifiable === true}`);
+            }
           });
         } else {
           lines.push('    execution_context: []');
@@ -667,14 +680,14 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         lines.push('    allowed_roles:');
         normalizedAllowedRoles.forEach((role) => lines.push(`      - ${role}`));
       }
-      if ((data.nodeKind || data.type) === 'ai' || (data.nodeKind || data.type) === 'command') {
+      if (nodeKind === 'ai' || nodeKind === 'command') {
         lines.push(`    checkpoint_before_run: ${!!data.checkpointBeforeRun}`);
       }
       if (data.skillRefs && data.skillRefs.length > 0) {
         lines.push('    skill_refs:');
         data.skillRefs.forEach((ref) => lines.push(`      - ${ref}`));
       }
-      if ((data.nodeKind || data.type) !== 'command' && data.responseSchema && data.responseSchema.trim()) {
+      if (nodeKind !== 'command' && data.responseSchema && data.responseSchema.trim()) {
         lines.push('    response_schema:');
         data.responseSchema.trim().split('\n').forEach((line) => lines.push(`      ${line}`));
       }
@@ -688,9 +701,6 @@ export function useFlowEditor({ flowId, isCreateMode }) {
           }
           lines.push(`        path: ${artifact.path}`);
           lines.push(`        required: ${!!artifact.required}`);
-          if (artifact.modifiable) {
-            lines.push('        modifiable: true');
-          }
         });
       } else {
         lines.push('    produced_artifacts: []');

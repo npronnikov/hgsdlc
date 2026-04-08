@@ -1,0 +1,119 @@
+id: clarify-and-implement-flow
+version: "1.0"
+canonical_name: clarify-and-implement-flow@1.0
+title: Уточнение требований и реализация (PO → агент)
+description: >
+  Короткий флоу для Product Owner: агент анализирует задачу и формирует
+  уточняющие вопросы в HTML-формате, PO отвечает на них, после чего агент
+  реализует функциональность.
+start_node_id: ai-analyze-and-ask
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+
+nodes:
+
+  # ── Step 1: Анализ задачи и генерация вопросов ────────────────────────────
+  - id: ai-analyze-and-ask
+    title: Анализ задачи и генерация вопросов
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: user_request
+        required: true
+    instruction: |
+      Изучи кодовую базу проекта и запрос пользователя.
+      Строго следуй подключённому скиллу.
+
+      Результат — два файла в рабочей директории запуска:
+        - questions.html  — вопросы в HTML-формате для отображения в gate UI
+        - answers.md      — пустой шаблон для ответов владельца продукта
+    skill_refs:
+      - analyze-and-ask-questions-html@1.0
+    produced_artifacts:
+      - scope: run
+        path: questions.html
+        required: true
+        modifiable: false
+      - scope: run
+        path: answers.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: human-answer-questions
+    on_failure: terminal-complete
+
+  # ── Gate: Владелец продукта отвечает на вопросы ───────────────────────────
+  # Тип: human_input с HTML-отображением вопросов.
+  # questions.html рендерится как превью, answers.md редактируется напрямую.
+  # Доступ: только PRODUCT_OWNER.
+  - id: human-answer-questions
+    title: Ответить на уточняющие вопросы
+    type: human_input
+    allowed_roles:
+      - PRODUCT_OWNER
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-analyze-and-ask
+        path: questions.html
+        scope: run
+        required: true
+        modifiable: false
+        transfer_mode: by_ref
+      - type: artifact_ref
+        node_id: ai-analyze-and-ask
+        path: answers.md
+        scope: run
+        required: true
+        modifiable: true
+        transfer_mode: by_ref
+    instruction: |
+      Ответь на уточняющие вопросы к задаче.
+
+      Открой файл answers.md и заполни ответы:
+      — для каждого вопроса укажи букву выбранного варианта (А / Б / В)
+        или напиши свой ответ в свободной форме.
+
+      Нажми Submit после заполнения всех ответов.
+    produced_artifacts:
+      - scope: run
+        path: answers.md
+        required: true
+    expected_mutations: []
+    on_submit: ai-implement
+
+  # ── Step 2: Реализация ─────────────────────────────────────────────────────
+  - id: ai-implement
+    title: Реализация функциональности
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: user_request
+        required: true
+      - type: artifact_ref
+        node_id: human-answer-questions
+        path: answers.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Реализуй функциональность в соответствии с запросом пользователя
+      и ответами владельца продукта из answers.md.
+
+      Требования к реализации:
+      - Строго соблюдай архитектурные паттерны проекта
+      - Пиши или обновляй тесты для изменённого кода
+      - Не изменяй файлы вне области, определённой запросом и ответами
+      - Убедись, что проект компилируется после каждого логического шага
+    skill_refs: []
+    produced_artifacts: []
+    expected_mutations: []
+    on_success: terminal-complete
+    on_failure: terminal-complete
+
+  # ── Terminal ───────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Завершение
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

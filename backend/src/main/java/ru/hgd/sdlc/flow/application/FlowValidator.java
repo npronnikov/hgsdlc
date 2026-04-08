@@ -84,7 +84,7 @@ public class FlowValidator {
         }
 
         validateExecutionContext(node, nodeKind, nodesById, errors);
-        validateDeclaredOutputs(node, errors);
+        validateDeclaredOutputs(node, nodeKind, errors);
 
         if (node.getSkillRefs() != null && !node.getSkillRefs().isEmpty() && !"ai".equals(nodeKind)) {
             errors.add("skill_refs only allowed for AI nodes: " + node.getId());
@@ -262,6 +262,9 @@ public class FlowValidator {
                 if (!"run".equals(scope)) {
                     errors.add("human_input execution_context supports only scope=run: " + node.getId());
                 }
+                if (entry.getModifiable() == null) {
+                    errors.add("human_input execution_context modifiable flag is missing: " + node.getId());
+                }
                 if (entry.getNodeId() == null || entry.getNodeId().isBlank()) {
                     errors.add("human_input run-scoped artifact_ref requires node_id: " + node.getId());
                     continue;
@@ -271,8 +274,13 @@ public class FlowValidator {
                     errors.add("human_input execution_context source node not found: " + node.getId() + " -> " + entry.getNodeId());
                     continue;
                 }
-                if (!isModifiableProducedArtifact(sourceNode, entry.getPath(), "run")) {
-                    errors.add("human_input execution_context must reference modifiable produced_artifacts: "
+                String sourceKind = normalizeNodeKind(sourceNode);
+                if (!Set.of("ai", "command").contains(sourceKind)) {
+                    errors.add("human_input execution_context source node must be ai/command: "
+                            + node.getId() + " -> " + entry.getNodeId());
+                }
+                if (!isProducedArtifactDeclared(sourceNode, entry.getPath(), "run")) {
+                    errors.add("human_input execution_context must reference produced_artifacts: "
                             + node.getId() + " -> " + entry.getNodeId() + ":" + entry.getPath());
                 }
             }
@@ -322,7 +330,7 @@ public class FlowValidator {
         }
     }
 
-    private void validateDeclaredOutputs(NodeModel node, List<String> errors) {
+    private void validateDeclaredOutputs(NodeModel node, String nodeKind, List<String> errors) {
         if (node.getProducedArtifacts() != null) {
             for (var entry : node.getProducedArtifacts()) {
                 if (entry == null) {
@@ -340,6 +348,9 @@ public class FlowValidator {
                     errors.add("produced_artifacts scope is required: " + node.getId());
                 } else if (!Set.of("project", "run").contains(scope)) {
                     errors.add("Unsupported produced_artifacts scope: " + node.getId());
+                }
+                if (Set.of("ai", "command").contains(nodeKind) && Boolean.TRUE.equals(entry.getModifiable())) {
+                    errors.add("produced_artifacts modifiable=true is not supported for ai/command nodes: " + node.getId());
                 }
             }
         }
@@ -372,7 +383,7 @@ public class FlowValidator {
         return value.trim().toLowerCase().replace(' ', '_').replace('-', '_');
     }
 
-    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String path, String scope) {
+    private boolean isProducedArtifactDeclared(NodeModel sourceNode, String path, String scope) {
         String normalizedPath = normalizePath(path);
         if (sourceNode == null || sourceNode.getProducedArtifacts() == null || normalizedPath == null) {
             return false;
@@ -386,8 +397,7 @@ public class FlowValidator {
             String artifactScope = normalize(artifact.getScope());
             if (normalizedPath.equals(artifactPath)
                     && normalizedScope != null
-                    && normalizedScope.equals(artifactScope)
-                    && Boolean.TRUE.equals(artifact.getModifiable())) {
+                    && normalizedScope.equals(artifactScope)) {
                 return true;
             }
         }
@@ -415,14 +425,27 @@ public class FlowValidator {
             if (predecessors.isEmpty()) {
                 continue;
             }
-            boolean hasModifiable = predecessors.stream()
-                    .anyMatch((candidate) -> candidate.getProducedArtifacts() != null
-                            && candidate.getProducedArtifacts().stream()
-                            .anyMatch((artifact) -> artifact != null && Boolean.TRUE.equals(artifact.getModifiable())));
+            Set<String> predecessorIds = predecessors.stream()
+                    .map(NodeModel::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            boolean hasModifiable = node.getExecutionContext() != null
+                    && node.getExecutionContext().stream()
+                    .filter((entry) -> entry != null)
+                    .filter((entry) -> "artifact_ref".equals(normalize(entry.getType())))
+                    .filter((entry) -> "run".equals(normalize(entry.getScope())))
+                    .filter((entry) -> Boolean.TRUE.equals(entry.getModifiable()))
+                    .anyMatch((entry) -> {
+                        String sourceNodeId = entry.getNodeId();
+                        if (sourceNodeId == null || !predecessorIds.contains(sourceNodeId)) {
+                            return false;
+                        }
+                        NodeModel sourceNode = nodesById.get(sourceNodeId);
+                        return isProducedArtifactDeclared(sourceNode, entry.getPath(), entry.getScope());
+                    });
             if (!hasModifiable) {
-                String predecessorIds = predecessors.stream().map(NodeModel::getId).sorted().reduce((a, b) -> a + ", " + b).orElse("unknown");
-                errors.add("human_input requires at least one modifiable produced_artifact in predecessor nodes: "
-                        + node.getId() + " <- [" + predecessorIds + "]");
+                String predecessorIdsText = predecessors.stream().map(NodeModel::getId).sorted().reduce((a, b) -> a + ", " + b).orElse("unknown");
+                errors.add("human_input requires at least one execution_context artifact_ref with modifiable=true from predecessor nodes: "
+                        + node.getId() + " <- [" + predecessorIdsText + "]");
             }
         }
     }
@@ -433,11 +456,11 @@ public class FlowValidator {
             List<String> errors
     ) {
         List<NodeModel> predecessors = findImmediatePredecessors(node, nodesById);
-        HumanInputArtifactExpectation expectation = buildHumanInputArtifactExpectation(predecessors);
+        HumanInputArtifactExpectation expectation = buildHumanInputArtifactExpectation(node, predecessors, nodesById);
 
         for (Map.Entry<String, Set<String>> collision : expectation.collisions().entrySet()) {
             String sources = collision.getValue().stream().sorted().reduce((a, b) -> a + ", " + b).orElse("unknown");
-            errors.add("human_input produced_artifacts collision in modifiable upstream outputs: "
+            errors.add("human_input produced_artifacts collision in execution_context modifiable artifacts: "
                     + node.getId() + " -> " + collision.getKey() + " <- [" + sources + "]");
         }
 
@@ -445,7 +468,7 @@ public class FlowValidator {
         Set<String> declaredArtifacts = declaredArtifactCounts.keySet();
         for (String expected : expectation.expectedKeys()) {
             if (!declaredArtifacts.contains(expected)) {
-                errors.add("human_input produced_artifacts missing modifiable upstream artifact: "
+                errors.add("human_input produced_artifacts missing required artifact from execution_context modifiable set: "
                         + node.getId() + " -> " + expected);
             }
         }
@@ -453,12 +476,12 @@ public class FlowValidator {
             String declared = declaredEntry.getKey();
             int count = declaredEntry.getValue();
             if (!expectation.expectedKeys().contains(declared)) {
-                errors.add("human_input produced_artifacts extra artifact not found in modifiable upstream: "
+                errors.add("human_input produced_artifacts extra artifact not found in execution_context modifiable set: "
                         + node.getId() + " -> " + declared);
                 continue;
             }
             if (count > 1) {
-                errors.add("human_input produced_artifacts extra artifact not found in modifiable upstream: "
+                errors.add("human_input produced_artifacts extra artifact not found in execution_context modifiable set: "
                         + node.getId() + " -> " + declared + " (duplicate x" + count + ")");
             }
         }
@@ -485,32 +508,46 @@ public class FlowValidator {
                 .toList();
     }
 
-    private HumanInputArtifactExpectation buildHumanInputArtifactExpectation(List<NodeModel> predecessors) {
+    private HumanInputArtifactExpectation buildHumanInputArtifactExpectation(
+            NodeModel humanInputNode,
+            List<NodeModel> predecessors,
+            Map<String, NodeModel> nodesById
+    ) {
         Map<String, Set<String>> sourcesByArtifact = new HashMap<>();
         Set<String> expectedKeys = new LinkedHashSet<>();
-        for (NodeModel predecessor : predecessors) {
-            String predecessorKind = normalizeNodeKind(predecessor);
-            if (!Set.of("ai", "command").contains(predecessorKind)) {
-                continue;
-            }
-            if (predecessor.getProducedArtifacts() == null) {
-                continue;
-            }
-            for (var artifact : predecessor.getProducedArtifacts()) {
-                String path = artifact == null ? null : normalizePath(artifact.getPath());
-                if (path == null) {
+        Set<String> predecessorIds = predecessors.stream()
+                .map(NodeModel::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (humanInputNode != null && humanInputNode.getExecutionContext() != null) {
+            for (var entry : humanInputNode.getExecutionContext()) {
+                if (entry == null) {
                     continue;
                 }
-                if (!Boolean.TRUE.equals(artifact.getModifiable())) {
+                if (!"artifact_ref".equals(normalize(entry.getType()))) {
                     continue;
                 }
-                String scope = normalize(artifact.getScope());
-                if (scope == null) {
+                if (!"run".equals(normalize(entry.getScope()))) {
+                    continue;
+                }
+                if (!Boolean.TRUE.equals(entry.getModifiable())) {
+                    continue;
+                }
+                String sourceNodeId = entry.getNodeId();
+                if (sourceNodeId == null || sourceNodeId.isBlank() || !predecessorIds.contains(sourceNodeId)) {
+                    continue;
+                }
+                NodeModel sourceNode = nodesById.get(sourceNodeId);
+                if (!isProducedArtifactDeclared(sourceNode, entry.getPath(), entry.getScope())) {
+                    continue;
+                }
+                String path = normalizePath(entry.getPath());
+                String scope = normalize(entry.getScope());
+                if (path == null || scope == null) {
                     continue;
                 }
                 String key = scope + "::" + path;
                 expectedKeys.add(key);
-                sourcesByArtifact.computeIfAbsent(key, (ignored) -> new LinkedHashSet<>()).add(predecessor.getId());
+                sourcesByArtifact.computeIfAbsent(key, (ignored) -> new LinkedHashSet<>()).add(sourceNodeId);
             }
         }
 

@@ -276,7 +276,6 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                       - scope: run
                         path: details.md
                         required: true
-                        modifiable: true
                     expected_mutations: []
                     on_success: collect-input
 
@@ -289,6 +288,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         path: details.md
                         scope: run
                         required: true
+                        modifiable: true
                         transfer_mode: by_ref
                     instruction: |
                       Provide details and submit.

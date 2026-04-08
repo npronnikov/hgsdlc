@@ -1175,7 +1175,10 @@ public class RunStepService {
             if (sourceNode == null) {
                 continue;
             }
-            if (!isModifiableProducedArtifact(sourceNode, artifactPath, scope)) {
+            if (!Boolean.TRUE.equals(entry.getModifiable())) {
+                continue;
+            }
+            if (!isProducedArtifactDeclared(sourceNode, artifactPath, scope)) {
                 continue;
             }
             Path sourcePath = resolveArtifactRefPath(run, sourceNodeId, scope, artifactPath);
@@ -1197,7 +1200,7 @@ public class RunStepService {
         return result;
     }
 
-    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String artifactPath, String scope) {
+    private boolean isProducedArtifactDeclared(NodeModel sourceNode, String artifactPath, String scope) {
         if (sourceNode == null || sourceNode.getProducedArtifacts() == null || artifactPath == null
                 || artifactPath.isBlank()) {
             return false;
@@ -1212,9 +1215,7 @@ public class RunStepService {
             if (!scope.equals(defaultScope(requirement.getScope()))) {
                 continue;
             }
-            if (Boolean.TRUE.equals(requirement.getModifiable())) {
-                return true;
-            }
+            return true;
         }
         return false;
     }

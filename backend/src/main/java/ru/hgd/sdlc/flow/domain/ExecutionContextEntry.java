@@ -19,6 +19,7 @@ public class ExecutionContextEntry {
     private String path;
     private String scope;
     private Boolean required;
+    private Boolean modifiable;
 
     @JsonProperty("node_id")
     private String nodeId;

@@ -5,11 +5,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import ru.hgd.sdlc.auth.domain.Role;
+import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.runtime.application.dto.GateChangesResult;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
@@ -58,6 +61,16 @@ class GitReviewServicePortTest {
                 .status(GateStatus.AWAITING_DECISION)
                 .openedAt(Instant.now())
                 .build();
+        User reviewer = User.builder()
+                .id(UUID.randomUUID())
+                .username("reviewer")
+                .displayName("Reviewer")
+                .role(Role.TECH_APPROVER)
+                .roles(Set.of(Role.TECH_APPROVER))
+                .passwordHash("test")
+                .enabled(true)
+                .createdAt(Instant.now())
+                .build();
 
         Mockito.when(gateInstanceRepository.findById(gateId)).thenReturn(Optional.of(gate));
         Mockito.when(runRepository.findById(runId)).thenReturn(Optional.of(run));
@@ -79,7 +92,7 @@ class GitReviewServicePortTest {
                         "numstat.err"
                 ));
 
-        GateChangesResult result = service.collectGateChanges(gateId, null);
+        GateChangesResult result = service.collectGateChanges(gateId, reviewer);
 
         Assertions.assertEquals(1, result.filesChanged());
         Assertions.assertEquals(2, result.addedLines());

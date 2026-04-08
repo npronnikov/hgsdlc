@@ -1,6 +1,8 @@
 import { buildEdges } from './flowSerializer.js';
 import {
   buildHumanInputArtifactContracts,
+  normalizeArtifactPath,
+  normalizeArtifactScope,
   normalizeNodeKind,
   toDeclaredArtifactCountMap,
   toDeclaredArtifactKeySet,
@@ -94,6 +96,9 @@ export function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
           if (entry.required === undefined || entry.required === null) {
             errors.push(`execution_context required is not set: ${node.id}`);
           }
+          if (kind === 'human_input' && (entry.modifiable === undefined || entry.modifiable === null)) {
+            errors.push(`human_input execution_context modifiable flag is missing: ${node.id}`);
+          }
           if (entry.type === 'artifact_ref') {
             if (!entry.path) {
               errors.push(`execution_context path is not set: ${node.id}`);
@@ -131,6 +136,9 @@ export function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
         if (!item.scope) {
           errors.push(`${label} scope is not set: ${node.id}`);
         }
+        if (label === 'produced_artifacts' && (kind === 'ai' || kind === 'command') && item.modifiable === true) {
+          errors.push(`produced_artifacts modifiable=true is not supported for ai/command nodes: ${node.id}`);
+        }
       });
     };
     checkPathList(data.producedArtifacts, 'produced_artifacts');
@@ -154,7 +162,7 @@ export function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
             errors.push(`human_input execution_context supports only scope=run: ${node.id}`);
           }
           if (!entry.node_id) {
-            errors.push(`human_input execution_context requires source node_id: ${node.id}`);
+            errors.push(`human_input run-scoped artifact_ref requires node_id: ${node.id}`);
           }
         });
       }
@@ -250,37 +258,49 @@ export function validateFlow(nodes, meta, rulesCatalog, skillsCatalog) {
       collisions: new Map(),
     };
     if (contract.predecessorIds.length > 0 && contract.expectedKeys.size === 0) {
-      errors.push(`human_input requires at least one modifiable produced_artifact in predecessor nodes: ${node.id} <- [${contract.predecessorIds.join(', ') || 'unknown'}]`);
+      errors.push(`human_input requires at least one execution_context artifact_ref with modifiable=true from predecessor nodes: ${node.id} <- [${contract.predecessorIds.join(', ') || 'unknown'}]`);
     }
     (data.executionContext || []).forEach((entry) => {
+      if ((entry?.type || '') !== 'artifact_ref') {
+        return;
+      }
+      if ((entry?.scope || 'run') !== 'run') {
+        return;
+      }
       const source = nodesById.get(entry.node_id);
-      if (!source) return;
+      if (!source) {
+        errors.push(`human_input execution_context source node not found: ${node.id} -> ${entry.node_id}`);
+        return;
+      }
+      const sourceKind = normalizeNodeKind(source.data || {});
+      if (!['ai', 'command'].includes(sourceKind)) {
+        errors.push(`human_input execution_context source node must be ai/command: ${node.id} -> ${entry.node_id}`);
+      }
       const sourceHasMatch = (source.data?.producedArtifacts || []).some((artifact) =>
-        artifact?.path === entry.path
-        && (artifact.scope || 'run') === (entry.scope || 'run')
-        && artifact.modifiable === true);
+        normalizeArtifactPath(artifact?.path) === normalizeArtifactPath(entry?.path)
+        && normalizeArtifactScope(artifact?.scope) === normalizeArtifactScope(entry?.scope));
       if (!sourceHasMatch) {
-        errors.push(`human_input execution_context must reference modifiable produced_artifacts: ${node.id} -> ${entry.node_id}:${entry.path || ''}`);
+        errors.push(`human_input execution_context must reference produced_artifacts: ${node.id} -> ${entry.node_id}:${entry.path || ''}`);
       }
     });
     contract.collisions.forEach((sources, key) => {
-      errors.push(`human_input produced_artifacts collision in modifiable upstream outputs: ${node.id} -> ${key} <- [${sources.join(', ')}]`);
+      errors.push(`human_input produced_artifacts collision in execution_context modifiable artifacts: ${node.id} -> ${key} <- [${sources.join(', ')}]`);
     });
 
     const declaredOutputCounts = toDeclaredArtifactCountMap(data.producedArtifacts || []);
     const declaredOutputs = toDeclaredArtifactKeySet(data.producedArtifacts || []);
     contract.expectedKeys.forEach((expected) => {
       if (!declaredOutputs.has(expected)) {
-        errors.push(`human_input produced_artifacts missing modifiable upstream artifact: ${node.id} -> ${expected}`);
+        errors.push(`human_input produced_artifacts missing required artifact from execution_context modifiable set: ${node.id} -> ${expected}`);
       }
     });
     declaredOutputCounts.forEach((count, declared) => {
       if (!contract.expectedKeys.has(declared)) {
-        errors.push(`human_input produced_artifacts extra artifact not found in modifiable upstream: ${node.id} -> ${declared}`);
+        errors.push(`human_input produced_artifacts extra artifact not found in execution_context modifiable set: ${node.id} -> ${declared}`);
         return;
       }
       if (count > 1) {
-        errors.push(`human_input produced_artifacts extra artifact not found in modifiable upstream: ${node.id} -> ${declared} (duplicate x${count})`);
+        errors.push(`human_input produced_artifacts extra artifact not found in execution_context modifiable set: ${node.id} -> ${declared} (duplicate x${count})`);
       }
     });
   });

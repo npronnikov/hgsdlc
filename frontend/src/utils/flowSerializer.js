@@ -50,7 +50,7 @@ export function toNodeData(node, isStart) {
   const rawProducedArtifacts = node.produced_artifacts || node.producedArtifacts || [];
   const producedArtifacts = rawProducedArtifacts.map((artifact) => ({
     ...artifact,
-    modifiable: artifact?.modifiable === true,
+    modifiable: false,
   }));
   const rawRework = node.on_rework || node.onRework || null;
   let onRework = null;
@@ -73,6 +73,9 @@ export function toNodeData(node, isStart) {
       return {
         ...entry,
         transfer_mode: entry.transfer_mode || 'by_ref',
+        modifiable: kind === 'human_input'
+          ? (typeof entry.modifiable === 'boolean' ? entry.modifiable : true)
+          : entry.modifiable,
       };
     }),
     instruction: node.instruction || '',
