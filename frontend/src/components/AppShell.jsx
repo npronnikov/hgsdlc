@@ -128,6 +128,7 @@ export default function AppShell() {
   const [pipelineProjects, setPipelineProjects] = useState([]);
   const [pipelineRunsLoading, setPipelineRunsLoading] = useState(false);
   const userRoles = user?.roles || [];
+  const isProductOwnerOnly = userRoles.includes('PRODUCT_OWNER') && !userRoles.includes('ADMIN');
   const navItems = [
     ...buildNavItems(userRoles).filter((item) => {
       const allowedRoles = NAV_ITEM_ALLOWED_ROLES[item.key];
@@ -279,7 +280,11 @@ export default function AppShell() {
                     key={runId}
                     type="button"
                     className={`pipeline-run-item ${selectedPipelineRunId === runId ? 'is-active' : ''}`}
-                    onClick={() => navigate(`/run-console?runId=${encodeURIComponent(runId)}`)}
+                    onClick={() => navigate(
+                      isProductOwnerOnly
+                        ? `/product-pipeline?runId=${encodeURIComponent(runId)}`
+                        : `/run-console?runId=${encodeURIComponent(runId)}`
+                    )}
                   >
                     <span className="pipeline-run-main">
                       <span className="pipeline-run-title" title={projectTitle}>{projectTitle}</span>
@@ -294,7 +299,7 @@ export default function AppShell() {
             <button
               type="button"
               className="pipeline-run-item pipeline-run-item-show-all"
-              onClick={() => navigate('/run-console')}
+              onClick={() => navigate(isProductOwnerOnly ? '/product-pipeline' : '/run-console')}
             >
               <span className="pipeline-run-main">
                 <span className="pipeline-run-title">Show All</span>

@@ -4188,17 +4188,12 @@ body {
   gap: 10px;
   max-height: 220px;
   overflow: hidden;
-  will-change: opacity, transform, max-height;
-  transition:
-    opacity 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 0.46s cubic-bezier(0.22, 0.61, 0.36, 1),
-    max-height 0.46s cubic-bezier(0.22, 0.61, 0.36, 1),
-    gap 0.46s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity;
+  transition: opacity 0.32s ease;
 }
 
 .vp-entry-headline.is-hidden {
   opacity: 0;
-  transform: translateY(-18px);
   pointer-events: none;
 }
 
@@ -4228,15 +4223,13 @@ body {
 .vp-stage-center {
   width: min(820px, 100%);
   opacity: 0;
-  transform: translateY(20px) scale(0.99);
-  will-change: opacity, transform;
-  transition: opacity 0.86s cubic-bezier(0.22, 0.61, 0.36, 1), transform 0.86s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity;
+  transition: opacity 0.36s ease;
   pointer-events: none;
 }
 
 .vp-stage-center.is-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 
@@ -4252,6 +4245,16 @@ body {
 
 .vp-pipeline-shell.is-running .vp-stage-center.is-visible > * {
   width: 100%;
+}
+
+.vp-pipeline-shell.is-running .vp-stage-center.is-visible.is-human-input-gate {
+  align-items: stretch;
+  justify-content: center;
+}
+
+.vp-pipeline-shell.is-running .vp-stage-center.is-visible.is-human-input-gate > * {
+  height: 100%;
+  min-height: 0;
 }
 
 .vp-center-panel {
@@ -4356,6 +4359,23 @@ body {
 .vp-live-run-panel .vp-stage-title.ant-typography,
 .vp-live-run-panel .vp-stage-live-text {
   text-align: center;
+}
+
+.vp-live-run-panel.is-human-input {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.vp-live-run-panel.is-human-input .vp-inline-gate-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .vp-live-run-meta {
@@ -4565,8 +4585,8 @@ body {
 .vp-composer-zone {
   width: min(760px, calc(100% - 16px));
   margin: 0 auto;
-  will-change: top, transform;
-  transition: top 2.2s cubic-bezier(0.22, 0.61, 0.36, 1), transform 2.2s cubic-bezier(0.22, 0.61, 0.36, 1), width 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity;
+  transition: opacity 0.36s ease;
 }
 
 .vp-composer-zone.is-idle {
@@ -4574,7 +4594,7 @@ body {
   left: auto;
   top: auto;
   transform: none;
-  transition: none;
+  opacity: 1;
 }
 
 .vp-composer-zone.is-docked {
@@ -4584,27 +4604,17 @@ body {
   width: min(760px, calc(100% - 16px));
   transform: translate(-50%, -100%);
   z-index: 5;
-  animation: vpDockUp 2.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+  opacity: 1;
 }
 
 .vp-composer-zone.is-returning {
   position: absolute;
   left: 50%;
-  top: 58%;
+  top: calc(100% - 16px);
   width: min(760px, calc(100% - 16px));
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
   z-index: 5;
-}
-
-@keyframes vpDockUp {
-  from {
-    transform: translate(-50%, -72%);
-    opacity: 0.92;
-  }
-  to {
-    transform: translate(-50%, -100%);
-    opacity: 1;
-  }
+  opacity: 0;
 }
 
 .vp-composer-shell {
@@ -4622,6 +4632,108 @@ body {
 .vp-composer-shell.is-locked {
   background: var(--surface-3);
   box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.5);
+}
+
+.vp-composer-shell.is-cancel-only {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  align-items: center;
+}
+
+.vp-cancel-dock {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+}
+
+.vp-cancel-dock.is-running {
+  animation: vpCancelAppear 0.32s ease;
+}
+
+.vp-cancel-dock.is-returning {
+  animation: vpCancelReturn 0.28s ease;
+}
+
+.vp-cancel-ring {
+  position: absolute;
+  inset: 50%;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vp-cancel-dock.is-running .vp-cancel-ring {
+  animation: vpCancelPulse 2.2s ease-out infinite;
+}
+
+.vp-cancel-dock.is-disabled .vp-cancel-ring {
+  animation: none !important;
+  opacity: 0.18;
+}
+
+.vp-cancel-dock.is-running .vp-cancel-ring-2 {
+  animation-delay: 0.72s;
+}
+
+.vp-cancel-dock.is-running .vp-cancel-ring-3 {
+  animation-delay: 1.44s;
+}
+
+.vp-cancel-dock.is-returning .vp-cancel-ring {
+  animation: vpCancelRingsOut 0.35s ease-in forwards;
+}
+
+.vp-cancel-orb-btn.ant-btn {
+  min-width: 102px;
+  height: 44px;
+  border-radius: 999px !important;
+  font-weight: 700;
+  box-shadow: 0 14px 28px -14px rgba(220, 38, 38, 0.7);
+  z-index: 1;
+}
+
+@keyframes vpCancelAppear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vpCancelReturn {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vpCancelPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes vpCancelRingsOut {
+  to {
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0;
+  }
 }
 
 .vp-entry-input textarea {
@@ -4877,7 +4989,7 @@ body {
 
   .vp-composer-zone.is-returning {
     width: calc(100% - 16px);
-    top: 62%;
+    top: calc(100% - 16px);
   }
 
   .vp-select-shell {

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Select, Space, Typography, message } from 'antd';
+import { Button, Input, Modal, Select, Space, Typography, message } from 'antd';
 import { ApartmentOutlined, AppstoreOutlined, CaretRightOutlined, CloseCircleFilled } from '@ant-design/icons';
+import { useSearchParams } from 'react-router-dom';
 import { parse as parseYaml } from 'yaml';
 import { apiRequest } from '../api/request.js';
 import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
@@ -29,8 +30,9 @@ const STAGE_ROTATING_MESSAGES = [
 ];
 
 const HEADLINE_FADE_MS = 460;
-const COMPOSER_MOVE_MS = 2200;
+const COMPOSER_MOVE_MS = 360;
 const STAGE_PAUSE_MS = 320;
+const STAGE_BOTTOM_GAP_PX = 28;
 
 function formatRunStatusLabel(status) {
   return String(status || 'unknown')
@@ -128,9 +130,14 @@ function ProductOwnerInputGatePanel({ gate, onDone }) {
   };
 
   const handleFormChange = (updatedForm) => {
-    const serialized = JSON.stringify(updatedForm, null, 2);
+    const serialized = typeof updatedForm === 'string'
+      ? updatedForm
+      : JSON.stringify(updatedForm, null, 2);
+    const parsed = isHumanForm(serialized);
     setEditedByPath((prev) => ({ ...prev, [currentPath]: serialized }));
-    setFormsByPath((prev) => ({ ...prev, [currentPath]: updatedForm }));
+    if (parsed) {
+      setFormsByPath((prev) => ({ ...prev, [currentPath]: parsed }));
+    }
   };
 
   const submitInput = async () => {
@@ -190,7 +197,7 @@ function ProductOwnerInputGatePanel({ gate, onDone }) {
       <div className="vp-inline-gate-artifact-label">{currentPath}</div>
       {parsedForm ? (
         <HumanFormViewer
-          formJson={currentValue}
+          formJson={parsedForm}
           onChange={handleFormChange}
         />
       ) : (
@@ -269,7 +276,9 @@ function ProductOwnerApprovalGatePanel({ gate, onDone }) {
 }
 
 export default function ProductPipelineMvp() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const shellRef = useRef(null);
+  const centerZoneRef = useRef(null);
   const composerRef = useRef(null);
   const launchAttemptRef = useRef(0);
   const stopResetTimerRef = useRef(null);
@@ -296,6 +305,7 @@ export default function ProductPipelineMvp() {
   const [revealHeadlineOnStop, setRevealHeadlineOnStop] = useState(false);
   const [stageReady, setStageReady] = useState(false);
   const [stageGapHeight, setStageGapHeight] = useState(null);
+  const runIdFromQuery = searchParams.get('runId');
 
   const projectOptions = useMemo(
     () => projects.map((item) => ({
@@ -393,12 +403,12 @@ export default function ProductPipelineMvp() {
   const shouldRenderHeadline = !isRunLayoutActive || keepHeadlineSpaceOnStop;
 
   const recalcStageGapHeight = useCallback(() => {
-    if (!shellRef.current || !composerRef.current) {
+    if (!centerZoneRef.current || !composerRef.current) {
       return;
     }
-    const shellRect = shellRef.current.getBoundingClientRect();
+    const centerZoneRect = centerZoneRef.current.getBoundingClientRect();
     const composerRect = composerRef.current.getBoundingClientRect();
-    const available = Math.floor(composerRect.top - shellRect.top);
+    const available = Math.floor(composerRect.top - centerZoneRect.top - STAGE_BOTTOM_GAP_PX);
     setStageGapHeight(Math.max(0, available));
   }, []);
 
@@ -427,6 +437,27 @@ export default function ProductPipelineMvp() {
   useEffect(() => () => {
     clearTimers();
   }, [clearTimers]);
+
+  useEffect(() => {
+    if (stopping || !runIdFromQuery || runIdFromQuery === activeRunId) {
+      return;
+    }
+    launchAttemptRef.current += 1;
+    clearTimers();
+    setStopping(false);
+    setRevealHeadlineOnStop(false);
+    setLaunching(false);
+    setComposerDocked(true);
+    setStageReady(true);
+    setState(APP_STATES.RUN_STARTED);
+    setActiveRunId(runIdFromQuery);
+    setActiveRun(null);
+    setRunNodes([]);
+    setFlowNodeTitlesById({});
+    setFlowNodeOrder([]);
+    setProgressMessageIndex(0);
+    localStorage.setItem('lastRunId', runIdFromQuery);
+  }, [activeRunId, clearTimers, runIdFromQuery, stopping]);
 
   const loadRunRuntime = useCallback(async (runId, { silent = false } = {}) => {
     if (!runId) {
@@ -506,22 +537,12 @@ export default function ProductPipelineMvp() {
 
     clearTimers();
     setStopping(false);
-    setComposerDocked(false);
+    setComposerDocked(true);
     setRevealHeadlineOnStop(false);
-    setStageReady(false);
+    setStageReady(true);
+    setState(APP_STATES.RUN_STARTED);
     clearRunRuntime();
     setLaunching(true);
-
-    startDockTimerRef.current = window.setTimeout(() => {
-      setComposerDocked(true);
-      startDockTimerRef.current = null;
-      startStageTimerRef.current = window.setTimeout(() => {
-        setState(APP_STATES.RUN_STARTED);
-        setStageReady(true);
-        setLaunching(false);
-        startStageTimerRef.current = null;
-      }, COMPOSER_MOVE_MS + STAGE_PAUSE_MS);
-    }, HEADLINE_FADE_MS);
 
     try {
       const project = projects.find((item) => item.id === selectedProject);
@@ -551,6 +572,7 @@ export default function ProductPipelineMvp() {
         } catch (_) {
           // ignore late cancel errors for stale launch attempts
         }
+        setLaunching(false);
         return;
       }
 
@@ -558,7 +580,13 @@ export default function ProductPipelineMvp() {
       setFlowNodeTitlesById(flowNodeMeta.titleById);
       setFlowNodeOrder(flowNodeMeta.nodeOrder);
       setActiveRunId(runId);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('runId', runId);
+        return next;
+      }, { replace: true });
       localStorage.setItem('lastRunId', runId);
+      setLaunching(false);
       await loadRunRuntime(runId);
     } catch (err) {
       clearTimers();
@@ -577,10 +605,16 @@ export default function ProductPipelineMvp() {
     flows,
     loadRunRuntime,
     projects,
+    setSearchParams,
     selectedFlow,
     selectedProject,
     task,
   ]);
+
+  const isFlowFinished = useMemo(
+    () => ['completed', 'failed', 'publish_failed'].includes(String(activeRun?.status || '').toLowerCase()),
+    [activeRun?.status]
+  );
 
   const stopRun = useCallback(() => {
     if (stopping) {
@@ -607,6 +641,11 @@ export default function ProductPipelineMvp() {
     setRevealHeadlineOnStop(false);
     setLaunching(false);
     setComposerDocked(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('runId');
+      return next;
+    }, { replace: true });
     setState(APP_STATES.IDLE);
     setStopping(true);
 
@@ -615,7 +654,21 @@ export default function ProductPipelineMvp() {
       setStopping(false);
       stopResetTimerRef.current = null;
     }, COMPOSER_MOVE_MS);
-  }, [activeRun, activeRunId, clearRunRuntime, clearTimers, stopping]);
+  }, [activeRun, activeRunId, clearRunRuntime, clearTimers, setSearchParams, stopping]);
+
+  const requestStopRun = useCallback(() => {
+    if (stopping || isFlowFinished) {
+      return;
+    }
+    Modal.confirm({
+      title: 'Cancel flow?',
+      content: 'Current run will be stopped. Do you want to continue?',
+      okText: 'Cancel flow',
+      okButtonProps: { danger: true },
+      cancelText: 'Keep running',
+      onOk: stopRun,
+    });
+  }, [isFlowFinished, stopRun, stopping]);
 
   const handleComposerEnter = (event) => {
     if (event.shiftKey) {
@@ -687,8 +740,10 @@ export default function ProductPipelineMvp() {
 
   const currentGate = activeRun?.current_gate || null;
   const hasHumanGate = currentGate && HUMAN_GATE_KINDS.includes(currentGate.gate_kind);
-  const rotatingProgressMessage = hasHumanGate
-    ? 'Human gate reached. Open the gate to continue.'
+  const hasHumanInputGate = hasHumanGate && currentGate.gate_kind === 'human_input';
+  const isCancelDisabled = isFlowFinished || stopping;
+  const rotatingProgressMessage = isFlowFinished
+    ? 'Flow completed, you can watch results now'
     : STAGE_ROTATING_MESSAGES[progressMessageIndex];
 
   useEffect(() => {
@@ -696,14 +751,14 @@ export default function ProductPipelineMvp() {
       setProgressMessageIndex(0);
       return undefined;
     }
-    if (hasHumanGate) {
+    if (hasHumanGate || isFlowFinished) {
       return undefined;
     }
     const timerId = window.setInterval(() => {
       setProgressMessageIndex((value) => ((value + 1) % STAGE_ROTATING_MESSAGES.length));
     }, 3200);
     return () => window.clearInterval(timerId);
-  }, [activeRunId, hasHumanGate, isStageVisible]);
+  }, [activeRunId, hasHumanGate, isFlowFinished, isStageVisible]);
 
   const renderStageSkeleton = (title, dynamicText) => (
     <div className="vp-center-panel vp-center-panel-skeleton">
@@ -724,17 +779,19 @@ export default function ProductPipelineMvp() {
     }
 
     return (
-      <div className="vp-center-panel vp-live-run-panel">
+      <div className={`vp-center-panel vp-live-run-panel ${hasHumanInputGate ? 'is-human-input' : ''}`}>
         <Text className="vp-stage-kicker">Pipeline status</Text>
         <Title level={3} className="vp-stage-title">{currentNodeTitle || 'Spinning up delivery pipeline'}</Title>
         <Text className="vp-stage-live-text">{statusText}</Text>
         <Text className="vp-live-run-meta mono">Run {activeRunId.slice(0, 12)} · started {formatDateTime(activeRun?.created_at)}</Text>
 
-        <div className="vp-live-message-strip">
-          <Text key={hasHumanGate ? 'gate' : progressMessageIndex} className="vp-live-message-text">
-            {rotatingProgressMessage}
-          </Text>
-        </div>
+        {!hasHumanGate && (
+          <div className="vp-live-message-strip">
+            <Text key={isFlowFinished ? 'flow-finished' : progressMessageIndex} className="vp-live-message-text">
+              {rotatingProgressMessage}
+            </Text>
+          </div>
+        )}
 
         {hasHumanGate && currentGate.gate_kind === 'human_input' && (
           <ProductOwnerInputGatePanel
@@ -761,7 +818,7 @@ export default function ProductPipelineMvp() {
 
   return (
     <div className={`vp-pipeline-shell ${isRunLayoutActive ? 'is-running' : ''}`} ref={shellRef}>
-      <div className="vp-center-zone">
+      <div className="vp-center-zone" ref={centerZoneRef}>
         {shouldRenderHeadline && (
           <div className={`vp-entry-headline ${isHeadlineHidden ? 'is-hidden' : ''} ${keepHeadlineSpaceOnStop ? 'is-return-prepared' : ''}`}>
             <Title level={2} className="vp-entry-title">What are we inventing today?</Title>
@@ -772,70 +829,88 @@ export default function ProductPipelineMvp() {
         )}
 
         <div
-          className={`vp-stage-center ${isStageVisible ? 'is-visible' : ''}`}
+          className={`vp-stage-center ${isStageVisible ? 'is-visible' : ''} ${hasHumanInputGate ? 'is-human-input-gate' : ''}`}
           style={isRunningFlow && stageGapHeight !== null ? { '--vp-stage-gap-height': `${stageGapHeight}px` } : undefined}
         >
           {renderCenterContent()}
         </div>
 
         <div className={`vp-composer-zone ${stopping ? 'is-returning' : (composerDocked ? 'is-docked' : 'is-idle')}`} ref={composerRef}>
-          <div className={`vp-composer-shell ${isRunningFlow ? 'is-locked' : ''}`}>
-            <TextArea
-              value={task}
-              onChange={(event) => setTask(event.target.value)}
-              onPressEnter={handleComposerEnter}
-              placeholder="Ask anything"
-              autoSize={{ minRows: 2, maxRows: 2 }}
-              className="vp-entry-input"
-              disabled={isRunningFlow}
-            />
-
-            <div className="vp-composer-controls">
-              <div className="vp-tool-row">
-                <div className="vp-select-shell vp-select-shell-project">
-                  <AppstoreOutlined />
-                  <Select
-                    value={selectedProject || undefined}
-                    options={projectOptions}
-                    onChange={setSelectedProject}
-                    placeholder="Select project"
-                    style={{ width: '100%' }}
-                    className="vp-inline-select"
-                    popupClassName="vp-select-dropdown"
-                    optionLabelProp="label"
-                    showSearch={false}
-                    variant="borderless"
-                    disabled={isRunningFlow}
-                  />
-                </div>
-                <div className="vp-select-shell vp-select-shell-flow">
-                  <ApartmentOutlined />
-                  <Select
-                    value={selectedFlow || undefined}
-                    options={flowOptions}
-                    onChange={setSelectedFlow}
-                    placeholder="Select flow"
-                    style={{ width: '100%' }}
-                    className="vp-inline-select"
-                    popupClassName="vp-select-dropdown"
-                    optionLabelProp="label"
-                    showSearch={false}
-                    variant="borderless"
-                    disabled={isRunningFlow}
-                  />
-                </div>
+          <div className={`vp-composer-shell ${isRunningFlow ? 'is-locked is-cancel-only' : ''}`}>
+            {isRunningFlow ? (
+              <div className={`vp-cancel-dock ${stopping ? 'is-returning' : 'is-running'} ${isCancelDisabled ? 'is-disabled' : ''}`}>
+                <span className="vp-cancel-ring vp-cancel-ring-1" />
+                <span className="vp-cancel-ring vp-cancel-ring-2" />
+                <span className="vp-cancel-ring vp-cancel-ring-3" />
+                <Button
+                  type="primary"
+                  size="large"
+                  danger
+                  icon={<CloseCircleFilled />}
+                  className="vp-cancel-orb-btn"
+                  onClick={requestStopRun}
+                  disabled={isCancelDisabled}
+                >
+                  Cancel
+                </Button>
               </div>
+            ) : (
+              <>
+                <TextArea
+                  value={task}
+                  onChange={(event) => setTask(event.target.value)}
+                  onPressEnter={handleComposerEnter}
+                  placeholder="Ask anything"
+                  autoSize={{ minRows: 2, maxRows: 2 }}
+                  className="vp-entry-input"
+                />
 
-              <Button
-                type="primary"
-                shape="circle"
-                icon={isRunningFlow ? <CloseCircleFilled /> : <CaretRightOutlined />}
-                className={`vp-run-icon-btn ${isRunningFlow ? 'is-cancel' : 'is-run'}`}
-                onClick={isRunningFlow ? stopRun : startRun}
-                disabled={!isRunningFlow && (!task.trim() || !selectedProject || !selectedFlow || launching)}
-                aria-label={isRunningFlow ? 'Stop' : 'Run'}
-              />
-            </div>
+                <div className="vp-composer-controls">
+                  <div className="vp-tool-row">
+                    <div className="vp-select-shell vp-select-shell-project">
+                      <AppstoreOutlined />
+                      <Select
+                        value={selectedProject || undefined}
+                        options={projectOptions}
+                        onChange={setSelectedProject}
+                        placeholder="Select project"
+                        style={{ width: '100%' }}
+                        className="vp-inline-select"
+                        popupClassName="vp-select-dropdown"
+                        optionLabelProp="label"
+                        showSearch={false}
+                        variant="borderless"
+                      />
+                    </div>
+                    <div className="vp-select-shell vp-select-shell-flow">
+                      <ApartmentOutlined />
+                      <Select
+                        value={selectedFlow || undefined}
+                        options={flowOptions}
+                        onChange={setSelectedFlow}
+                        placeholder="Select flow"
+                        style={{ width: '100%' }}
+                        className="vp-inline-select"
+                        popupClassName="vp-select-dropdown"
+                        optionLabelProp="label"
+                        showSearch={false}
+                        variant="borderless"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    icon={<CaretRightOutlined />}
+                    className="vp-run-icon-btn is-run"
+                    onClick={startRun}
+                    disabled={!task.trim() || !selectedProject || !selectedFlow || launching}
+                    aria-label="Run"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
