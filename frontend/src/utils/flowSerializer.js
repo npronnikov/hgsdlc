@@ -78,6 +78,7 @@ export function toNodeData(node, isStart) {
     instruction: node.instruction || '',
     checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? defaultCheckpointBeforeRun,
     skillRefs: node.skill_refs || node.skillRefs || [],
+    allowedRoles: node.allowed_roles || node.allowedRoles || [],
     responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
     producedArtifacts,
     expectedMutations: node.expected_mutations || node.expectedMutations || [],

@@ -367,6 +367,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       instruction: '',
       checkpointBeforeRun: kind === 'ai' || kind === 'command',
       skillRefs: [],
+      allowedRoles: [],
       responseSchema: '',
       producedArtifacts: [],
       expectedMutations: [],
@@ -627,6 +628,13 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       if (data.instruction) {
         lines.push('    instruction: |');
         data.instruction.split('\n').forEach((line) => lines.push(`      ${line}`));
+      }
+      const normalizedAllowedRoles = (data.allowedRoles || [])
+        .filter((role) => typeof role === 'string' && role.trim())
+        .map((role) => role.trim());
+      if (normalizedAllowedRoles.length > 0) {
+        lines.push('    allowed_roles:');
+        normalizedAllowedRoles.forEach((role) => lines.push(`      - ${role}`));
       }
       if ((data.nodeKind || data.type) === 'ai' || (data.nodeKind || data.type) === 'command') {
         lines.push(`    checkpoint_before_run: ${!!data.checkpointBeforeRun}`);

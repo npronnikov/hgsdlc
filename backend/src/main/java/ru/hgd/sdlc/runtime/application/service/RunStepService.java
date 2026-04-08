@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.domain.ExecutionContextEntry;
@@ -70,6 +71,7 @@ public class RunStepService {
     private static final String REWORK_REASON_TARGET_CHECKPOINT_DISABLED = "rework_target_checkpoint_disabled";
     private static final String REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND = "target_checkpoint_not_found";
     private static final String STEP_SUMMARY_FILE_NAME = "step-summary.json";
+    private static final String DEFAULT_GATE_ASSIGNEE_ROLE = Role.TECH_APPROVER.name();
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -1403,14 +1405,14 @@ public class RunStepService {
 
     private String firstAllowedRole(List<String> allowedRoles) {
         if (allowedRoles == null || allowedRoles.isEmpty()) {
-            return null;
+            return DEFAULT_GATE_ASSIGNEE_ROLE;
         }
         for (String role : allowedRoles) {
             if (role != null && !role.isBlank()) {
                 return role;
             }
         }
-        return null;
+        return DEFAULT_GATE_ASSIGNEE_ROLE;
     }
 
     private boolean isRunCancelled(UUID runId) {

@@ -19,6 +19,12 @@ const MODIFIABLE_OPTIONS = [
   { value: 'no', label: 'Modifiable: NO' },
   { value: 'yes', label: 'Modifiable: YES' },
 ];
+const ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'FLOW_CONFIGURATOR', label: 'Flow Configurator' },
+  { value: 'PRODUCT_OWNER', label: 'Product Owner' },
+  { value: 'TECH_APPROVER', label: 'Tech Approver' },
+];
 const SHOW_AI_RESPONSE_SCHEMA_EDITOR = false;
 const SHOW_EXPECTED_CHANGES_EDITOR = false;
 
@@ -114,13 +120,16 @@ export function NodeEditPanel({ editor }) {
           <div className="field-control">
             <Select
               value={selectedNode.data.nodeKind || selectedNode.data.type}
-              disabled={isReadOnly}
-              title="Node type defines runtime behavior."
+              disabled
+              title="Node type is set when node is created and cannot be changed."
               onChange={(value) => {
                 updateSelectedNode({
                   nodeKind: value,
                   type: value,
                   skillRefs: value === 'ai' ? selectedNode.data.skillRefs || [] : [],
+                  allowedRoles: value === 'human_input' || value === 'human_approval'
+                    ? selectedNode.data.allowedRoles || []
+                    : [],
                   onSubmit: value === 'human_input' ? selectedNode.data.onSubmit || '' : '',
                   onApprove: value === 'human_approval' ? selectedNode.data.onApprove || '' : '',
                   onRework: value === 'human_approval'
@@ -145,6 +154,23 @@ export function NodeEditPanel({ editor }) {
             />
           </div>
         </div>
+        {(selectedNodeKind === 'human_input' || selectedNodeKind === 'human_approval') && (
+          <div>
+            <Text className="muted">Approve/Input role</Text>
+            <div className="field-control">
+              <Select
+                value={(selectedNode.data.allowedRoles || [])[0] || undefined}
+                options={ROLE_OPTIONS}
+                disabled={isReadOnly}
+                allowClear
+                placeholder="User role to pass gate"
+                title="User role to pass gate"
+                onChange={(value) => updateSelectedNode({ allowedRoles: value ? [value] : [] })}
+              />
+            </div>
+            <Text type="secondary" style={{ marginTop: 4, display: 'block', fontSize: 12, textAlign: 'right' }}>Tech Approver by default</Text>
+          </div>
+        )}
         {showExecutionContextEditor && (
           <>
             <Divider />

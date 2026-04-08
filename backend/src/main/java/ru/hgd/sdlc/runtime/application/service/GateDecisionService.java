@@ -17,6 +17,7 @@ import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ConflictException;
@@ -56,6 +57,8 @@ import ru.hgd.sdlc.settings.application.SettingsService;
 
 @Service
 public class GateDecisionService {
+    private static final List<String> DEFAULT_GATE_ALLOWED_ROLES = List.of(Role.TECH_APPROVER.name());
+
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
     private final GateInstanceRepository gateInstanceRepository;
@@ -579,13 +582,22 @@ public class GateDecisionService {
     }
 
     private void enforceGateRole(NodeModel node, User user) {
-        List<String> allowedRoles = node.getAllowedRoles() == null ? List.of() : node.getAllowedRoles();
-        if (allowedRoles.isEmpty()) {
-            return;
-        }
+        List<String> allowedRoles = resolveAllowedRoles(node);
         if (user == null || !user.hasAnyRoleName(allowedRoles)) {
             throw new ForbiddenException("Actor role is not allowed for this gate");
         }
+    }
+
+    private List<String> resolveAllowedRoles(NodeModel node) {
+        List<String> configured = node.getAllowedRoles() == null ? List.of() : node.getAllowedRoles();
+        List<String> normalized = configured.stream()
+                .filter((role) -> role != null && !role.isBlank())
+                .map(String::trim)
+                .toList();
+        if (normalized.isEmpty()) {
+            return DEFAULT_GATE_ALLOWED_ROLES;
+        }
+        return normalized;
     }
 
     private void validateSubmittedArtifact(SubmittedArtifact artifact) {
