@@ -14,7 +14,7 @@ ARG QWEN_CLI_VERSION=0.14.1
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl nodejs npm \
+    && apt-get install -y --no-install-recommends ca-certificates curl git nodejs npm \
     && npm install -g "@qwen-code/qwen-code@${QWEN_CLI_VERSION}" \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
