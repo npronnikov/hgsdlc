@@ -88,6 +88,22 @@ const RULES = [
   { re: /Start AI node requires instruction: (.+)/i, msg: (_, id) => `Start AI node requires instruction: ${id}` },
   { re: /Executor node requires on_success: (.+)/i, msg: (_, id) => `Executor node requires on_success: ${id}` },
   { re: /human_input gate requires on_submit: (.+)/i, msg: (_, id) => `human_input gate requires on_submit: ${id}` },
+  {
+    re: /human_input requires at least one modifiable produced_artifact in predecessor nodes: (.+)/i,
+    msg: (_, detail) => `human_input requires at least one modifiable produced_artifact in predecessor nodes: ${detail}`,
+  },
+  {
+    re: /human_input produced_artifacts missing modifiable upstream artifact: (.+)/i,
+    msg: (_, detail) => `human_input produced_artifacts missing modifiable upstream artifact: ${detail}`,
+  },
+  {
+    re: /human_input produced_artifacts extra artifact not found in modifiable upstream: (.+)/i,
+    msg: (_, detail) => `human_input produced_artifacts extra artifact not found in modifiable upstream: ${detail}`,
+  },
+  {
+    re: /human_input produced_artifacts collision in modifiable upstream outputs: (.+)/i,
+    msg: (_, detail) => `human_input produced_artifacts collision in modifiable upstream outputs: ${detail}`,
+  },
   { re: /human_approval gate requires on_approve: (.+)/i, msg: (_, id) => `human_approval gate requires on_approve: ${id}` },
   { re: /human_approval gate requires on_rework: (.+)/i, msg: (_, id) => `human_approval gate requires on_rework: ${id}` },
   { re: /checkpoint_before_run is only allowed for ai\/command nodes: (.+)/i, msg: (_, id) => `checkpoint_before_run is allowed only for ai/command nodes: ${id}` },

@@ -17,9 +17,40 @@ import {
 } from '../utils/flowVersionUtils.js';
 import { buildEdges, parseFlowYaml, parseFlowYamlWithMeta, DEFAULT_REWORK } from '../utils/flowSerializer.js';
 import { validateFlow } from '../utils/flowValidator.js';
+import {
+  buildHumanInputArtifactContracts,
+  isManagedArtifactListEqual,
+  normalizeNodeKind,
+} from '../utils/humanInputArtifacts.js';
 import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
 
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
+
+function syncHumanInputManagedOutputs(nodes) {
+  const contractsByNode = buildHumanInputArtifactContracts(nodes);
+  let hasChanges = false;
+  const nextNodes = nodes.map((node) => {
+    const data = node.data || {};
+    if (normalizeNodeKind(data) !== 'human_input') {
+      return node;
+    }
+    const contract = contractsByNode.get(node.id) || { expectedArtifacts: [] };
+    const expectedArtifacts = contract.expectedArtifacts || [];
+    const currentArtifacts = data.producedArtifacts || [];
+    if (isManagedArtifactListEqual(currentArtifacts, expectedArtifacts)) {
+      return node;
+    }
+    hasChanges = true;
+    return {
+      ...node,
+      data: {
+        ...data,
+        producedArtifacts: expectedArtifacts,
+      },
+    };
+  });
+  return hasChanges ? nextNodes : nodes;
+}
 
 const emptyFlow = {
   title: '',
@@ -870,6 +901,10 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       }))
     );
   }, [flowMeta.startNodeId, setNodes]);
+
+  useEffect(() => {
+    setNodes((prev) => syncHumanInputManagedOutputs(prev));
+  }, [nodes, setNodes]);
 
   const handleStartNodeChange = (value) => {
     updateFlowMeta({ startNodeId: value });

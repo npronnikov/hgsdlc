@@ -158,7 +158,7 @@ class FlowValidatorTest {
     }
 
     @Test
-    void humanInputProducedArtifactsMustMatchExecutionContext() {
+    void humanInputProducedArtifactsMustMatchModifiableUpstreamArtifacts() {
         NodeModel producer = NodeModel.builder()
                 .id("producer")
                 .type("ai")
@@ -203,7 +203,67 @@ class FlowValidatorTest {
                 .build();
 
         List<String> errors = validator.validate(flow);
-        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("must match execution_context artifacts")));
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("missing modifiable upstream artifact")));
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("extra artifact not found in modifiable upstream")));
+    }
+
+    @Test
+    void humanInputProducedArtifactsDetectsUpstreamCollisions() {
+        NodeModel producerA = NodeModel.builder()
+                .id("producer-a")
+                .type("ai")
+                .executionContext(List.of())
+                .instruction("Generate A")
+                .onSuccess("input")
+                .onFailure("producer-b")
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(true).build()
+                ))
+                .build();
+        NodeModel producerB = NodeModel.builder()
+                .id("producer-b")
+                .type("command")
+                .executionContext(List.of())
+                .instruction("Generate B")
+                .onSuccess("input")
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(true).build()
+                ))
+                .build();
+        NodeModel input = NodeModel.builder()
+                .id("input")
+                .type("human_input")
+                .instruction("Review and edit")
+                .executionContext(List.of(
+                        ExecutionContextEntry.builder()
+                                .type("artifact_ref")
+                                .scope("run")
+                                .path("questions.md")
+                                .required(true)
+                                .nodeId("producer-a")
+                                .build()
+                ))
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).build()
+                ))
+                .onSubmit("end")
+                .build();
+        NodeModel end = NodeModel.builder()
+                .id("end")
+                .type("terminal")
+                .executionContext(List.of())
+                .build();
+        FlowModel flow = FlowModel.builder()
+                .id("f")
+                .version("1.0")
+                .canonicalName("f@1.0")
+                .title("flow")
+                .startNodeId("producer-a")
+                .nodes(List.of(producerA, producerB, input, end))
+                .build();
+
+        List<String> errors = validator.validate(flow);
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("collision in modifiable upstream outputs")));
     }
 
     @Test

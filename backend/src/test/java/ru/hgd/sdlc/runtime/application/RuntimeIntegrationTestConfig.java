@@ -92,7 +92,7 @@ public class RuntimeIntegrationTestConfig {
 
                 return new AgentInvocationContext(
                         projectRoot,
-                        List.of("zsh", "-lc", script),
+                        List.of("bash", "-lc", script),
                         promptPath,
                         rulesPath,
                         skillsRoot,

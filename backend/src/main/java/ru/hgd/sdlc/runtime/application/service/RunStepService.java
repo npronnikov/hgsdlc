@@ -658,7 +658,7 @@ public class RunStepService {
         try {
             CommandResult commandResult = runProcess(
                     run.getId(),
-                    List.of("zsh", "-lc", instruction),
+                    List.of("bash", "-lc", instruction),
                     workingDirectory,
                     settingsService.getAiTimeoutSeconds(),
                     stdoutPath,

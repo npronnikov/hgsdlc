@@ -2,6 +2,7 @@ package ru.hgd.sdlc.flow.application;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -372,16 +373,18 @@ public class FlowValidator {
     }
 
     private boolean isModifiableProducedArtifact(NodeModel sourceNode, String path, String scope) {
-        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || path == null || path.isBlank()) {
+        String normalizedPath = normalizePath(path);
+        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || normalizedPath == null) {
             return false;
         }
         String normalizedScope = normalize(scope);
         for (var artifact : sourceNode.getProducedArtifacts()) {
-            if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
+            String artifactPath = artifact == null ? null : normalizePath(artifact.getPath());
+            if (artifactPath == null) {
                 continue;
             }
             String artifactScope = normalize(artifact.getScope());
-            if (path.equals(artifact.getPath())
+            if (normalizedPath.equals(artifactPath)
                     && normalizedScope != null
                     && normalizedScope.equals(artifactScope)
                     && Boolean.TRUE.equals(artifact.getModifiable())) {
@@ -404,16 +407,11 @@ public class FlowValidator {
 
     private void validateHumanInputPredecessorContracts(Map<String, NodeModel> nodesById, List<String> errors) {
         for (NodeModel node : nodesById.values()) {
-            String nodeKind = normalize(node.getNodeKind());
-            if (nodeKind == null) {
-                nodeKind = normalize(node.getType());
-            }
+            String nodeKind = normalizeNodeKind(node);
             if (!"human_input".equals(nodeKind)) {
                 continue;
             }
-            List<NodeModel> predecessors = nodesById.values().stream()
-                    .filter((candidate) -> collectTargets(candidate).contains(node.getId()))
-                    .toList();
+            List<NodeModel> predecessors = findImmediatePredecessors(node, nodesById);
             if (predecessors.isEmpty()) {
                 continue;
             }
@@ -434,59 +432,138 @@ public class FlowValidator {
             Map<String, NodeModel> nodesById,
             List<String> errors
     ) {
-        Set<String> expectedArtifacts = new LinkedHashSet<>();
-        if (node.getExecutionContext() != null) {
-            for (var entry : node.getExecutionContext()) {
-                if (entry == null) {
-                    continue;
-                }
-                if (!"artifact_ref".equals(normalize(entry.getType()))) {
-                    continue;
-                }
-                if (!"run".equals(normalize(entry.getScope()))) {
-                    continue;
-                }
-                String sourceNodeId = entry.getNodeId();
-                String path = entry.getPath();
-                if (sourceNodeId == null || sourceNodeId.isBlank() || path == null || path.isBlank()) {
-                    continue;
-                }
-                NodeModel sourceNode = nodesById.get(sourceNodeId);
-                if (!isModifiableProducedArtifact(sourceNode, path, "run")) {
-                    continue;
-                }
-                expectedArtifacts.add("run::" + path);
-            }
-        }
-        if (expectedArtifacts.isEmpty()) {
-            return;
+        List<NodeModel> predecessors = findImmediatePredecessors(node, nodesById);
+        HumanInputArtifactExpectation expectation = buildHumanInputArtifactExpectation(predecessors);
+
+        for (Map.Entry<String, Set<String>> collision : expectation.collisions().entrySet()) {
+            String sources = collision.getValue().stream().sorted().reduce((a, b) -> a + ", " + b).orElse("unknown");
+            errors.add("human_input produced_artifacts collision in modifiable upstream outputs: "
+                    + node.getId() + " -> " + collision.getKey() + " <- [" + sources + "]");
         }
 
-        Set<String> declaredArtifacts = new LinkedHashSet<>();
-        if (node.getProducedArtifacts() != null) {
-            for (var artifact : node.getProducedArtifacts()) {
-                if (artifact == null || artifact.getPath() == null || artifact.getPath().isBlank()) {
-                    continue;
-                }
-                declaredArtifacts.add(normalize(artifact.getScope()) + "::" + artifact.getPath());
-            }
-        }
-
-        if (declaredArtifacts.isEmpty()) {
-            errors.add("human_input produced_artifacts must mirror modifiable execution_context artifacts: " + node.getId());
-            return;
-        }
-        for (String expected : expectedArtifacts) {
+        Map<String, Integer> declaredArtifactCounts = declaredArtifactCounts(node);
+        Set<String> declaredArtifacts = declaredArtifactCounts.keySet();
+        for (String expected : expectation.expectedKeys()) {
             if (!declaredArtifacts.contains(expected)) {
-                errors.add("human_input produced_artifacts missing required artifact from execution_context: "
+                errors.add("human_input produced_artifacts missing modifiable upstream artifact: "
                         + node.getId() + " -> " + expected);
             }
         }
-        for (String declared : declaredArtifacts) {
-            if (!expectedArtifacts.contains(declared)) {
-                errors.add("human_input produced_artifacts must match execution_context artifacts: "
+        for (Map.Entry<String, Integer> declaredEntry : declaredArtifactCounts.entrySet()) {
+            String declared = declaredEntry.getKey();
+            int count = declaredEntry.getValue();
+            if (!expectation.expectedKeys().contains(declared)) {
+                errors.add("human_input produced_artifacts extra artifact not found in modifiable upstream: "
                         + node.getId() + " -> " + declared);
+                continue;
+            }
+            if (count > 1) {
+                errors.add("human_input produced_artifacts extra artifact not found in modifiable upstream: "
+                        + node.getId() + " -> " + declared + " (duplicate x" + count + ")");
             }
         }
+    }
+
+    private String normalizeNodeKind(NodeModel node) {
+        if (node == null) {
+            return null;
+        }
+        String nodeKind = normalize(node.getNodeKind());
+        if (nodeKind != null) {
+            return nodeKind;
+        }
+        return normalize(node.getType());
+    }
+
+    private List<NodeModel> findImmediatePredecessors(NodeModel target, Map<String, NodeModel> nodesById) {
+        if (target == null || target.getId() == null || target.getId().isBlank()) {
+            return List.of();
+        }
+        return nodesById.values().stream()
+                .sorted(Comparator.comparing(NodeModel::getId, Comparator.nullsLast(String::compareTo)))
+                .filter((candidate) -> collectTargets(candidate).contains(target.getId()))
+                .toList();
+    }
+
+    private HumanInputArtifactExpectation buildHumanInputArtifactExpectation(List<NodeModel> predecessors) {
+        Map<String, Set<String>> sourcesByArtifact = new HashMap<>();
+        Set<String> expectedKeys = new LinkedHashSet<>();
+        for (NodeModel predecessor : predecessors) {
+            String predecessorKind = normalizeNodeKind(predecessor);
+            if (!Set.of("ai", "command").contains(predecessorKind)) {
+                continue;
+            }
+            if (predecessor.getProducedArtifacts() == null) {
+                continue;
+            }
+            for (var artifact : predecessor.getProducedArtifacts()) {
+                String path = artifact == null ? null : normalizePath(artifact.getPath());
+                if (path == null) {
+                    continue;
+                }
+                if (!Boolean.TRUE.equals(artifact.getModifiable())) {
+                    continue;
+                }
+                String scope = normalize(artifact.getScope());
+                if (scope == null) {
+                    continue;
+                }
+                String key = scope + "::" + path;
+                expectedKeys.add(key);
+                sourcesByArtifact.computeIfAbsent(key, (ignored) -> new LinkedHashSet<>()).add(predecessor.getId());
+            }
+        }
+
+        Map<String, Set<String>> collisions = new HashMap<>();
+        for (Map.Entry<String, Set<String>> entry : sourcesByArtifact.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                collisions.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        Set<String> sortedExpected = expectedKeys.stream()
+                .sorted()
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        Map<String, Set<String>> sortedCollisions = new java.util.LinkedHashMap<>();
+        collisions.keySet().stream().sorted().forEach((key) -> sortedCollisions.put(key, collisions.get(key)));
+
+        return new HumanInputArtifactExpectation(sortedExpected, sortedCollisions);
+    }
+
+    private Map<String, Integer> declaredArtifactCounts(NodeModel node) {
+        Map<String, Integer> declaredArtifacts = new java.util.LinkedHashMap<>();
+        if (node.getProducedArtifacts() == null) {
+            return declaredArtifacts;
+        }
+        for (var artifact : node.getProducedArtifacts()) {
+            String path = artifact == null ? null : normalizePath(artifact.getPath());
+            if (path == null) {
+                continue;
+            }
+            String scope = normalize(artifact.getScope());
+            if (scope == null) {
+                continue;
+            }
+            String key = scope + "::" + path;
+            declaredArtifacts.merge(key, 1, Integer::sum);
+        }
+        return declaredArtifacts;
+    }
+
+    private String normalizePath(String path) {
+        if (path == null) {
+            return null;
+        }
+        String trimmed = path.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed;
+    }
+
+    private record HumanInputArtifactExpectation(
+            Set<String> expectedKeys,
+            Map<String, Set<String>> collisions
+    ) {
     }
 }
