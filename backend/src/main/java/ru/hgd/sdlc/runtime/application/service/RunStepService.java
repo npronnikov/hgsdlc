@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.domain.ExecutionContextEntry;
@@ -70,6 +71,7 @@ public class RunStepService {
     private static final String REWORK_REASON_TARGET_CHECKPOINT_DISABLED = "rework_target_checkpoint_disabled";
     private static final String REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND = "target_checkpoint_not_found";
     private static final String STEP_SUMMARY_FILE_NAME = "step-summary.json";
+    private static final String DEFAULT_GATE_ASSIGNEE_ROLE = Role.TECH_APPROVER.name();
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -105,8 +107,7 @@ public class RunStepService {
             RunPublishService runPublishService,
             List<CodingAgentStrategy> codingAgentStrategies,
             @Value("${runtime.max-tick-iterations:128}") Integer maxTickIterations,
-            @Value("${runtime.max-inline-artifact-tokens:16384}") Integer maxInlineArtifactTokens
-    ) {
+            @Value("${runtime.max-inline-artifact-tokens:16384}") Integer maxInlineArtifactTokens) {
         this.runRepository = runRepository;
         this.nodeExecutionRepository = nodeExecutionRepository;
         this.artifactVersionRepository = artifactVersionRepository;
@@ -120,13 +121,13 @@ public class RunStepService {
         this.workspacePort = workspacePort;
         this.clockPort = clockPort;
         this.runPublishService = runPublishService;
-        this.codingAgentStrategiesByAgentId = (codingAgentStrategies == null ? List.<CodingAgentStrategy>of() : codingAgentStrategies)
+        this.codingAgentStrategiesByAgentId = (codingAgentStrategies == null ? List.<CodingAgentStrategy>of()
+                : codingAgentStrategies)
                 .stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
                         (strategy) -> normalize(strategy.codingAgent()),
                         Function.identity(),
-                        (left, right) -> left
-                ));
+                        (left, right) -> left));
         this.maxTickIterations = maxTickIterations == null ? DEFAULT_MAX_TICK_ITERATIONS : maxTickIterations;
         this.maxInlineArtifactTokens = normalizeMaxInlineArtifactTokens(maxInlineArtifactTokens);
         this.maxInlineArtifactBytes = toApproxBytes(this.maxInlineArtifactTokens);
@@ -170,7 +171,8 @@ public class RunStepService {
             createCheckpointBeforeExecution(run, node, execution, nodeKind);
             return nodeExecutionRouter.execute(this, run, node, execution, nodeKind);
         } catch (NodeFailureException ex) {
-            runtimeStepTxService.markNodeExecutionFailed(run.getId(), execution.getId(), ex.errorCode, ex.getMessage(), ex.auditEventType);
+            runtimeStepTxService.markNodeExecutionFailed(run.getId(), execution.getId(), ex.errorCode, ex.getMessage(),
+                    ex.auditEventType, ex.getDetails());
             if (isRunCancelled(run.getId())) {
                 return false;
             }
@@ -203,8 +205,7 @@ public class RunStepService {
                     resolvedContext,
                     resolveProjectRoot(run),
                     resolveNodeExecutionRoot(run, execution),
-                    workflowProgress
-            ));
+                    workflowProgress));
         } catch (CodingAgentException ex) {
             throw new NodeFailureException(ex.getErrorCode(), ex.getMessage(), false, ex.getDetails());
         }
@@ -224,9 +225,7 @@ public class RunStepService {
                         flowModel,
                         agentInvocationContext.promptPath().toString(),
                         agentInvocationContext.rulePath().toString(),
-                        agentInvocationContext.skillsRoot().toString()
-                )
-        );
+                        agentInvocationContext.skillsRoot().toString()));
         runtimeStepTxService.appendAudit(
                 run.getId(),
                 execution.getId(),
@@ -238,9 +237,7 @@ public class RunStepService {
                         node,
                         agentInvocationContext.promptPackage().promptChecksum(),
                         agentInvocationContext.workingDirectory().toString(),
-                        agentInvocationContext.command()
-                )
-        );
+                        agentInvocationContext.command()));
 
         Map<String, String> beforeMutations = snapshotMutations(run, node.getExpectedMutations());
         CommandResult agentResult;
@@ -251,8 +248,7 @@ public class RunStepService {
                     agentInvocationContext.workingDirectory(),
                     settingsService.getAiTimeoutSeconds(),
                     agentInvocationContext.stdoutPath(),
-                    agentInvocationContext.stderrPath()
-            );
+                    agentInvocationContext.stderrPath());
         } catch (ProcessExecutionPort.ProcessCancelledException ex) {
             runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), ex.getMessage());
             return false;
@@ -267,8 +263,11 @@ public class RunStepService {
             throw new NodeFailureException(
                     "AGENT_EXECUTION_FAILED",
                     capitalize(strategy.codingAgent()) + " execution failed with exit code " + agentResult.exitCode(),
-                    false
-            );
+                    false,
+                    mapOf(
+                            "exit_code", agentResult.exitCode(),
+                            "stdout", truncate(agentResult.stdout(), 4000),
+                            "stderr", truncate(agentResult.stderr(), 4000)));
         }
         validateNodeOutputs(run, node, execution, beforeMutations);
 
@@ -287,9 +286,7 @@ public class RunStepService {
                         "stdout_path", agentResult.stdoutPath(),
                         "stderr_path", agentResult.stderrPath(),
                         "stdout", truncate(agentResult.stdout(), 12000),
-                        "stderr", truncate(agentResult.stderr(), 12000)
-                )
-        );
+                        "stderr", truncate(agentResult.stderr(), 12000)));
 
         String stepSummaryJson = extractStepSummary(run, execution, agentResult.stdout());
         if (stepSummaryJson == null) {
@@ -298,9 +295,7 @@ public class RunStepService {
                     "step_summary_missing", ActorType.SYSTEM, "runtime",
                     Map.of(
                             "node_id", node.getId(),
-                            "step_summary_path", resolveStepSummaryPath(run, execution).toString()
-                    )
-            );
+                            "step_summary_path", resolveStepSummaryPath(run, execution).toString()));
         }
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), stepSummaryJson);
         if (pendingReworkInstruction != null) {
@@ -322,8 +317,7 @@ public class RunStepService {
                 "command_invocation_started",
                 ActorType.SYSTEM,
                 "runtime",
-                mapOf("node_id", node.getId(), "execution_context", resolvedContext)
-        );
+                mapOf("node_id", node.getId(), "execution_context", resolvedContext));
 
         Map<String, String> beforeMutations = snapshotMutations(run, node.getExpectedMutations());
         CommandResult commandResult;
@@ -352,9 +346,7 @@ public class RunStepService {
                         "stdout_path", commandResult.stdoutPath(),
                         "stderr_path", commandResult.stderrPath(),
                         "stdout", truncate(commandResult.stdout(), 12000),
-                        "stderr", truncate(commandResult.stderr(), 12000)
-                )
-        );
+                        "stderr", truncate(commandResult.stderr(), 12000)));
 
         runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), null);
         applyTransition(run, execution, null, node.getOnSuccess(), "on_success");
@@ -366,8 +358,7 @@ public class RunStepService {
             NodeModel node,
             NodeExecutionEntity execution,
             GateKind gateKind,
-            GateStatus initialStatus
-    ) {
+            GateStatus initialStatus) {
         if (gateKind == GateKind.HUMAN_INPUT) {
             createHumanInputOutputFiles(run, node, execution);
         }
@@ -379,8 +370,7 @@ public class RunStepService {
                 gateKind,
                 initialStatus,
                 firstAllowedRole(node.getAllowedRoles()),
-                payloadJson
-        );
+                payloadJson);
         return false;
     }
 
@@ -401,17 +391,16 @@ public class RunStepService {
         if (!runtimeCodingAgent.equals(flowCodingAgent)) {
             throw new NodeFailureException(
                     "CODING_AGENT_MISMATCH",
-                    "Flow coding_agent does not match runtime settings: flow=" + flowCodingAgent + ", runtime=" + runtimeCodingAgent,
-                    false
-            );
+                    "Flow coding_agent does not match runtime settings: flow=" + flowCodingAgent + ", runtime="
+                            + runtimeCodingAgent,
+                    false);
         }
         CodingAgentStrategy strategy = codingAgentStrategiesByAgentId.get(runtimeCodingAgent);
         if (strategy == null) {
             throw new NodeFailureException(
                     "UNSUPPORTED_CODING_AGENT",
                     "Runtime coding_agent is not implemented: " + runtimeCodingAgent,
-                    false
-            );
+                    false);
         }
         return strategy;
     }
@@ -479,14 +468,12 @@ public class RunStepService {
                 "status", entry.status(),
                 "added", entry.added(),
                 "removed", entry.removed(),
-                "is_binary", entry.binary()
-        )).toList());
+                "is_binary", entry.binary())).toList());
         payload.put("git_summary", mapOf(
                 "files_changed", changes.size(),
                 "added_lines", addedLines,
                 "removed_lines", removedLines,
-                "status_label", "human_input".equals(nodeKind) ? "Awaiting input" : "Ready for review"
-        ));
+                "status_label", "human_input".equals(nodeKind) ? "Awaiting input" : "Ready for review"));
     }
 
     private ReworkDiscardAvailability resolveReworkDiscardAvailability(RunEntity run, NodeModel approvalNode) {
@@ -510,12 +497,14 @@ public class RunStepService {
             return new ReworkDiscardAvailability("discard", false, false, false, REWORK_REASON_TARGET_KIND_UNSUPPORTED);
         }
         if (!Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun())) {
-            return new ReworkDiscardAvailability("discard", false, false, false, REWORK_REASON_TARGET_CHECKPOINT_DISABLED);
+            return new ReworkDiscardAvailability("discard", false, false, false,
+                    REWORK_REASON_TARGET_CHECKPOINT_DISABLED);
         }
         NodeExecutionEntity targetExecution = nodeExecutionRepository
                 .findFirstByRunIdAndNodeIdOrderByAttemptNoDesc(run.getId(), targetNodeId)
                 .orElse(null);
-        String checkpointCommitSha = targetExecution == null ? null : trimToNull(targetExecution.getCheckpointCommitSha());
+        String checkpointCommitSha = targetExecution == null ? null
+                : trimToNull(targetExecution.getCheckpointCommitSha());
         if (targetExecution == null || !targetExecution.isCheckpointEnabled() || checkpointCommitSha == null) {
             return new ReworkDiscardAvailability("keep", true, true, false, REWORK_REASON_TARGET_CHECKPOINT_NOT_FOUND);
         }
@@ -524,7 +513,8 @@ public class RunStepService {
 
     private List<Map<String, Object>> resolveGateContextArtifacts(RunEntity run, NodeModel node) {
         List<Map<String, Object>> result = new ArrayList<>();
-        List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of() : node.getExecutionContext();
+        List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of()
+                : node.getExecutionContext();
         for (ExecutionContextEntry entry : entries) {
             if (entry == null || entry.getType() == null) {
                 continue;
@@ -557,8 +547,7 @@ public class RunStepService {
     private List<Map<String, Object>> resolveHumanInputOutputArtifacts(
             RunEntity run,
             NodeModel node,
-            NodeExecutionEntity execution
-    ) {
+            NodeExecutionEntity execution) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (HumanInputEditableArtifact artifact : resolveHumanInputEditableArtifacts(run, node, execution)) {
             Path outputPath = resolveProducedArtifactPath(run, execution, "run", artifact.path());
@@ -572,8 +561,7 @@ public class RunStepService {
                     "source_node_id", artifact.sourceNodeId(),
                     "source_artifact_version_id", artifact.sourceArtifactVersionId(),
                     "source_path", artifact.sourcePath(),
-                    "content", content
-            ));
+                    "content", content));
         }
         return result;
     }
@@ -600,8 +588,7 @@ public class RunStepService {
                     outputPath,
                     ArtifactScope.RUN,
                     ArtifactKind.HUMAN_INPUT,
-                    null
-            );
+                    null);
         }
     }
 
@@ -640,15 +627,16 @@ public class RunStepService {
                 "artifact_key", artifactKey,
                 "path", path.toString(),
                 "source_node_id", sourceNodeId,
-                "transfer_mode", "by_ref"
-        );
+                "transfer_mode", "by_ref");
     }
 
     private RunStatus resolveTerminalStatus(UUID runId) {
         return auditEventRepository.findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(runId, "transition_applied")
                 .map(event -> {
                     try {
-                        Map<String, Object> payload = objectMapper.readValue(event.getPayloadJson(), new TypeReference<>() {});
+                        Map<String, Object> payload = objectMapper.readValue(event.getPayloadJson(),
+                                new TypeReference<>() {
+                                });
                         String transition = String.valueOf(payload.getOrDefault("transition", ""));
                         return FAILURE_TRANSITIONS.contains(transition) ? RunStatus.FAILED : RunStatus.COMPLETED;
                     } catch (Exception ex) {
@@ -670,12 +658,11 @@ public class RunStepService {
         try {
             CommandResult commandResult = runProcess(
                     run.getId(),
-                    List.of("zsh", "-lc", instruction),
+                    List.of("bash", "-lc", instruction),
                     workingDirectory,
                     settingsService.getAiTimeoutSeconds(),
                     stdoutPath,
-                    stderrPath
-            );
+                    stderrPath);
             int exitCode = commandResult.exitCode();
             Set<Integer> successExitCodes = (node.getSuccessExitCodes() == null || node.getSuccessExitCodes().isEmpty())
                     ? Set.of(0)
@@ -684,8 +671,12 @@ public class RunStepService {
                 throw new NodeFailureException(
                         "COMMAND_EXECUTION_FAILED",
                         "Command node failed with exit code " + exitCode,
-                        false
-                );
+                        false,
+                        mapOf(
+                                "exit_code", exitCode,
+                                "stdout", truncate(commandResult.stdout(), 4000),
+                                "stderr", truncate(commandResult.stderr(), 4000),
+                                "instruction", truncate(instruction, 1000)));
             }
             return commandResult;
         } catch (ProcessExecutionPort.ProcessCancelledException ex) {
@@ -701,8 +692,7 @@ public class RunStepService {
             Path workingDirectory,
             int timeoutSeconds,
             Path stdoutPath,
-            Path stderrPath
-    ) throws IOException {
+            Path stderrPath) throws IOException {
         ProcessExecutionPort.ProcessExecutionResult result = processExecutionPort.execute(
                 new ProcessExecutionPort.ProcessExecutionRequest(
                         runId,
@@ -711,16 +701,13 @@ public class RunStepService {
                         timeoutSeconds,
                         stdoutPath,
                         stderrPath,
-                        true
-                )
-        );
+                        true));
         return new CommandResult(
                 result.exitCode(),
                 result.stdout(),
                 result.stderr(),
                 result.stdoutPath(),
-                result.stderrPath()
-        );
+                result.stderrPath());
     }
 
     private String readFile(Path path) throws IOException {
@@ -745,8 +732,7 @@ public class RunStepService {
             NodeModel node,
             NodeExecutionEntity execution,
             String nodeKind,
-            CommandResult commandResult
-    ) {
+            CommandResult commandResult) {
         List<PathRequirement> declared = node.getProducedArtifacts() == null ? List.of() : node.getProducedArtifacts();
         for (PathRequirement requirement : declared) {
             if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
@@ -763,8 +749,7 @@ public class RunStepService {
             NodeModel node,
             String nodeKind,
             CommandResult commandResult,
-            String path
-    ) {
+            String path) {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(node.getTitle() == null ? node.getId() : node.getTitle()).append("\n\n");
         sb.append("- run_id: ").append(run.getId()).append("\n");
@@ -797,8 +782,7 @@ public class RunStepService {
             RunEntity run,
             NodeModel node,
             NodeExecutionEntity execution,
-            Map<String, String> beforeMutations
-    ) {
+            Map<String, String> beforeMutations) {
         List<PathRequirement> produced = node.getProducedArtifacts() == null ? List.of() : node.getProducedArtifacts();
         for (PathRequirement requirement : produced) {
             if (requirement == null || requirement.getPath() == null || requirement.getPath().isBlank()) {
@@ -810,8 +794,7 @@ public class RunStepService {
                 throw new NodeFailureException(
                         "NODE_VALIDATION_FAILED",
                         "Required produced artifact missing: " + requirement.getPath(),
-                        true
-                );
+                        true);
             }
             if (exists) {
                 recordArtifactVersion(
@@ -821,8 +804,7 @@ public class RunStepService {
                         path,
                         toArtifactScope(requirement.getScope()),
                         ArtifactKind.PRODUCED,
-                        null
-                );
+                        null);
             }
         }
 
@@ -839,8 +821,7 @@ public class RunStepService {
                 throw new NodeFailureException(
                         "NODE_VALIDATION_FAILED",
                         "Required expected_mutation not detected: " + mutation.getPath(),
-                        true
-                );
+                        true);
             }
             if (changed && workspacePort.exists(path)) {
                 recordArtifactVersion(
@@ -850,8 +831,7 @@ public class RunStepService {
                         path,
                         toArtifactScope(mutation.getScope()),
                         ArtifactKind.MUTATION,
-                        null
-                );
+                        null);
             }
         }
     }
@@ -874,7 +854,8 @@ public class RunStepService {
     private List<Map<String, Object>> resolveExecutionContext(RunEntity run, NodeModel node) {
         List<Map<String, Object>> resolved = new ArrayList<>();
         List<InlineArtifactContext> inlineCandidates = new ArrayList<>();
-        List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of() : node.getExecutionContext();
+        List<ExecutionContextEntry> entries = node.getExecutionContext() == null ? List.of()
+                : node.getExecutionContext();
         for (ExecutionContextEntry entry : entries) {
             if (entry == null || entry.getType() == null || entry.getType().isBlank()) {
                 continue;
@@ -889,9 +870,9 @@ public class RunStepService {
                         if (required) {
                             throw new NodeFailureException(
                                     "MISSING_EXECUTION_CONTEXT",
-                                    "Missing required artifact_ref: node_id=" + entry.getNodeId() + ", path=" + entry.getPath(),
-                                    false
-                            );
+                                    "Missing required artifact_ref: node_id=" + entry.getNodeId() + ", path="
+                                            + entry.getPath(),
+                                    false);
                         }
                         continue;
                     }
@@ -902,10 +883,10 @@ public class RunStepService {
                                 artifactKeyForPath(entry.getPath()),
                                 path,
                                 entry.getNodeId() == null ? "" : entry.getNodeId(),
-                                sizeBytes
-                        ));
+                                sizeBytes));
                     } else {
-                        resolved.add(byRefArtifactContext(path, artifactKeyForPath(entry.getPath()), entry.getNodeId() == null ? "" : entry.getNodeId()));
+                        resolved.add(byRefArtifactContext(path, artifactKeyForPath(entry.getPath()),
+                                entry.getNodeId() == null ? "" : entry.getNodeId()));
                     }
                 }
                 default -> {
@@ -922,8 +903,7 @@ public class RunStepService {
                     approxTokens(totalInlineBytes),
                     maxInlineArtifactTokens,
                     maxInlineArtifactBytes,
-                    inlineCandidates.size()
-            );
+                    inlineCandidates.size());
         }
         for (InlineArtifactContext candidate : inlineCandidates) {
             if (inlineOverflow) {
@@ -940,8 +920,7 @@ public class RunStepService {
                     "content", content,
                     "content_checksum", ChecksumUtil.sha256(content),
                     "size_bytes", candidate.sizeBytes(),
-                    "size_tokens_approx", approxTokens(candidate.sizeBytes())
-            ));
+                    "size_tokens_approx", approxTokens(candidate.sizeBytes())));
         }
         return resolved;
     }
@@ -951,14 +930,12 @@ public class RunStepService {
             NodeExecutionEntity execution,
             GateInstanceEntity gate,
             String targetNodeId,
-            String transitionLabel
-    ) {
+            String transitionLabel) {
         if (targetNodeId == null || targetNodeId.isBlank()) {
             throw new NodeFailureException(
                     "INVALID_TRANSITION",
                     "Transition target is missing for " + transitionLabel,
-                    false
-            );
+                    false);
         }
         FlowModel flowModel = parseFlowSnapshot(run);
         requireNode(flowModel, targetNodeId);
@@ -967,8 +944,7 @@ public class RunStepService {
                 execution == null ? null : execution.getId(),
                 gate == null ? null : gate.getId(),
                 targetNodeId,
-                transitionLabel
-        );
+                transitionLabel);
     }
 
     private void failRun(RunEntity run, String errorCode, String message) {
@@ -986,8 +962,7 @@ public class RunStepService {
             RunEntity run,
             NodeModel node,
             NodeExecutionEntity execution,
-            String nodeKind
-    ) {
+            String nodeKind) {
         if (!Boolean.TRUE.equals(node.getCheckpointBeforeRun())) {
             return;
         }
@@ -1006,8 +981,7 @@ public class RunStepService {
                 "checkpoint_add",
                 List.of("git", "add", "-A"),
                 workingDirectory,
-                operationRoot
-        );
+                operationRoot);
         ensureGitCommandSuccess("checkpoint add", addResult);
 
         CommandResult commitResult = runGitCommand(
@@ -1016,8 +990,7 @@ public class RunStepService {
                 "checkpoint_commit",
                 List.of("git", "commit", "--allow-empty", "-m", checkpointCommitMessage),
                 workingDirectory,
-                operationRoot
-        );
+                operationRoot);
         ensureGitCommandSuccess("checkpoint commit", commitResult);
 
         CommandResult shaResult = runGitCommand(
@@ -1026,8 +999,7 @@ public class RunStepService {
                 "checkpoint_rev_parse",
                 List.of("git", "rev-parse", "HEAD"),
                 workingDirectory,
-                operationRoot
-        );
+                operationRoot);
         ensureGitCommandSuccess("checkpoint rev-parse", shaResult);
 
         String checkpointSha = parseCheckpointSha(shaResult.stdout());
@@ -1043,17 +1015,15 @@ public class RunStepService {
                             "phase", "rev_parse",
                             "reason", "empty_or_invalid_sha",
                             "stdout", truncate(shaResult.stdout(), 4000),
-                            "stderr", truncate(shaResult.stderr(), 4000)
-                    )
-            );
+                            "stderr", truncate(shaResult.stderr(), 4000)));
             throw new NodeFailureException(
                     "CHECKPOINT_CREATION_FAILED",
                     "Failed to resolve checkpoint commit SHA",
-                    false
-            );
+                    false);
         }
 
-        runtimeStepTxService.markNodeExecutionCheckpoint(run.getId(), execution.getId(), checkpointSha, clockPort.now());
+        runtimeStepTxService.markNodeExecutionCheckpoint(run.getId(), execution.getId(), checkpointSha,
+                clockPort.now());
         runtimeStepTxService.appendAudit(
                 run.getId(),
                 execution.getId(),
@@ -1064,17 +1034,14 @@ public class RunStepService {
                 mapOf(
                         "checkpoint_commit_sha", checkpointSha,
                         "stdout", truncate(commitResult.stdout(), 4000),
-                        "stderr", truncate(commitResult.stderr(), 4000)
-                )
-        );
+                        "stderr", truncate(commitResult.stderr(), 4000)));
     }
 
     private void configureCheckpointGitIdentity(
             RunEntity run,
             NodeExecutionEntity execution,
             Path workingDirectory,
-            Path operationRoot
-    ) {
+            Path operationRoot) {
         SettingsService.RuntimeSettings settings = settingsService.getRuntimeSettings();
         String localUser = trimToNull(settings.localGitUsername());
         String localEmail = trimToNull(settings.localGitEmail());
@@ -1082,8 +1049,7 @@ public class RunStepService {
             throw new NodeFailureException(
                     "CHECKPOINT_CREATION_FAILED",
                     "Runtime local git identity is empty",
-                    false
-            );
+                    false);
         }
 
         CommandResult configNameResult = runGitCommand(
@@ -1092,8 +1058,7 @@ public class RunStepService {
                 "checkpoint_config_user_name",
                 List.of("git", "config", "user.name", localUser),
                 workingDirectory,
-                operationRoot
-        );
+                operationRoot);
         ensureGitCommandSuccess("checkpoint config user.name", configNameResult);
 
         CommandResult configEmailResult = runGitCommand(
@@ -1102,8 +1067,7 @@ public class RunStepService {
                 "checkpoint_config_user_email",
                 List.of("git", "config", "user.email", localEmail),
                 workingDirectory,
-                operationRoot
-        );
+                operationRoot);
         ensureGitCommandSuccess("checkpoint config user.email", configEmailResult);
     }
 
@@ -1113,8 +1077,7 @@ public class RunStepService {
             String operationName,
             List<String> command,
             Path workingDirectory,
-            Path operationRoot
-    ) {
+            Path operationRoot) {
         Path stdoutPath = operationRoot.resolve(operationName + ".stdout.log");
         Path stderrPath = operationRoot.resolve(operationName + ".stderr.log");
         try {
@@ -1126,16 +1089,13 @@ public class RunStepService {
                             settingsService.getAiTimeoutSeconds(),
                             stdoutPath,
                             stderrPath,
-                            true
-                    )
-            );
+                            true));
             return new CommandResult(
                     result.exitCode(),
                     result.stdout(),
                     result.stderr(),
                     result.stdoutPath(),
-                    result.stderrPath()
-            );
+                    result.stderrPath());
         } catch (IOException ex) {
             runtimeStepTxService.appendAudit(
                     run.getId(),
@@ -1147,14 +1107,11 @@ public class RunStepService {
                     mapOf(
                             "operation", operationName,
                             "command", command,
-                            "error", ex.getMessage()
-                    )
-            );
+                            "error", ex.getMessage()));
             throw new NodeFailureException(
                     "CHECKPOINT_CREATION_FAILED",
                     "Checkpoint command failed: " + operationName,
-                    false
-            );
+                    false);
         }
     }
 
@@ -1168,9 +1125,7 @@ public class RunStepService {
                 false,
                 mapOf(
                         "stdout", truncate(result.stdout(), 4000),
-                        "stderr", truncate(result.stderr(), 4000)
-                )
-        );
+                        "stderr", truncate(result.stderr(), 4000)));
     }
 
     private String parseCheckpointSha(String stdout) {
@@ -1188,16 +1143,17 @@ public class RunStepService {
     private List<HumanInputEditableArtifact> resolveHumanInputEditableArtifacts(
             RunEntity run,
             NodeModel humanInputNode,
-            NodeExecutionEntity execution
-    ) {
+            NodeExecutionEntity execution) {
         FlowModel flowModel = parseFlowSnapshot(run);
         Map<String, NodeModel> nodesById = flowModel.getNodes() == null
                 ? Map.of()
                 : flowModel.getNodes().stream()
-                .filter((candidate) -> candidate != null && candidate.getId() != null && !candidate.getId().isBlank())
-                .collect(java.util.stream.Collectors.toMap(NodeModel::getId, Function.identity(), (a, b) -> a));
+                        .filter((candidate) -> candidate != null && candidate.getId() != null
+                                && !candidate.getId().isBlank())
+                        .collect(java.util.stream.Collectors.toMap(NodeModel::getId, Function.identity(), (a, b) -> a));
         List<HumanInputEditableArtifact> result = new ArrayList<>();
-        List<ExecutionContextEntry> entries = humanInputNode.getExecutionContext() == null ? List.of() : humanInputNode.getExecutionContext();
+        List<ExecutionContextEntry> entries = humanInputNode.getExecutionContext() == null ? List.of()
+                : humanInputNode.getExecutionContext();
         for (ExecutionContextEntry entry : entries) {
             if (entry == null) {
                 continue;
@@ -1219,7 +1175,10 @@ public class RunStepService {
             if (sourceNode == null) {
                 continue;
             }
-            if (!isModifiableProducedArtifact(sourceNode, artifactPath, scope)) {
+            if (!Boolean.TRUE.equals(entry.getModifiable())) {
+                continue;
+            }
+            if (!isProducedArtifactDeclared(sourceNode, artifactPath, scope)) {
                 continue;
             }
             Path sourcePath = resolveArtifactRefPath(run, sourceNodeId, scope, artifactPath);
@@ -1236,14 +1195,14 @@ public class RunStepService {
                     Boolean.TRUE.equals(entry.getRequired()),
                     sourceNodeId,
                     sourcePath.toString(),
-                    sourceVersion == null ? null : sourceVersion.getId().toString()
-            ));
+                    sourceVersion == null ? null : sourceVersion.getId().toString()));
         }
         return result;
     }
 
-    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String artifactPath, String scope) {
-        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || artifactPath == null || artifactPath.isBlank()) {
+    private boolean isProducedArtifactDeclared(NodeModel sourceNode, String artifactPath, String scope) {
+        if (sourceNode == null || sourceNode.getProducedArtifacts() == null || artifactPath == null
+                || artifactPath.isBlank()) {
             return false;
         }
         for (PathRequirement requirement : sourceNode.getProducedArtifacts()) {
@@ -1256,9 +1215,7 @@ public class RunStepService {
             if (!scope.equals(defaultScope(requirement.getScope()))) {
                 continue;
             }
-            if (Boolean.TRUE.equals(requirement.getModifiable())) {
-                return true;
-            }
+            return true;
         }
         return false;
     }
@@ -1339,7 +1296,8 @@ public class RunStepService {
         return resolved;
     }
 
-    private Path resolveProducedArtifactPath(RunEntity run, NodeExecutionEntity execution, String scopeRaw, String fileName) {
+    private Path resolveProducedArtifactPath(RunEntity run, NodeExecutionEntity execution, String scopeRaw,
+            String fileName) {
         if ("project".equals(defaultScope(scopeRaw))) {
             return resolvePath(run, scopeRaw, fileName);
         }
@@ -1424,8 +1382,7 @@ public class RunStepService {
             Path path,
             ArtifactScope scope,
             ArtifactKind kind,
-            Integer explicitSizeBytes
-    ) {
+            Integer explicitSizeBytes) {
         long size = explicitSizeBytes == null ? fileSize(path) : explicitSizeBytes.longValue();
         runtimeStepTxService.recordArtifactVersion(
                 run.getId(),
@@ -1435,8 +1392,7 @@ public class RunStepService {
                 scope,
                 kind,
                 fileChecksumOrNull(path),
-                size
-        );
+                size);
     }
 
     private ArtifactScope toArtifactScope(String scopeRaw) {
@@ -1450,14 +1406,14 @@ public class RunStepService {
 
     private String firstAllowedRole(List<String> allowedRoles) {
         if (allowedRoles == null || allowedRoles.isEmpty()) {
-            return null;
+            return DEFAULT_GATE_ASSIGNEE_ROLE;
         }
         for (String role : allowedRoles) {
             if (role != null && !role.isBlank()) {
                 return role;
             }
         }
-        return null;
+        return DEFAULT_GATE_ASSIGNEE_ROLE;
     }
 
     private boolean isRunCancelled(UUID runId) {
@@ -1526,8 +1482,7 @@ public class RunStepService {
 
     private GitNumstat readUntrackedNumstat(RunEntity run, String path) {
         CommandResult result = runGitQuery(run, List.of(
-                "git", "diff", "--numstat", "--no-index", "--", "/dev/null", path
-        ));
+                "git", "diff", "--numstat", "--no-index", "--", "/dev/null", path));
         if (result.exitCode() != 0 && result.exitCode() != 1) {
             return null;
         }
@@ -1572,7 +1527,8 @@ public class RunStepService {
     }
 
     private CommandResult runGitQuery(RunEntity run, List<String> command) {
-        Path operationRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve(".runtime").resolve("gate-review");
+        Path operationRoot = resolveRunScopeRoot(resolveRunWorkspaceRoot(run)).resolve(".runtime")
+                .resolve("gate-review");
         String suffix = String.valueOf(System.nanoTime());
         Path stdoutPath = operationRoot.resolve("git-" + suffix + ".stdout.log");
         Path stderrPath = operationRoot.resolve("git-" + suffix + ".stderr.log");
@@ -1585,16 +1541,13 @@ public class RunStepService {
                             Math.max(10, settingsService.getAiTimeoutSeconds()),
                             stdoutPath,
                             stderrPath,
-                            true
-                    )
-            );
+                            true));
             return new CommandResult(
                     result.exitCode(),
                     result.stdout(),
                     result.stderr(),
                     result.stdoutPath(),
-                    result.stderrPath()
-            );
+                    result.stderrPath());
         } catch (IOException ex) {
             throw new ValidationException("Failed to execute git command for run: " + run.getId());
         }
@@ -1685,11 +1638,16 @@ public class RunStepService {
             if (code.isBlank()) {
                 return "modified";
             }
-            if ("??".equals(code)) return "untracked";
-            if (code.contains("A")) return "added";
-            if (code.contains("D")) return "deleted";
-            if (code.contains("R")) return "renamed";
-            if (code.contains("M")) return "modified";
+            if ("??".equals(code))
+                return "untracked";
+            if (code.contains("A"))
+                return "added";
+            if (code.contains("D"))
+                return "deleted";
+            if (code.contains("R"))
+                return "renamed";
+            if (code.contains("M"))
+                return "modified";
             return code.toLowerCase(Locale.ROOT);
         }
         return "modified";
@@ -1770,15 +1728,15 @@ public class RunStepService {
     private record GitNumstat(
             int added,
             int removed,
-            boolean binary
-    ) {}
+            boolean binary) {
+    }
 
     private record InlineArtifactContext(
             String artifactKey,
             Path path,
             String sourceNodeId,
-            long sizeBytes
-    ) {}
+            long sizeBytes) {
+    }
 
     private record HumanInputEditableArtifact(
             String artifactKey,
@@ -1787,24 +1745,24 @@ public class RunStepService {
             boolean required,
             String sourceNodeId,
             String sourcePath,
-            String sourceArtifactVersionId
-    ) {}
+            String sourceArtifactVersionId) {
+    }
 
     private record CommandResult(
             int exitCode,
             String stdout,
             String stderr,
             String stdoutPath,
-            String stderrPath
-    ) {}
+            String stderrPath) {
+    }
 
     private record ReworkDiscardAvailability(
             String mode,
             boolean keepChanges,
             boolean keepChangesSelectable,
             boolean discardAvailable,
-            String unavailableReason
-    ) {}
+            String unavailableReason) {
+    }
 
     public static class NodeFailureException extends RuntimeException {
         private final String errorCode;
@@ -1815,7 +1773,8 @@ public class RunStepService {
             this(errorCode, message, validationFailure, Map.of());
         }
 
-        public NodeFailureException(String errorCode, String message, boolean validationFailure, Map<String, Object> details) {
+        public NodeFailureException(String errorCode, String message, boolean validationFailure,
+                Map<String, Object> details) {
             super(message);
             this.errorCode = errorCode;
             this.auditEventType = validationFailure ? "node_validation_failed" : "node_execution_failed";

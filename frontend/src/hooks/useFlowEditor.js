@@ -15,11 +15,51 @@ import {
   getMaxPublishedMinorForMajor,
   getDraftForMajor,
 } from '../utils/flowVersionUtils.js';
-import { buildEdges, parseFlowYaml, DEFAULT_REWORK } from '../utils/flowSerializer.js';
+import { buildEdges, parseFlowYaml, parseFlowYamlWithMeta, DEFAULT_REWORK } from '../utils/flowSerializer.js';
 import { validateFlow } from '../utils/flowValidator.js';
+import {
+  buildHumanInputExecutionContextSyncContracts,
+  isExecutionContextListEqual,
+  isManagedArtifactListEqual,
+  normalizeNodeKind,
+} from '../utils/humanInputArtifacts.js';
 import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
 
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
+
+function syncHumanInputManagedOutputs(nodes) {
+  const contractsByNode = buildHumanInputExecutionContextSyncContracts(nodes);
+  let hasChanges = false;
+  const nextNodes = nodes.map((node) => {
+    const data = node.data || {};
+    if (normalizeNodeKind(data) !== 'human_input') {
+      return node;
+    }
+    const contract = contractsByNode.get(node.id) || {
+      syncedExecutionContext: [],
+      expectedArtifacts: [],
+    };
+    const expectedExecutionContext = contract.syncedExecutionContext || [];
+    const expectedArtifacts = contract.expectedArtifacts || [];
+    const currentExecutionContext = data.executionContext || [];
+    const currentArtifacts = data.producedArtifacts || [];
+    const executionContextMatches = isExecutionContextListEqual(currentExecutionContext, expectedExecutionContext);
+    const outputsMatch = isManagedArtifactListEqual(currentArtifacts, expectedArtifacts);
+    if (executionContextMatches && outputsMatch) {
+      return node;
+    }
+    hasChanges = true;
+    return {
+      ...node,
+      data: {
+        ...data,
+        executionContext: expectedExecutionContext,
+        producedArtifacts: expectedArtifacts,
+      },
+    };
+  });
+  return hasChanges ? nextNodes : nodes;
+}
 
 const emptyFlow = {
   title: '',
@@ -27,6 +67,7 @@ const emptyFlow = {
   description: '',
   startNodeId: '',
   codingAgent: '',
+  canonicalName: '',
   ruleRefs: [],
   teamCode: '',
   platformCode: 'FRONT',
@@ -366,6 +407,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       instruction: '',
       checkpointBeforeRun: kind === 'ai' || kind === 'command',
       skillRefs: [],
+      allowedRoles: [],
       responseSchema: '',
       producedArtifacts: [],
       expectedMutations: [],
@@ -484,6 +526,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         status: data.status || prev.status,
         startNodeId: data.start_node_id || prev.startNodeId,
         codingAgent: data.coding_agent || prev.codingAgent,
+        canonicalName: data.canonical_name || prev.canonicalName,
         ruleRefs: data.rule_refs || [],
         teamCode: data.team_code || '',
         platformCode: data.platform_code || 'FRONT',
@@ -526,6 +569,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         status: data.status || prev.status,
         startNodeId: data.start_node_id || prev.startNodeId,
         codingAgent: data.coding_agent || prev.codingAgent,
+        canonicalName: data.canonical_name || prev.canonicalName,
         ruleRefs: data.rule_refs || [],
         teamCode: data.team_code || '',
         platformCode: data.platform_code || 'FRONT',
@@ -560,9 +604,15 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       `version: "${version}"`,
       `canonical_name: ${canonicalName}`,
       `title: ${flowMeta.title}`,
-      `description: ${flowMeta.description || ''}`,
-      `start_node_id: ${flowMeta.startNodeId}`,
     ];
+    const desc = flowMeta.description || '';
+    if (desc.includes('\n')) {
+      lines.push('description: |');
+      desc.split('\n').forEach((line) => lines.push(`  ${line}`));
+    } else {
+      lines.push(`description: ${desc}`);
+    }
+    lines.push(`start_node_id: ${flowMeta.startNodeId}`);
     lines.push(`fail_on_missing_declared_output: ${!!flowMeta.failOnMissingDeclaredOutput}`);
     lines.push(`fail_on_missing_expected_mutation: ${!!flowMeta.failOnMissingExpectedMutation}`);
     if (flowMeta.ruleRefs.length === 0) {
@@ -584,10 +634,16 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         lines.push(`    title: ${data.title}`);
       }
       if (data.description) {
-        lines.push(`    description: ${data.description}`);
+        if (data.description.includes('\n')) {
+          lines.push('    description: |');
+          data.description.split('\n').forEach((line) => lines.push(`      ${line}`));
+        } else {
+          lines.push(`    description: ${data.description}`);
+        }
       }
       lines.push(`    type: ${data.nodeKind || data.type || ''}`);
-      if ((data.nodeKind || data.type) !== 'command') {
+      const nodeKind = data.nodeKind || data.type || '';
+      if (nodeKind !== 'command') {
         if (data.executionContext && data.executionContext.length > 0) {
           lines.push('    execution_context:');
           data.executionContext.forEach((entry) => {
@@ -605,6 +661,9 @@ export function useFlowEditor({ flowId, isCreateMode }) {
             if (entry.path) {
               lines.push(`        path: ${entry.path}`);
             }
+            if (nodeKind === 'human_input' && entry.type === 'artifact_ref') {
+              lines.push(`        modifiable: ${entry.modifiable === true}`);
+            }
           });
         } else {
           lines.push('    execution_context: []');
@@ -614,14 +673,21 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         lines.push('    instruction: |');
         data.instruction.split('\n').forEach((line) => lines.push(`      ${line}`));
       }
-      if ((data.nodeKind || data.type) === 'ai' || (data.nodeKind || data.type) === 'command') {
+      const normalizedAllowedRoles = (data.allowedRoles || [])
+        .filter((role) => typeof role === 'string' && role.trim())
+        .map((role) => role.trim());
+      if (normalizedAllowedRoles.length > 0) {
+        lines.push('    allowed_roles:');
+        normalizedAllowedRoles.forEach((role) => lines.push(`      - ${role}`));
+      }
+      if (nodeKind === 'ai' || nodeKind === 'command') {
         lines.push(`    checkpoint_before_run: ${!!data.checkpointBeforeRun}`);
       }
       if (data.skillRefs && data.skillRefs.length > 0) {
         lines.push('    skill_refs:');
         data.skillRefs.forEach((ref) => lines.push(`      - ${ref}`));
       }
-      if ((data.nodeKind || data.type) !== 'command' && data.responseSchema && data.responseSchema.trim()) {
+      if (nodeKind !== 'command' && data.responseSchema && data.responseSchema.trim()) {
         lines.push('    response_schema:');
         data.responseSchema.trim().split('\n').forEach((line) => lines.push(`      ${line}`));
       }
@@ -635,9 +701,6 @@ export function useFlowEditor({ flowId, isCreateMode }) {
           }
           lines.push(`        path: ${artifact.path}`);
           lines.push(`        required: ${!!artifact.required}`);
-          if (artifact.modifiable) {
-            lines.push('        modifiable: true');
-          }
         });
       } else {
         lines.push('    produced_artifacts: []');
@@ -754,6 +817,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         status: response.status || prev.status,
         startNodeId: response.start_node_id || prev.startNodeId,
         codingAgent: response.coding_agent || prev.codingAgent,
+        canonicalName: response.canonical_name || prev.canonicalName,
         ruleRefs: response.rule_refs || prev.ruleRefs,
         teamCode: response.team_code || prev.teamCode,
         platformCode: response.platform_code || prev.platformCode,
@@ -847,6 +911,10 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       }))
     );
   }, [flowMeta.startNodeId, setNodes]);
+
+  useEffect(() => {
+    setNodes((prev) => syncHumanInputManagedOutputs(prev));
+  }, [nodes, setNodes]);
 
   const handleStartNodeChange = (value) => {
     updateFlowMeta({ startNodeId: value });
@@ -942,6 +1010,53 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     }
   };
 
+  const importFlowYaml = (yamlString) => {
+    let result;
+    try {
+      result = parseFlowYamlWithMeta(yamlString);
+    } catch (err) {
+      message.error(`YAML parse error: ${err.message}`);
+      return false;
+    }
+    if (!result) {
+      message.error('Invalid YAML: expected a mapping at the root');
+      return false;
+    }
+    const { meta: parsed, nodes: importedNodes } = result;
+    if (!Array.isArray(parsed.nodes) || parsed.nodes.length === 0) {
+      message.error('Invalid flow YAML: "nodes" array is missing or empty');
+      return false;
+    }
+    if (importedNodes.length === 0) {
+      message.error('Failed to parse nodes from YAML');
+      return false;
+    }
+
+    setFlowMeta((prev) => ({
+      ...prev,
+      flowId: isCreateMode ? (parsed.id ?? prev.flowId) : prev.flowId,
+      title: parsed.title ?? prev.title,
+      description: parsed.description ?? prev.description,
+      startNodeId: parsed.start_node_id ?? prev.startNodeId,
+      codingAgent: parsed.coding_agent ?? prev.codingAgent,
+      platformCode: parsed.platform_code ?? prev.platformCode,
+      scope: parsed.scope ?? prev.scope,
+      flowKind: parsed.flow_kind ?? prev.flowKind,
+      riskLevel: parsed.risk_level ?? prev.riskLevel,
+      ruleRefs: Array.isArray(parsed.rule_refs) ? parsed.rule_refs : prev.ruleRefs,
+      failOnMissingDeclaredOutput: parsed.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
+      failOnMissingExpectedMutation: parsed.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
+      responseSchema: parsed.response_schema
+        ? JSON.stringify(parsed.response_schema, null, 2)
+        : prev.responseSchema,
+    }));
+    setNodes(importedNodes);
+    setSelectedNodeId(importedNodes[0]?.id ?? null);
+
+    message.success(`Imported ${importedNodes.length} nodes from YAML`);
+    return true;
+  };
+
   return {
     // state
     flowMeta,
@@ -1024,5 +1139,6 @@ export function useFlowEditor({ flowId, isCreateMode }) {
     openPublishDialog,
     deleteCurrentDraft,
     confirmPublish,
+    importFlowYaml,
   };
 }

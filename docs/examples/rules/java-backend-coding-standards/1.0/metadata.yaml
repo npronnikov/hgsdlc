@@ -1,0 +1,27 @@
+entity_type: rule
+id: java-backend-coding-standards
+version: "1.0"
+canonical_name: java-backend-coding-standards@1.0
+display_name: "Стандарты кодирования Java-бэкенда"
+description: >
+  Базовые правила кодирования для Java/Spring Boot backend-разработки:
+  структура проекта, слои, именование, обработка ошибок, транзакции,
+  тестирование и проектирование API.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - spring-boot
+  - backend
+  - qwen-rules
+rule_kind: coding-style
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "rules/java-backend-coding-standards/1.0"
+lifecycle_status: active
+checksum: "f386add07e67cb91802a54b1c20bcbc75839c69b3317f96d46fef7fc4fd6f973"

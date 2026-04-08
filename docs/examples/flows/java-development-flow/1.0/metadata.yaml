@@ -1,0 +1,29 @@
+entity_type: flow
+id: java-development-flow
+version: "1.0"
+canonical_name: java-development-flow@1.0
+display_name: "Разработка Java-функциональности (уточнение → требования → план → реализация)"
+description: >
+  Полноценный флоу разработки Java-функциональности: уточняет запрос через вопросы,
+  формирует детальные требования, строит план реализации и реализует функциональность
+  с этапами согласования после требований, плана и реализации.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - spring-boot
+  - full-cycle
+  - requirements
+  - planning
+flow_kind: full-cycle
+risk_level: high
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "flows/java-development-flow/1.0"
+lifecycle_status: active
+checksum: "00ab5bbd9440d7daf700bfcf993bac9a0d66135e2e6f9a166181279d2382eede"

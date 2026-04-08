@@ -1,0 +1,28 @@
+entity_type: skill
+id: restore-c4-architecture-java
+version: "1.0"
+canonical_name: restore-c4-architecture-java@1.0
+display_name: "Восстановление диаграмм C4 для Java-проекта"
+description: >
+  Проанализируй Java/Spring Boot проект и подготовь архитектурную документацию
+  по модели C4 с диаграммами Mermaid: уровни System Context, Container и
+  Component.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - architecture
+  - c4
+  - mermaid
+  - qwen
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "skills/restore-c4-architecture-java/1.0"
+lifecycle_status: active
+checksum: "5888c7fc45f79e1cc50c6ce5df46f58631a24fa2ea09be84739406070803c9ec"

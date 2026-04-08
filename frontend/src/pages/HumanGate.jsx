@@ -2,13 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Card,
+  Checkbox,
   Col,
   Collapse,
   Drawer,
   Grid,
   Input,
   Modal,
+  Progress,
   Row,
+  Segmented,
   Space,
   Switch,
   Tag,
@@ -17,11 +20,12 @@ import {
   Typography,
   message,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, FullscreenExitOutlined, FullscreenOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
 import MarkdownPreview from '../components/MarkdownPreview.jsx';
+import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
@@ -48,9 +52,10 @@ function normalizePath(path) {
   return String(path || '').replaceAll('\\', '/');
 }
 
-function buildTree(paths) {
+function buildTree(changesList) {
   const root = new Map();
-  paths.forEach((path) => {
+  changesList.forEach((change) => {
+    const path = change.path;
     const parts = pathSegments(path);
     let level = root;
     parts.forEach((part, idx) => {
@@ -59,13 +64,14 @@ function buildTree(paths) {
       const dirKey = `dir:${parts.slice(0, idx + 1).join('/')}`;
       const nodeKey = isLeaf ? rawPath : dirKey;
       if (!level.has(part)) {
-        level.set(part, { key: nodeKey, title: part, children: new Map(), leaf: false, path: null });
+        level.set(part, { key: nodeKey, title: part, children: new Map(), leaf: false, path: null, change: null });
       }
       const node = level.get(part);
       if (isLeaf) {
         node.leaf = true;
         node.key = rawPath;
         node.path = rawPath;
+        node.change = change;
       }
       level = node.children;
     });
@@ -76,6 +82,7 @@ function buildTree(paths) {
       key: item.key,
       title: item.title,
       path: item.path,
+      change: item.change,
       isLeaf: item.leaf && item.children.size === 0,
       selectable: item.leaf && item.children.size === 0,
       children: toTreeData(item.children),
@@ -83,13 +90,28 @@ function buildTree(paths) {
   return toTreeData(root);
 }
 
+const STATUS_LABELS = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', untracked: 'U' };
+
 function matchesEditablePath(gitPath, editablePath) {
   if (!gitPath || !editablePath) {
     return false;
   }
-  const g = String(gitPath).replaceAll('\\', '/');
-  const e = String(editablePath).replaceAll('\\', '/');
+  const g = normalizePath(gitPath).replace(/^\.\/+/, '');
+  const e = normalizePath(editablePath).replace(/^\.\/+/, '');
   return g === e || g.endsWith(`/${e}`);
+}
+
+function matchesAnyEditablePath(gitPath, editablePaths) {
+  if (!gitPath || !Array.isArray(editablePaths) || editablePaths.length === 0) {
+    return false;
+  }
+  return editablePaths.some((editablePath) => (
+    matchesEditablePath(gitPath, editablePath) || matchesEditablePath(editablePath, gitPath)
+  ));
+}
+
+function artifactEditablePath(artifact) {
+  return artifact?.workspace_path || artifact?.path || '';
 }
 
 function detectLanguage(path) {
@@ -193,10 +215,13 @@ export default function HumanGate() {
   const [gate, setGate] = useState(null);
   const [changes, setChanges] = useState([]);
   const [summary, setSummary] = useState({ files_changed: 0, added_lines: 0, removed_lines: 0, status_label: '—' });
+  const [viewedFiles, setViewedFiles] = useState(new Set());
   const [selectedPath, setSelectedPath] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [modifiedContent, setModifiedContent] = useState('');
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [patchContent, setPatchContent] = useState('');
+  const [diffMode, setDiffMode] = useState('side-by-side');
   const [loading, setLoading] = useState(false);
 
   const [approveComment, setApproveComment] = useState('');
@@ -236,21 +261,61 @@ export default function HumanGate() {
   const canSubmitRework = hasAnyReworkRequests || hasManualReworkInstruction;
   const userInstructions = gate?.payload?.user_instructions || '';
   const editableArtifacts = Array.isArray(gate?.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
+  const editablePaths = useMemo(
+    () => editableArtifacts.map((artifact) => artifactEditablePath(artifact)).filter(Boolean),
+    [editableArtifacts],
+  );
 
-  const viewFiles = useMemo(() => (changes || []).map((item) => item.path).filter(Boolean), [changes]);
-  const treeData = useMemo(() => buildTree(viewFiles), [viewFiles]);
+  const filteredChanges = useMemo(() => {
+    const list = (changes || []).filter((item) => item.path);
+    if (!isInput) {
+      return list;
+    }
+    return list.filter((item) => matchesAnyEditablePath(item.path, editablePaths));
+  }, [changes, editablePaths, isInput]);
+  const viewFiles = useMemo(() => filteredChanges.map((item) => item.path), [filteredChanges]);
+  const treeData = useMemo(() => buildTree(filteredChanges), [filteredChanges]);
+
+  const viewedCount = useMemo(() => viewFiles.filter((f) => viewedFiles.has(f)).length, [viewFiles, viewedFiles]);
+  const toggleViewed = useCallback((filePath) => {
+    setViewedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) next.delete(filePath);
+      else next.add(filePath);
+      return next;
+    });
+  }, []);
+
+  const currentFileIdx = useMemo(() => {
+    if (!selectedPath) return -1;
+    return viewFiles.indexOf(selectedPath);
+  }, [viewFiles, selectedPath]);
+  const totalFiles = viewFiles.length;
+  const goToFile = useCallback((idx) => {
+    if (idx >= 0 && idx < viewFiles.length) {
+      setSelectedPath(viewFiles[idx]);
+    }
+  }, [viewFiles]);
+  const goPrevFile = useCallback(() => goToFile(currentFileIdx - 1), [goToFile, currentFileIdx]);
+  const goNextFile = useCallback(() => goToFile(currentFileIdx + 1), [goToFile, currentFileIdx]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+      if (e.key === '[' || (e.key === 'ArrowUp' && e.altKey)) { e.preventDefault(); goPrevFile(); }
+      if (e.key === ']' || (e.key === 'ArrowDown' && e.altKey)) { e.preventDefault(); goNextFile(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [goPrevFile, goNextFile]);
 
   const selectedEditable = useMemo(() => {
     if (!isInput || !selectedPath) {
       return null;
     }
-    const selectedNormalized = normalizePath(selectedPath);
     return editableArtifacts.find((artifact) => {
-      const workspacePath = artifact?.workspace_path;
-      if (!workspacePath) {
-        return false;
-      }
-      return normalizePath(workspacePath) === selectedNormalized;
+      const artifactPath = artifactEditablePath(artifact);
+      return matchesAnyEditablePath(selectedPath, [artifactPath]);
     }) || null;
   }, [editableArtifacts, isInput, selectedPath]);
   const selectedGitChange = useMemo(() => {
@@ -258,8 +323,9 @@ export default function HumanGate() {
     return changes.find((item) => normalizePath(item.path) === selectedNormalized) || null;
   }, [changes, selectedPath]);
   const selectedGitStatus = String(selectedGitChange?.status || 'modified').toLowerCase();
+  const selectedIsBinary = !!selectedGitChange?.is_binary;
   const isNewFileChange = selectedGitStatus === 'added' || selectedGitStatus === 'untracked';
-  const renderSideBySideDiff = isApproval && !isNewFileChange;
+  const renderSideBySideDiff = isApproval && !isNewFileChange && diffMode === 'side-by-side';
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const useRenderedMarkdownPreview = isApproval && selectedLanguage === 'markdown';
@@ -268,6 +334,7 @@ export default function HumanGate() {
   const currentEditableContent = selectedEditable
     ? (editedByPath[selectedEditable.path] ?? selectedEditable.content ?? '')
     : '';
+  const currentEditableFormJson = isHumanForm(currentEditableContent);
 
   const refresh = async () => {
     if (!runId || !gateId) {
@@ -304,15 +371,30 @@ export default function HumanGate() {
   }, [runId, gateId]);
 
   useEffect(() => {
+    if (viewFiles.length === 0) {
+      if (selectedPath) {
+        setSelectedPath('');
+      }
+      return;
+    }
+    const selectedExists = viewFiles.some((path) => normalizePath(path) === normalizePath(selectedPath));
+    if (!selectedExists) {
+      setSelectedPath(viewFiles[0]);
+    }
+  }, [selectedPath, viewFiles]);
+
+  useEffect(() => {
     const loadDiff = async () => {
       if (!selectedPath || !gateId) {
         setOriginalContent('');
         setModifiedContent('');
+        setPatchContent('');
         return;
       }
       if (!selectedGitChange) {
         setOriginalContent('');
         setModifiedContent('');
+        setPatchContent('');
         return;
       }
       setLoadingDiff(true);
@@ -321,10 +403,12 @@ export default function HumanGate() {
         const data = await apiRequest(`/gates/${gateId}/diff?path=${encodeURIComponent(pathForDiff)}`);
         setOriginalContent(data.original_content || '');
         setModifiedContent(data.modified_content || '');
+        setPatchContent(data.patch || '');
       } catch (err) {
         message.error(err.message || 'Failed to load diff');
         setOriginalContent('');
         setModifiedContent('');
+        setPatchContent('');
       } finally {
         setLoadingDiff(false);
       }
@@ -591,6 +675,13 @@ export default function HumanGate() {
       message.warning('No editable artifacts changed');
       return;
     }
+    for (const { content } of changedArtifacts) {
+      const formError = validateHumanForm(isHumanForm(content));
+      if (formError) {
+        message.warning(formError);
+        return;
+      }
+    }
     setSubmitting('submit');
     try {
       await apiRequest(`/gates/${gate.gate_id}/submit-input`, {
@@ -656,11 +747,21 @@ export default function HumanGate() {
 
       <Card className="human-approval-summary">
         <div className="human-approval-summary-row">
-          <Space size={16}>
+          <Space size={16} wrap>
             <Text strong>{summary.files_changed || 0} files changed</Text>
             <Text style={{ color: '#16a34a' }}>+{summary.added_lines || 0}</Text>
             <Text style={{ color: '#dc2626' }}>-{summary.removed_lines || 0}</Text>
             <Tag>{summary.status_label || (isInput ? 'Awaiting input' : 'Ready for review')}</Tag>
+            {totalFiles > 0 && (
+              <span className="hg-viewed-progress">
+                <Progress
+                  percent={Math.round((viewedCount / totalFiles) * 100)}
+                  size="small"
+                  style={{ width: 100, marginBottom: 0 }}
+                  format={() => `${viewedCount}/${totalFiles}`}
+                />
+              </span>
+            )}
           </Space>
           <Space>
             {isApproval && (
@@ -683,7 +784,7 @@ export default function HumanGate() {
       </Card>
 
       <Row gutter={[16, 16]} className="human-gate-main-row">
-        <Col xs={24} lg={6}>
+        <Col xs={24} lg={6} className="human-gate-sidebar-col">
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <Card title="Node instruction" className="human-gate-node-instruction-card">
               <pre className="human-gate-main-instruction-content">
@@ -705,13 +806,28 @@ export default function HumanGate() {
                   setSelectedPath(String(info?.node?.path || keys[0] || ''));
                 }}
                 titleRender={(node) => {
-                  const editable = node.isLeaf && editableArtifacts.some(
-                    (a) => a?.workspace_path && normalizePath(a.workspace_path) === normalizePath(node.path)
-                  );
+                  const editable = node.isLeaf && matchesAnyEditablePath(node.path, editablePaths);
+                  const ch = node.change;
+                  const statusKey = String(ch?.status || '').toLowerCase();
+                  const statusLabel = STATUS_LABELS[statusKey];
+                  const isViewed = node.isLeaf && viewedFiles.has(node.path);
                   return (
-                    <span>
-                      {node.title}
-                      {editable && <EditOutlined style={{ marginLeft: 6, opacity: 0.6 }} />}
+                    <span className={`hg-tree-node${isViewed ? ' hg-tree-node--viewed' : ''}`}>
+                      <span className="hg-tree-node-name">{node.title}</span>
+                      {editable && <EditOutlined style={{ marginLeft: 4, opacity: 0.6, fontSize: 12 }} />}
+                      {ch && (
+                        <span className="hg-tree-node-meta">
+                          {statusLabel && <span className={`hg-tree-badge hg-tree-badge--${statusKey}`}>{statusLabel}</span>}
+                          {ch.is_binary ? (
+                            <span className="hg-tree-binary">binary</span>
+                          ) : (
+                            <>
+                              {ch.added > 0 && <span className="hg-tree-added">+{ch.added}</span>}
+                              {ch.removed > 0 && <span className="hg-tree-removed">-{ch.removed}</span>}
+                            </>
+                          )}
+                        </span>
+                      )}
                     </span>
                   );
                 }}
@@ -726,26 +842,64 @@ export default function HumanGate() {
             title={selectedPath ? (
               <div className="human-gate-editor-title">
                 <div className="human-gate-editor-title-main">
+                  <Button size="small" icon={<LeftOutlined />} disabled={currentFileIdx <= 0} onClick={goPrevFile} title="Previous file ( [ )" />
+                  <span className="hg-file-counter">{currentFileIdx + 1} / {totalFiles}</span>
+                  <Button size="small" icon={<RightOutlined />} disabled={currentFileIdx >= totalFiles - 1} onClick={goNextFile} title="Next file ( ] )" />
                   <span className="human-gate-editor-path">{selectedPath}</span>
                   <span className="human-gate-editor-status">{selectedGitStatus}</span>
                 </div>
-                {useRenderedMarkdownPreview && (
-                  <Tabs
-                    activeKey={markdownViewTab}
-                    onChange={setMarkdownViewTab}
-                    className="human-gate-header-tabs"
-                    items={[
-                      { key: 'source', label: 'Source' },
-                      { key: 'preview', label: 'Preview' },
-                    ]}
-                  />
-                )}
+                <div className="human-gate-editor-title-actions">
+                  {useRenderedMarkdownPreview && (
+                    <Tabs
+                      activeKey={markdownViewTab}
+                      onChange={setMarkdownViewTab}
+                      className="human-gate-header-tabs"
+                      items={[
+                        { key: 'source', label: 'Source' },
+                        { key: 'diff', label: 'Diff' },
+                        { key: 'preview', label: 'Preview' },
+                      ]}
+                    />
+                  )}
+                  {isApproval && !selectedIsEditable && (
+                    <Segmented
+                      size="small"
+                      value={diffMode}
+                      onChange={setDiffMode}
+                      options={[
+                        { label: 'Split', value: 'side-by-side' },
+                        { label: 'Unified', value: 'unified' },
+                        { label: 'Patch', value: 'patch' },
+                      ]}
+                    />
+                  )}
+                  <Checkbox
+                    checked={viewedFiles.has(selectedPath)}
+                    onChange={() => toggleViewed(selectedPath)}
+                  >
+                    Viewed
+                  </Checkbox>
+                </div>
               </div>
             ) : 'Diff viewer'}
             loading={loadingDiff}
           >
             <div className="human-gate-view-body">
-              {selectedIsEditable ? (
+              {selectedIsBinary ? (
+                <div className="hg-binary-placeholder">
+                  <Text type="secondary">Binary file changed. Cannot display diff.</Text>
+                </div>
+              ) : selectedIsEditable && currentEditableFormJson ? (
+                <div className="human-gate-fill-pane" style={{ overflow: 'auto', padding: 16 }}>
+                  <HumanFormViewer
+                    formJson={currentEditableFormJson}
+                    onChange={(updated) => {
+                      if (!selectedEditable) return;
+                      setEditedByPath((prev) => ({ ...prev, [selectedEditable.path]: updated }));
+                    }}
+                  />
+                </div>
+              ) : selectedIsEditable ? (
                 <div className="human-gate-fill-pane">
                   <Editor
                     height="100%"
@@ -779,7 +933,7 @@ export default function HumanGate() {
                     setContextMenuState({ open: true, x: event.clientX, y: event.clientY });
                   }}
                 >
-                  {markdownViewTab === 'source' ? (
+                  {markdownViewTab === 'source' && (
                     <div className="human-gate-markdown-tab-body">
                       <Editor
                         height="100%"
@@ -808,7 +962,28 @@ export default function HumanGate() {
                         }}
                       />
                     </div>
-                  ) : (
+                  )}
+                  {markdownViewTab === 'diff' && (
+                    <div className="human-gate-markdown-tab-body">
+                      <DiffEditor
+                        height="100%"
+                        beforeMount={configureMonacoThemes}
+                        theme={monacoTheme}
+                        original={originalContent}
+                        modified={modifiedContent}
+                        language="markdown"
+                        options={{
+                          readOnly: true,
+                          renderSideBySide: diffMode === 'side-by-side',
+                          useInlineViewWhenSpaceIsLimited: false,
+                          minimap: { enabled: false },
+                          wordWrap: 'on',
+                          automaticLayout: true,
+                        }}
+                      />
+                    </div>
+                  )}
+                  {markdownViewTab === 'preview' && (
                     <div
                       ref={previewFullscreenRef}
                       className={`human-gate-markdown-tab-body human-gate-markdown-preview${isPreviewFullscreen ? ' is-browser-fullscreen' : ''}`}
@@ -860,6 +1035,10 @@ export default function HumanGate() {
                       </Button>
                     </div>
                   )}
+                </div>
+              ) : diffMode === 'patch' && patchContent ? (
+                <div className="human-gate-fill-pane hg-patch-view">
+                  <pre className="hg-patch-content">{patchContent}</pre>
                 </div>
               ) : (
                 <div

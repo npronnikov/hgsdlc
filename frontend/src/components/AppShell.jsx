@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
-  AppstoreOutlined,
   ApartmentOutlined,
   AuditOutlined,
   DeploymentUnitOutlined,
@@ -20,12 +19,12 @@ import {
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
+import { apiRequest } from '../api/request.js';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
 const BASE_NAV_ITEMS = [
-  { key: '/overview', icon: <AppstoreOutlined />, label: 'Overview' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
   { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
   { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
@@ -53,6 +52,7 @@ const routeMeta = {
   '/skills': { title: 'Skills', menuKey: '/skills' },
   '/skill-editor': { title: 'Skill Editor', menuKey: '/skills' },
   '/requests': { title: 'Requests', menuKey: '/requests' },
+  '/product-pipeline': { title: 'Idea to Dev', menuKey: '/product-pipeline' },
   '/run-launch': { title: 'Run Launch', menuKey: '/run-launch' },
   '/run-console': { title: 'Run Console', menuKey: '/run-console' },
   '/settings': { title: 'Runtime Settings', menuKey: '/settings' },
@@ -69,12 +69,61 @@ const routeMeta = {
   '/users': { title: 'Users', menuKey: '/users' },
 };
 
+const ACTIVE_RUN_STATUSES = ['created', 'running', 'waiting_gate', 'waiting_publish'];
+
+function formatRunStatusLabel(status) {
+  return String(status || 'unknown')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function resolveRunStatusTone(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (ACTIVE_RUN_STATUSES.includes(normalized)) {
+    return 'running';
+  }
+  if (normalized === 'completed') {
+    return 'done';
+  }
+  if (['failed', 'cancelled', 'publish_failed'].includes(normalized)) {
+    return 'blocked';
+  }
+  return 'review';
+}
+
+function formatRunStartedTime(value) {
+  if (!value) {
+    return '—';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function resolveRunIndicatorTone(statusTone) {
+  if (statusTone === 'done') {
+    return 'green';
+  }
+  if (statusTone === 'blocked') {
+    return 'red';
+  }
+  return 'amber';
+}
+
 export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { isDark, toggleMode } = useThemeMode();
   const [collapsed, setCollapsed] = useState(true);
+  const [pipelineRuns, setPipelineRuns] = useState([]);
+  const [pipelineProjects, setPipelineProjects] = useState([]);
+  const [pipelineRunsLoading, setPipelineRunsLoading] = useState(false);
   const userRoles = user?.roles || [];
   const navItems = [
     ...BASE_NAV_ITEMS.filter((item) => {
@@ -119,10 +168,52 @@ export default function AppShell() {
   const showSkillIdCrumb = isSkillEditorRoute && skillIdFromPath && skillIdFromPath !== 'create';
   const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
   const displayName = user?.username || 'User';
+  const selectedPipelineRunId = searchParams.get('runId') || searchParams.get('ppRunId') || pipelineRuns[0]?.run_id || null;
+  const projectNameById = useMemo(() => {
+    const map = new Map();
+    for (const project of pipelineProjects) {
+      if (project?.id) {
+        map.set(project.id, project.name || project.id);
+      }
+    }
+    return map;
+  }, [pipelineProjects]);
   const userMenuItems = [
     { key: 'settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Logout' },
   ];
+
+  useEffect(() => {
+    let active = true;
+    const loadPipelineRuns = async () => {
+      setPipelineRunsLoading(true);
+      try {
+        const [runsData, projectsData] = await Promise.all([
+          apiRequest('/runs?limit=20'),
+          apiRequest('/projects'),
+        ]);
+        if (!active) {
+          return;
+        }
+        setPipelineRuns(Array.isArray(runsData) ? runsData : []);
+        setPipelineProjects(Array.isArray(projectsData) ? projectsData : []);
+      } catch (_) {
+        if (!active) {
+          return;
+        }
+        setPipelineRuns([]);
+        setPipelineProjects([]);
+      } finally {
+        if (active) {
+          setPipelineRunsLoading(false);
+        }
+      }
+    };
+    loadPipelineRuns();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Layout className="hg-layout">
@@ -155,8 +246,59 @@ export default function AppShell() {
           selectedKeys={[selectedKey]}
           items={navItems}
           onClick={({ key }) => navigate(key)}
+          className={!collapsed ? 'hg-menu-with-runs' : undefined}
           inlineCollapsed={collapsed}
         />
+        {!collapsed && (
+          <div className="pipeline-runs-nav">
+            <div className="pipeline-runs-nav-head">
+              <Text className="pipeline-runs-nav-title">Recent Runs</Text>
+            </div>
+            <div className="pipeline-runs-nav-list">
+              {pipelineRunsLoading && <div className="pipeline-runs-empty">Loading…</div>}
+              {!pipelineRunsLoading && pipelineRuns.length === 0 && (
+                <div className="pipeline-runs-empty">No runs yet</div>
+              )}
+              {!pipelineRunsLoading && pipelineRuns.map((run) => {
+                const runId = run?.run_id;
+                if (!runId) {
+                  return null;
+                }
+                const status = run?.status || 'unknown';
+                const tone = resolveRunStatusTone(status);
+                const statusLabel = formatRunStatusLabel(status);
+                const projectTitle = projectNameById.get(run?.project_id) || run?.project_id || '—';
+                const flowTitle = run?.flow_canonical_name || 'Flow unavailable';
+                const startedTime = formatRunStartedTime(run?.created_at);
+                const indicatorTone = resolveRunIndicatorTone(tone);
+                return (
+                  <button
+                    key={runId}
+                    type="button"
+                    className={`pipeline-run-item ${selectedPipelineRunId === runId ? 'is-active' : ''}`}
+                    onClick={() => navigate(`/run-console?runId=${encodeURIComponent(runId)}`)}
+                  >
+                    <span className="pipeline-run-main">
+                      <span className="pipeline-run-title" title={projectTitle}>{projectTitle}</span>
+                      <span className="pipeline-run-flow mono" title={flowTitle}>{flowTitle}</span>
+                      <span className="pipeline-run-meta">{statusLabel} · {startedTime}</span>
+                    </span>
+                    <span className={`pipeline-run-indicator is-${indicatorTone}`} />
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              className="pipeline-run-item pipeline-run-item-show-all"
+              onClick={() => navigate('/run-console')}
+            >
+              <span className="pipeline-run-main">
+                <span className="pipeline-run-title">Show All</span>
+              </span>
+            </button>
+          </div>
+        )}
         <div className={`card-muted sider-footer ${collapsed ? 'sider-footer-collapsed' : ''}`}>
           <Tag color="#94a3b8">v0.1</Tag>
           {!collapsed && <Text className="muted">staging</Text>}

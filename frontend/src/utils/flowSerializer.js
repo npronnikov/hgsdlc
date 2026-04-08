@@ -50,7 +50,7 @@ export function toNodeData(node, isStart) {
   const rawProducedArtifacts = node.produced_artifacts || node.producedArtifacts || [];
   const producedArtifacts = rawProducedArtifacts.map((artifact) => ({
     ...artifact,
-    modifiable: artifact?.modifiable === true,
+    modifiable: false,
   }));
   const rawRework = node.on_rework || node.onRework || null;
   let onRework = null;
@@ -73,11 +73,15 @@ export function toNodeData(node, isStart) {
       return {
         ...entry,
         transfer_mode: entry.transfer_mode || 'by_ref',
+        modifiable: kind === 'human_input'
+          ? (typeof entry.modifiable === 'boolean' ? entry.modifiable : true)
+          : entry.modifiable,
       };
     }),
     instruction: node.instruction || '',
     checkpointBeforeRun: node.checkpoint_before_run ?? node.checkpointBeforeRun ?? defaultCheckpointBeforeRun,
     skillRefs: node.skill_refs || node.skillRefs || [],
+    allowedRoles: node.allowed_roles || node.allowedRoles || [],
     responseSchema: node.response_schema ? JSON.stringify(node.response_schema, null, 2) : '',
     producedArtifacts,
     expectedMutations: node.expected_mutations || node.expectedMutations || [],
@@ -91,6 +95,41 @@ export function toNodeData(node, isStart) {
   };
 }
 
+function layoutNodes(rawNodes, startNodeId) {
+  const nodes = rawNodes.map((node, index) => ({
+    id: node.id || `node-${index + 1}`,
+    type: 'flowNode',
+    position: { x: index * 220, y: 0 },
+    data: toNodeData(node, node.id === startNodeId),
+  }));
+  if (nodes.length === 0) {
+    return nodes;
+  }
+  const edges = buildEdges(nodes);
+  const NODE_WIDTH = 220;
+  const NODE_HEIGHT = 90;
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 140 });
+  nodes.forEach((node) => {
+    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  });
+  edges.forEach((edge) => {
+    graph.setEdge(edge.source, edge.target);
+  });
+  dagre.layout(graph);
+  return nodes.map((node) => {
+    const layout = graph.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: layout.x - NODE_WIDTH / 2,
+        y: layout.y - NODE_HEIGHT / 2,
+      },
+    };
+  });
+}
+
 export function parseFlowYaml(flowYaml, startNodeId) {
   if (!flowYaml) {
     return [];
@@ -98,41 +137,21 @@ export function parseFlowYaml(flowYaml, startNodeId) {
   try {
     const parsed = parseYaml(flowYaml);
     const rawNodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
-    const nodes = rawNodes.map((node, index) => ({
-      id: node.id || `node-${index + 1}`,
-      type: 'flowNode',
-      position: { x: index * 220, y: 0 },
-      data: toNodeData(node, node.id === startNodeId),
-    }));
-    const edges = buildEdges(nodes);
-    if (nodes.length === 0) {
-      return nodes;
-    }
-
-    const NODE_WIDTH = 220;
-    const NODE_HEIGHT = 90;
-    const graph = new dagre.graphlib.Graph();
-    graph.setDefaultEdgeLabel(() => ({}));
-    graph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 140 });
-    nodes.forEach((node) => {
-      graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-    });
-    edges.forEach((edge) => {
-      graph.setEdge(edge.source, edge.target);
-    });
-    dagre.layout(graph);
-
-    return nodes.map((node) => {
-      const layout = graph.node(node.id);
-      return {
-        ...node,
-        position: {
-          x: layout.x - NODE_WIDTH / 2,
-          y: layout.y - NODE_HEIGHT / 2,
-        },
-      };
-    });
+    return layoutNodes(rawNodes, startNodeId);
   } catch (err) {
     return [];
   }
+}
+
+export function parseFlowYamlWithMeta(yamlString) {
+  const parsed = parseYaml(yamlString);
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  const rawNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
+  const startNodeId = parsed.start_node_id ?? '';
+  return {
+    meta: parsed,
+    nodes: layoutNodes(rawNodes, startNodeId),
+  };
 }

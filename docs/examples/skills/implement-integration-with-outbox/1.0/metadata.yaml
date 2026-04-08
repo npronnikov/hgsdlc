@@ -1,0 +1,29 @@
+entity_type: skill
+id: implement-integration-with-outbox
+version: "1.0"
+canonical_name: implement-integration-with-outbox@1.0
+display_name: "Реализация интеграции с паттерном Transactional Outbox"
+description: >
+  Реализуй надежную публикацию событий в Java/Spring Boot с использованием
+  паттерна Transactional Outbox: изменение доменной модели и запись в outbox
+  в одной транзакции, затем плановый relay публикует события в брокер.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - spring-boot
+  - integration
+  - outbox
+  - kafka
+  - qwen
+skill_kind: code
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "skills/implement-integration-with-outbox/1.0"
+lifecycle_status: active
+checksum: "2c60f1b1a177a25c3e432897c88802b1325cd6f524bc54d93f1348c975c4ca89"

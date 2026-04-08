@@ -789,7 +789,8 @@ function RunListView({ navigate }) {
             columns={columns}
             dataSource={rows}
             tableLayout="fixed"
-            scroll={{ x: 1100 }}
+            sticky
+            scroll={{ x: 1100, y: 'calc(100vh - 420px)' }}
             pagination={{ pageSize: 20, showSizeChanger: false }}
             rowClassName={(record) => `run-console-row run-console-row-${record.status || 'unknown'}`}
             onRow={(record) => ({

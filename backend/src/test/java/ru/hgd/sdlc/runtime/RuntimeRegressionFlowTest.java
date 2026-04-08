@@ -343,7 +343,6 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                       - scope: run
                         path: questions.md
                         required: true
-                        modifiable: true
                     expected_mutations: []
                     on_success: answer-questions
 
@@ -356,6 +355,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                         path: questions.md
                         scope: run
                         required: true
+                        modifiable: true
                         transfer_mode: by_ref
                     instruction: |
                       Fill questions and submit.
@@ -402,7 +402,6 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                       - scope: run
                         path: summary.md
                         required: true
-                        modifiable: true
                     expected_mutations:
                       - scope: project
                         path: README.md

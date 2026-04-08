@@ -36,6 +36,7 @@ class FlowValidatorTest {
                                 .scope("run")
                                 .path("questions.md")
                                 .required(true)
+                                .modifiable(false)
                                 .nodeId("producer")
                                 .build()
                 ))
@@ -59,7 +60,7 @@ class FlowValidatorTest {
                 .build();
 
         List<String> errors = validator.validate(flow);
-        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("at least one modifiable")));
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("execution_context artifact_ref with modifiable=true")));
     }
 
     @Test
@@ -72,7 +73,7 @@ class FlowValidatorTest {
                 .onSuccess("input")
                 .onFailure("end")
                 .producedArtifacts(List.of(
-                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(true).build()
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(false).build()
                 ))
                 .build();
         NodeModel input = NodeModel.builder()
@@ -85,6 +86,7 @@ class FlowValidatorTest {
                                 .scope("run")
                                 .path("questions.md")
                                 .required(true)
+                                .modifiable(true)
                                 .nodeId("producer")
                                 .build()
                 ))
@@ -121,7 +123,7 @@ class FlowValidatorTest {
                 .onSuccess("input")
                 .onFailure("end")
                 .producedArtifacts(List.of(
-                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(true).build()
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(false).build()
                 ))
                 .build();
         NodeModel input = NodeModel.builder()
@@ -134,6 +136,7 @@ class FlowValidatorTest {
                                 .scope("run")
                                 .path("questions.md")
                                 .required(true)
+                                .modifiable(true)
                                 .nodeId("")
                                 .build()
                 ))
@@ -158,7 +161,7 @@ class FlowValidatorTest {
     }
 
     @Test
-    void humanInputProducedArtifactsMustMatchExecutionContext() {
+    void humanInputProducedArtifactsMustMatchModifiableUpstreamArtifacts() {
         NodeModel producer = NodeModel.builder()
                 .id("producer")
                 .type("ai")
@@ -167,7 +170,7 @@ class FlowValidatorTest {
                 .onSuccess("input")
                 .onFailure("end")
                 .producedArtifacts(List.of(
-                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(true).build()
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(false).build()
                 ))
                 .build();
         NodeModel input = NodeModel.builder()
@@ -180,6 +183,7 @@ class FlowValidatorTest {
                                 .scope("run")
                                 .path("questions.md")
                                 .required(true)
+                                .modifiable(true)
                                 .nodeId("producer")
                                 .build()
                 ))
@@ -203,7 +207,77 @@ class FlowValidatorTest {
                 .build();
 
         List<String> errors = validator.validate(flow);
-        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("must match execution_context artifacts")));
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("missing required artifact from execution_context modifiable set")));
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("extra artifact not found in execution_context modifiable set")));
+    }
+
+    @Test
+    void humanInputProducedArtifactsDetectsUpstreamCollisions() {
+        NodeModel producerA = NodeModel.builder()
+                .id("producer-a")
+                .type("ai")
+                .executionContext(List.of())
+                .instruction("Generate A")
+                .onSuccess("input")
+                .onFailure("producer-b")
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(false).build()
+                ))
+                .build();
+        NodeModel producerB = NodeModel.builder()
+                .id("producer-b")
+                .type("command")
+                .executionContext(List.of())
+                .instruction("Generate B")
+                .onSuccess("input")
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).modifiable(false).build()
+                ))
+                .build();
+        NodeModel input = NodeModel.builder()
+                .id("input")
+                .type("human_input")
+                .instruction("Review and edit")
+                .executionContext(List.of(
+                        ExecutionContextEntry.builder()
+                                .type("artifact_ref")
+                                .scope("run")
+                                .path("questions.md")
+                                .required(true)
+                                .modifiable(true)
+                                .nodeId("producer-a")
+                                .build()
+                        ,
+                        ExecutionContextEntry.builder()
+                                .type("artifact_ref")
+                                .scope("run")
+                                .path("questions.md")
+                                .required(true)
+                                .modifiable(true)
+                                .nodeId("producer-b")
+                                .build()
+                ))
+                .producedArtifacts(List.of(
+                        PathRequirement.builder().path("questions.md").scope("run").required(true).build()
+                ))
+                .onSubmit("end")
+                .build();
+        NodeModel end = NodeModel.builder()
+                .id("end")
+                .type("terminal")
+                .executionContext(List.of())
+                .build();
+        FlowModel flow = FlowModel.builder()
+                .id("f")
+                .version("1.0")
+                .canonicalName("f@1.0")
+                .title("flow")
+                .startNodeId("producer-a")
+                .nodes(List.of(producerA, producerB, input, end))
+                .build();
+
+        List<String> errors = validator.validate(flow);
+        Assertions.assertTrue(errors.stream().anyMatch((err) -> err.contains("collision in execution_context modifiable artifacts")));
     }
 
     @Test
@@ -234,7 +308,7 @@ class FlowValidatorTest {
                 .onSuccess("approval")
                 .onFailure("end")
                 .producedArtifacts(List.of(
-                        PathRequirement.builder().path("input.md").scope("run").required(true).modifiable(true).build()
+                        PathRequirement.builder().path("input.md").scope("run").required(true).modifiable(false).build()
                 ))
                 .build();
         NodeModel end = NodeModel.builder()

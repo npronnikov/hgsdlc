@@ -1,0 +1,27 @@
+entity_type: skill
+id: build-implementation-plan
+version: "1.0"
+canonical_name: build-implementation-plan@1.0
+display_name: "Построение плана реализации"
+description: >
+  На основе утвержденных требований проанализируй кодовую базу и подготовь
+  пошаговый план реализации со ссылками на файлы, порядком зависимостей,
+  оценкой рисков и критериями приемки для каждого шага.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - planning
+  - analysis
+  - qwen
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "skills/build-implementation-plan/1.0"
+lifecycle_status: active
+checksum: "427804ca5beec73c7ae17f4f34d343a695f132c0b645cf35fb27a54b644d475a"

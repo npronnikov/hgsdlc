@@ -1,0 +1,28 @@
+entity_type: flow
+id: clarify-and-implement-flow
+version: "1.0"
+canonical_name: clarify-and-implement-flow@1.0
+display_name: "Уточнение требований и реализация (PO → агент)"
+description: >
+  Короткий флоу для Product Owner: агент анализирует задачу и формирует
+  уточняющие вопросы в HTML-формате, PO отвечает на них, после чего агент
+  реализует функциональность.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - product-owner
+  - clarification
+  - html-gate
+  - short-cycle
+flow_kind: delivery
+risk_level: medium
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-08T00:00:00Z"
+published_at: "2026-04-08T00:00:00Z"
+source_ref: main
+source_path: "flows/clarify-and-implement-flow/1.0"
+lifecycle_status: active
+checksum: "ffb565eb10fb688093565e91488afbebec814894c2bfc357252055fb1c6259a8"

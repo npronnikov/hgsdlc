@@ -1,0 +1,68 @@
+id: form-questions-flow
+version: "1.0"
+canonical_name: form-questions-flow@1.0
+title: Тест human-form — вопросы и ответы
+description: >
+  Минимальный тестовый флоу для проверки функционала human-form:
+  AI генерирует questions.form.json, пользователь заполняет форму в gate UI,
+  заполненный файл сохраняется с выбранными ответами.
+start_node_id: ai-generate-questions
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+
+nodes:
+
+  # ── Step 1: AI генерирует форму с вопросами ──────────────────────────────
+  - id: ai-generate-questions
+    title: Генерация уточняющих вопросов
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: user_request
+        required: true
+    instruction: |
+      Прочитай запрос пользователя.
+      Строго следуй подключённому скиллу: сформулируй уточняющие вопросы
+      и сохрани их в файл questions.form.json в рабочей директории.
+    skill_refs:
+      - generate-form-questions@1.0
+    produced_artifacts:
+      - scope: run
+        path: questions.form.json
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: human-fill-form
+    on_failure: terminal-complete
+
+  # ── Gate: Пользователь заполняет форму ───────────────────────────────────
+  # questions.form.json заходит с modifiable: true.
+  # Gate UI рендерит его как интерактивную форму (kind: human-form).
+  # После submit тот же файл сохраняется с заполненными value.
+  - id: human-fill-form
+    title: Заполнить форму с вопросами
+    type: human_input
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-questions
+        path: questions.form.json
+        scope: run
+        required: true
+        modifiable: true
+        transfer_mode: by_ref
+    instruction: |
+      Заполни форму с уточняющими вопросами и нажми Submit.
+    produced_artifacts:
+      - scope: run
+        path: questions.form.json
+        required: true
+    expected_mutations: []
+    on_submit: terminal-complete
+
+  # ── Terminal ──────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Завершение
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

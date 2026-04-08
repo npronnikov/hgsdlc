@@ -26,7 +26,7 @@ class DefaultProcessExecutionAdapterTest {
         ProcessExecutionPort.ProcessExecutionResult result = adapter.execute(
                 new ProcessExecutionPort.ProcessExecutionRequest(
                         null,
-                        List.of("zsh", "-lc", "printf 'ok'; printf 'err' 1>&2"),
+                        List.of("bash", "-lc", "printf 'ok'; printf 'err' 1>&2"),
                         tempDir,
                         5,
                         stdout,
@@ -54,7 +54,7 @@ class DefaultProcessExecutionAdapterTest {
                 () -> adapter.execute(
                         new ProcessExecutionPort.ProcessExecutionRequest(
                                 UUID.randomUUID(),
-                                List.of("zsh", "-lc", "sleep 2"),
+                                List.of("bash", "-lc", "sleep 2"),
                                 tempDir,
                                 1,
                                 stdout,
@@ -66,4 +66,3 @@ class DefaultProcessExecutionAdapterTest {
         Assertions.assertTrue(ex.getMessage().contains("Process timeout"));
     }
 }
-

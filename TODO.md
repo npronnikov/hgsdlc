@@ -51,3 +51,11 @@ UI: diff перед публикацией.
 
 lifecycle_status у скилов/рулов/флоу
 Нужно написать сценарий перевода в эти статусы
+
+внеси следюущие изменнеия
+1) у human approval / human input нод доб
+
+измени yaml для флоу: все обработчики должны быть в структуре
+on_{}:
+      {attr}: value
+      next_node: {implementation-plan}

@@ -1,0 +1,213 @@
+id: java-development-flow
+version: "1.0"
+canonical_name: java-development-flow@1.0
+title: Java feature development (clarify → requirements → plan → implement)
+description: >
+  Full-cycle Java feature development flow: clarifies the request with questions,
+  generates detailed requirements, builds an implementation plan, implements the
+  feature, with human approval gates after requirements, plan, and implementation.
+start_node_id: ai-analyze-and-ask-questions
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+rule_refs:
+  - java-backend-coding-standards@1.0
+
+nodes:
+
+  # ── Step 1: Analyze project and generate clarifying questions ──────────────
+  - id: ai-analyze-and-ask-questions
+    title: Analyze project and generate clarifying questions
+    type: ai
+    checkpoint_before_run: true
+    execution_context: []
+    instruction: |
+      Изучи кодовую базу проекта и исходный запрос пользователя.
+      Сформируй 10-15 целевых уточняющих вопросов, чтобы убрать неоднозначности
+      до начала реализации.
+
+      Строго следуй подключенному skill.
+      Сохрани результат в `questions.md` в рабочей директории запуска.
+    skill_refs:
+      - analyze-and-ask-clarifying-questions@1.0
+    produced_artifacts:
+      - scope: run
+        path: questions.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: human-answer-questions
+    on_failure: terminal-complete
+
+  # ── Step 2: Human answers questions ───────────────────────────────────────
+  - id: human-answer-questions
+    title: Answer clarifying questions
+    type: human_input
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-analyze-and-ask-questions
+        path: questions.md
+        scope: run
+        required: true
+        modifiable: true
+    instruction: |
+      Открой `questions.md` в рабочей директории запуска.
+      Для каждого вопроса отметь один из предложенных вариантов (например, "[x] Вариант A")
+      либо заполни "Другое: ваш ответ".
+      Для открытых вопросов можно дать краткие ответы в свободной форме.
+      Сохрани файл и нажми Submit после завершения.
+    produced_artifacts:
+      - scope: run
+        path: questions.md
+        required: true
+    expected_mutations: []
+    on_submit: ai-generate-requirements
+
+  # ── Step 3: Generate system requirements ──────────────────────────────────
+  - id: ai-generate-requirements
+    title: Generate system requirements
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: human-answer-questions
+        path: questions.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Используя исходный запрос пользователя и заполненный `questions.md`,
+      тщательно проанализируй кодовую базу и сформируй подробные системные требования.
+
+      Требования должны ссылаться на конкретные файлы и классы проекта.
+      Строго следуй подключенному skill.
+      Сохрани результат в `requirements.md` в рабочей директории запуска.
+    skill_refs:
+      - generate-system-requirements@1.0
+    produced_artifacts:
+      - scope: run
+        path: requirements.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-requirements
+    on_failure: terminal-complete
+
+  # ── Gate: Approve requirements ─────────────────────────────────────────────
+  - id: approve-requirements
+    title: Review and approve requirements
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Просмотри `requirements.md` в рабочей директории запуска.
+      Проверь, что все функциональные, API-, модельные и тестовые требования
+      полные, конкретные и соответствуют ожиданиям.
+      Подтверди для перехода к планированию либо запроси доработку с правками.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-build-plan
+    on_rework:
+      next_node: ai-generate-requirements
+
+  # ── Step 4: Build implementation plan ─────────────────────────────────────
+  - id: ai-build-plan
+    title: Build implementation plan
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Прочитай утвержденный `requirements.md` и проанализируй кодовую базу.
+      Подготовь подробный пошаговый план реализации.
+
+      Строго следуй подключенному skill.
+      Сохрани результат в `plan.md` в рабочей директории запуска.
+    skill_refs:
+      - build-implementation-plan@1.0
+    produced_artifacts:
+      - scope: run
+        path: plan.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-plan
+    on_failure: terminal-complete
+
+  # ── Gate: Approve plan ─────────────────────────────────────────────────────
+  - id: approve-plan
+    title: Review and approve implementation plan
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Просмотри `plan.md` в рабочей директории запуска.
+      Проверь, что план покрывает все требования, шаги идут в правильном порядке,
+      риски обозначены, а критерии приемки сформулированы ясно.
+      Подтверди для старта реализации либо запроси доработку с обратной связью.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-implement
+    on_rework:
+      next_node: ai-build-plan
+
+  # ── Step 5: Implement ─────────────────────────────────────────────────────
+  - id: ai-implement
+    title: Implement the feature
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-build-plan
+        path: plan.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Реализуй функциональность строго в соответствии с утвержденными `plan.md`
+      и `requirements.md`.
+
+      Требования к реализации:
+      - Следуй всем подключенным правилам (java-backend-coding-standards)
+      - Выполняй шаги в порядке, заданном в plan.md
+      - Пиши или обновляй тесты для всего измененного кода
+      - Не изменяй файлы вне области, определенной в plan.md
+      - После каждого логического шага убеждайся, что проект компилируется (./gradlew compileJava)
+      - Перед завершением запускай тесты (./gradlew test)
+    skill_refs: []
+    produced_artifacts: []
+    expected_mutations: []
+    on_success: approve-implementation
+    on_failure: terminal-complete
+
+  # ── Gate: Approve implementation ───────────────────────────────────────────
+  - id: approve-implementation
+    title: Review and approve implementation
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Просмотри внесенные изменения в рабочей директории.
+      Проверь, что реализация соответствует плану и требованиям,
+      тесты проходят, а качество кода соответствует стандартам.
+      Подтверди для завершения флоу либо запроси доработку с конкретной обратной связью.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: terminal-complete
+    on_rework:
+      next_node: ai-implement
+
+  # ── Terminal ───────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Complete
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

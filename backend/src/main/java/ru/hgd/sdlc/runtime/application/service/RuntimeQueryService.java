@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.runtime.application.dto.ArtifactContentResult;
@@ -35,6 +36,7 @@ public class RuntimeQueryService {
             GateStatus.AWAITING_DECISION,
             GateStatus.FAILED_VALIDATION
     );
+    private static final String DEFAULT_GATE_ASSIGNEE_ROLE = Role.TECH_APPROVER.name();
 
     private final RunRepository runRepository;
     private final NodeExecutionRepository nodeExecutionRepository;
@@ -104,9 +106,13 @@ public class RuntimeQueryService {
             return all;
         }
         return all.stream()
-                .filter((gate) -> gate.getAssigneeRole() == null
-                        || gate.getAssigneeRole().isBlank()
-                        || user.hasRoleName(gate.getAssigneeRole()))
+                .filter((gate) -> {
+                    String role = gate.getAssigneeRole();
+                    if (role == null || role.isBlank()) {
+                        role = DEFAULT_GATE_ASSIGNEE_ROLE;
+                    }
+                    return user.hasRoleName(role);
+                })
                 .toList();
     }
 

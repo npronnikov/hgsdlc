@@ -82,6 +82,7 @@ public class CatalogService {
 
         if (mode == RepairMode.FULL_REPAIR) {
             try {
+                purgePublicationPipelineIndex();
                 purgeCatalogIndex();
             } catch (Exception ex) {
                 return RepairResult.failed(
@@ -306,6 +307,23 @@ public class CatalogService {
     }
 
     // ---- DB cleanup ----
+
+    private void purgePublicationPipelineIndex() {
+        if (tryExecuteCleanup("TRUNCATE TABLE publication_approvals, publication_jobs, publication_requests CASCADE")) {
+            return;
+        }
+        if (tryExecuteCleanup("TRUNCATE TABLE publication_approvals")
+                && tryExecuteCleanup("TRUNCATE TABLE publication_jobs")
+                && tryExecuteCleanup("TRUNCATE TABLE publication_requests CASCADE")) {
+            return;
+        }
+        if (tryExecuteCleanup("DELETE FROM publication_approvals")
+                && tryExecuteCleanup("DELETE FROM publication_jobs")
+                && tryExecuteCleanup("DELETE FROM publication_requests")) {
+            return;
+        }
+        throw new ValidationException("Failed to cleanup publication pipeline tables");
+    }
 
     private void purgeCatalogIndex() {
         if (tryExecuteCleanup("TRUNCATE TABLE flows, skills, rules CASCADE")) {
