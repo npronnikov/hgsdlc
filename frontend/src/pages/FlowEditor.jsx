@@ -15,10 +15,10 @@ const { Title, Text } = Typography;
 
 const NODE_TYPE_OPTIONS = [
   { key: 'ai', label: 'AI Executor' },
-  { key: 'command', label: 'Command Executor' },
+  { key: 'command', label: 'Shell Command' },
   { key: 'human_input', label: 'Human Input Gate' },
   { key: 'human_approval', label: 'Human Approval Gate' },
-  { key: 'terminal', label: 'Terminal' },
+  { key: 'terminal', label: 'Stop Flow' },
 ];
 
 export default function FlowEditor() {

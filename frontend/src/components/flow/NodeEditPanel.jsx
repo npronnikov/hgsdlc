@@ -137,10 +137,10 @@ export function NodeEditPanel({ editor }) {
               }}
               options={[
                 { value: 'ai', label: 'AI Executor' },
-                { value: 'command', label: 'Command Executor' },
+                { value: 'command', label: 'Shell Command' },
                 { value: 'human_input', label: 'Human Input Gate' },
                 { value: 'human_approval', label: 'Human Approval Gate' },
-                { value: 'terminal', label: 'Terminal' },
+                { value: 'terminal', label: 'Stop Flow' },
               ]}
             />
           </div>

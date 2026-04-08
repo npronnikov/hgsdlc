@@ -6,7 +6,7 @@ export const NODE_KIND_META = {
     variant: 'executor ai',
   },
   command: {
-    label: 'Command Executor',
+    label: 'Shell Command',
     variant: 'executor command',
   },
   human_input: {
@@ -18,7 +18,7 @@ export const NODE_KIND_META = {
     variant: 'gate approval',
   },
   terminal: {
-    label: 'Terminal',
+    label: 'Stop Flow',
     variant: 'terminal',
   },
 };
