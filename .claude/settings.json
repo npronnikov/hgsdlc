@@ -36,7 +36,9 @@
       "Bash(./gradlew check:*)",
       "Bash(./gradlew *)",
       "Bash(./sed *)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(grep -n \"roles\\\\|authorities\\\\|me\" /Users/nick/IdeaProjects/human-guided-development/backend/src/main/java/ru/hgd/sdlc/security/*.java)",
+      "Bash(xargs cat:*)"
     ],
     "deny": [
       "Read(./.env)",

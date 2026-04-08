@@ -1,176 +1,225 @@
 # План реализации
 
 ## Краткое резюме
-Нужно добавить в `human_input` режим HTML-формы без изменения backend-контракта: если контент артефакта HTML, UI рендерит форму, перехватывает `submit`, извлекает ответы и сохраняет их как содержимое выходного артефакта, объявленного в `produced_artifacts` этой `human_input` ноды. Для Markdown/обычного текста остаётся текущий редактор. План состоит из 5 шагов; основной риск — безопасный рендер HTML и устойчивый сбор `question-answer` без схемы.
+Реализуем режим запуска для Product Owner через флаг `skip-gates`: он сохраняется в `run`, читается runtime и автоматически пропускает human-gates, кроме тех, где разрешена роль `PRODUCT_OWNER`. На фронтенде ссылка меню `#/run-launch` ведет в `#/product-pipeline` только для пользователя Product Owner без роли `ADMIN`; для `admin` и остальных ролей остается `#/run-launch`. План состоит из 7 атомарных шагов с backend-first порядком и отдельным блоком UI для inline-гейтов и последовательного редактирования артефактов.
 
 ## Архитектурные решения
-- **Решение 1**: Не менять API `POST /gates/{gateId}/submit-input` и backend-валидацию; передаём ответы как `content_base64` существующего modifiable артефакта.
-Почему: текущий runtime уже хранит версии артефактов и проверяет “artifact modified”; это покрывает задачу без миграций БД и без новых DTO.
-- **Решение 2**: Определять режим UI по контенту выбранного editable-артефакта (`html` c `<form>` vs markdown/text), а не по новым полям flow.
-Почему: пользователь явно просит без схем и без межнодовой валидации.
-- **Решение 3**: На submit HTML-формы сериализовать ответы в детерминированный текст (Q/A + JSON блок) и писать в тот же артефакт.
-Почему: downstream-ноды получают привычный текстовый файл, но внутри есть структурированный блок ответов.
-- **Решение 4**: Целевой артефакт для сохранения брать только из списка выходов `human_input` (runtime payload `human_input_artifacts`, который строится из modifiable `produced_artifacts`/`execution_context`), а не из произвольного выбранного файла в UI.
-Почему: это выполняет контракт ноды и исключает запись ответа в неверный путь.
+- **Решение 1**: Флаг назвать именно `skip-gates` (в коде/БД: `skipGates` / `skip_gates`).
+  Причина: прямое соответствие бизнес-правилу «пропускать гейты».
+- **Решение 2**: Флаг хранить в `runs` как snapshot состояния на момент старта run.
+  Причина: поведение не меняется, даже если роли пользователя изменятся после запуска.
+- **Решение 3**: Логику skip реализовать в `RunStepService` до `openGate(...)`.
+  Причина: единая серверная точка принятия решения, независимая от UI.
+- **Решение 4**: Менять только целевую ссылку пункта меню `run-launch` для Product Owner без роли `ADMIN`, без глобального редиректа `run-console`.
+  Причина: минимальные изменения навигации и меньше риск регрессий.
+- **Решение 5**: Для `human_input` использовать `HumanFormViewer` для `form.json` (`kind: human-form`), остальные файлы редактировать в Monaco.
+  Причина: переиспользование уже работающей валидации и редактора.
 
 ---
 
 ## Шаги реализации
 
-### Шаг 1 — Выделить режимы отображения human_input (сложность: medium)
-**Цель**: в `HumanGate` определить для выбранного editable-артефакта режим `html_form` или `text_editor`.
+### Шаг 1 — Добавить флаг `skip-gates` в runtime-модель (сложность: medium)
+**Цель**: Ввести источник истины для runtime-режима пропуска гейтов.
 
 **Файлы**:
-- `frontend/src/pages/HumanGate.jsx` — добавить функции `detectHumanInputViewMode(content, path)` и вычисление режима для `selectedEditable`.
-- `frontend/src/pages/HumanGate.jsx` — оставить существующий markdown/text editor как fallback по умолчанию.
+- `backend/src/main/resources/db/changelog/041-runtime-skip-gates.sql` — добавить колонку `skip_gates BOOLEAN NOT NULL DEFAULT FALSE` в таблицу `runs`.
+- `backend/src/main/resources/db/changelog/db.changelog-master.yaml` — подключить migration `041`.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/domain/RunEntity.java` — добавить поле `skipGates`.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/RuntimeStepTxService.java` — расширить `createRun(...)` параметром `skipGates`.
 
 **Детали реализации**:
-```javascript
-function detectHumanInputViewMode(content, path) {
-  const body = String(content || '').trim().toLowerCase();
-  if (body.includes('<form') && (body.includes('<input') || body.includes('<textarea') || body.includes('<select'))) {
-    return 'html_form';
-  }
-  return 'text_editor';
-}
+```java
+// RunEntity.java
+@Column(name = "skip_gates", nullable = false)
+@Builder.Default
+private boolean skipGates = false;
+
+// RuntimeStepTxService.createRun(...)
+RunEntity entity = RunEntity.builder()
+    // ...
+    .skipGates(skipGates)
+    .build();
 ```
 
 **Зависит от**: нет зависимостей
 
 **Проверка**:
-- `cd frontend && npm run build` — проект собирается
-- Ручная проверка: для markdown-файла поведение не изменилось
+- `cd backend && ./gradlew compileJava`
+- Старт приложения с Liquibase без ошибок.
 
 ---
 
-### Шаг 2 — Рендер HTML-формы в контейнере и перехват submit (сложность: high)
-**Цель**: отрисовать HTML в “воротах” и перехватить событие `submit` контейнером.
+### Шаг 2 — Прокинуть `skip-gates` в run при создании (сложность: medium)
+**Цель**: Правильно устанавливать флаг в момент старта run.
 
 **Файлы**:
-- `frontend/src/pages/HumanGate.jsx` — добавить HTML-container (`ref`) и `useEffect` с делегированием события `submit`.
-- `frontend/src/styles.css` — добавить стили для блока формы (`.human-gate-html-form`, поля, кнопки).
-- `frontend/package.json` — добавить безопасный sanitizer (например, `dompurify`) перед вставкой HTML.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunLifecycleService.java` — вычислять `skipGates` по роли пользователя.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/RuntimeStepTxService.java` — принять и сохранить `skipGates`.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/api/RuntimeController.java` — при необходимости вернуть `skip_gates` в `RunResponse` (для дебага/контракта).
 
 **Детали реализации**:
-```javascript
-useEffect(() => {
-  const el = htmlContainerRef.current;
-  if (!el) return;
-  const onSubmit = (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement)) return;
-    event.preventDefault();
-    handleHtmlFormSubmit(form);
-  };
-  el.addEventListener('submit', onSubmit, true);
-  return () => el.removeEventListener('submit', onSubmit, true);
-}, [handleHtmlFormSubmit]);
+```java
+private boolean resolveSkipGates(User user) {
+    // Базовое правило: true для PRODUCT_OWNER, false для остальных.
+    // Если нужен stricter-режим (только PO-only), фиксируем отдельным решением до кода.
+}
+
+run = runtimeStepTxService.createRun(
+  // ...,
+  resolveSkipGates(user),
+  // ...
+);
 ```
 
 **Зависит от**: шаг 1
 
 **Проверка**:
-- HTML из editable-артефакта визуально рендерится на странице `HumanGate`
-- Нажатие кнопки `type="submit"` не вызывает перезагрузку страницы
+- `cd backend && ./gradlew compileJava`
+- Контракт `POST /api/runs` сохраняет run с ожидаемым значением `skip_gates`.
 
 ---
 
-### Шаг 3 — Сериализация question-answer и запись в выходной артефакт ноды (сложность: high)
-**Цель**: при submit формы собрать ответы пользователя и превратить их в текст строго того артефакта, который объявлен выходом `human_input` ноды, после чего отправить текущий backend submit.
+### Шаг 3 — Runtime: читать `skip-gates` и скипать не-PO ворота (сложность: high)
+**Цель**: Автоматически пропускать human-gates, если run в `skip-gates` режиме и gate не назначен на `PRODUCT_OWNER`.
 
 **Файлы**:
-- `frontend/src/pages/HumanGate.jsx` — реализовать `collectFormAnswers(form)` + `serializeAnswers(answers)` + `resolveHumanInputOutputArtifact(...)`, затем обновлять `editedByPath[targetArtifact.path]`.
-- `frontend/src/pages/HumanGate.jsx` — расширить `submitInput` для сценария auto-submit после HTML submit.
-
-**Детали реализации**:
-```javascript
-function collectFormAnswers(form) {
-  const fd = new FormData(form);
-  const map = {};
-  for (const [key, value] of fd.entries()) {
-    if (map[key] === undefined) map[key] = value;
-    else if (Array.isArray(map[key])) map[key].push(value);
-    else map[key] = [map[key], value];
-  }
-  return map;
-}
-
-function serializeAnswers(answers) {
-  return [
-    '# Human Input Answers',
-    '',
-    '```json',
-    JSON.stringify({ answers }, null, 2),
-    '```',
-  ].join('\n');
-}
-
-function resolveHumanInputOutputArtifact(editableArtifacts) {
-  const required = editableArtifacts.find((item) => item?.required === true);
-  return required || editableArtifacts[0] || null;
-}
-```
-
-**Зависит от**: шаг 2
-
-**Проверка**:
-- После submit HTML-формы изменяется контент именно у выходного артефакта `human_input` ноды
-- `POST /gates/{gateId}/submit-input` уходит в текущем формате (`artifacts[].content_base64`)
-- Gate успешно проходит `on_submit` без backend-изменений
-
----
-
-### Шаг 4 — UX-согласование кнопок submit (сложность: medium)
-**Цель**: сделать поведение submit однозначным для пользователя в HTML-режиме.
-
-**Файлы**:
-- `frontend/src/pages/HumanGate.jsx` — выбрать одну политику:
-  - `вариант A`: submit формы сразу вызывает `submitInput`;
-  - `вариант B`: submit формы только сохраняет ответы локально, а верхняя кнопка `Submit input` отправляет gate.
-- `frontend/src/styles.css` — визуальный статус “form captured / ready to submit”.
-
-**Детали реализации**:
-```javascript
-const handleHtmlFormSubmit = async (form) => {
-  const answers = collectFormAnswers(form);
-  const serialized = serializeAnswers(answers);
-  const targetArtifact = resolveHumanInputOutputArtifact(editableArtifacts);
-  if (!targetArtifact) return;
-  setEditedByPath((prev) => ({ ...prev, [targetArtifact.path]: serialized }));
-  await submitInput({ onlyPath: targetArtifact.path, auto: true });
-};
-```
-
-**Зависит от**: шаг 3
-
-**Проверка**:
-- Пользователь понимает, что произошло после нажатия submit (сообщение + статус)
-- Нет двойной отправки (`form submit` + верхняя кнопка)
-
----
-
-### Шаг 5 — Регрессия и e2e сценарий HTML/MD (сложность: medium)
-**Цель**: убедиться, что новый режим не ломает существующий markdown human_input.
-
-**Файлы**:
-- `frontend/src/pages/HumanGate.jsx` — финальная полировка edge-cases.
-- `frontend/src/styles.css` — адаптация мобильной вёрстки HTML-формы.
-- `backend/src/test/java/ru/hgd/sdlc/runtime/RuntimeRegressionFlowTest.java` — (опционально) сценарий, где human_input получает уже изменённый контент и успешно сабмитится по текущему API.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/RunStepService.java` — добавить `shouldSkipGate(run, node)` и ветку auto-skip перед `openGate(...)`.
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/HumanInputNodeExecutor.java` — использовать новую ветку (через `RunStepService`).
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/service/HumanApprovalNodeExecutor.java` — использовать новую ветку (через `RunStepService`).
+- `backend/src/main/java/ru/hgd/sdlc/runtime/application/RuntimeStepTxService.java` — audit `gate_auto_skipped`.
 
 **Детали реализации**:
 ```java
-// backend остаётся на текущем контракте: artifacts[].content_base64
-// покрываем только интеграционный happy-path submit
+private boolean shouldSkipGate(RunEntity run, NodeModel node) {
+    if (!run.isSkipGates()) return false;
+    List<String> allowed = normalizedAllowedRoles(node.getAllowedRoles());
+    return !allowed.contains("PRODUCT_OWNER");
+}
+
+// human_input skip:
+createHumanInputOutputFiles(...);
+markNodeExecutionSucceeded(...);
+applyTransition(..., node.getOnSubmit(), "auto_on_submit");
+
+// human_approval skip:
+markNodeExecutionSucceeded(...);
+applyTransition(..., node.getOnApprove(), "auto_on_approve");
 ```
 
-**Зависит от**: шаги 1–4
+**Зависит от**: шаги 1-2
+
+**Проверка**:
+- `cd backend && ./gradlew test --tests ru.hgd.sdlc.runtime.RuntimeRegressionFlowTest`
+- Кейсы:
+  - `skip_gates=true` + gate `allowed_roles=[TECH_APPROVER]` => gate не открывается.
+  - `skip_gates=true` + gate `allowed_roles=[PRODUCT_OWNER]` => run уходит в `WAITING_GATE`.
+
+---
+
+### Шаг 4 — Меню: `run-launch` -> `product-pipeline` только для Product Owner (сложность: low)
+**Цель**: Выполнить требование навигации без изменения остальных маршрутов.
+
+**Файлы**:
+- `frontend/src/components/AppShell.jsx` — формировать `navItems` динамически: для Product Owner без роли `ADMIN` у пункта `Run Launch` ключ `'/product-pipeline'`, иначе `'/run-launch'`.
+- `frontend/src/App.jsx` — роуты оставить существующими (`/run-launch` и `/product-pipeline`).
+
+**Детали реализации**:
+```jsx
+const isProductOwnerOnly = userRoles.includes('PRODUCT_OWNER') && !userRoles.includes('ADMIN');
+const BASE_NAV_ITEMS = [
+  // ...
+  { key: isProductOwnerOnly ? '/product-pipeline' : '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
+  // ...
+];
+```
+
+**Зависит от**: нет зависимостей
 
 **Проверка**:
 - `cd frontend && npm run build`
+- Ручной сценарий:
+  - `product_owner` (без `ADMIN`) видит `Run Launch`, переход ведет на `#/product-pipeline`.
+  - `admin` и остальные роли по этому же пункту идут на `#/run-launch`.
+
+---
+
+### Шаг 5 — Inline human gates в центре `ProductPipeline` (сложность: high)
+**Цель**: Показывать `human_input`/`human_approval` прямо в центре блока `Pipeline status`.
+
+**Файлы**:
+- `frontend/src/pages/ProductPipelineMvp.jsx` — вместо кнопки перехода рендерить inline panel для текущего gate.
+- `frontend/src/styles.css` — стили для inline формы/редактора/кнопок в `.vp-live-run-panel`.
+- `frontend/src/components/HumanFormViewer.jsx` — переиспользовать без изменения API.
+
+**Детали реализации**:
+```jsx
+if (currentGate?.gate_kind === 'human_input') {
+  return <ProductOwnerInputGatePanel gate={currentGate} runId={activeRunId} onDone={reloadRun} />;
+}
+if (currentGate?.gate_kind === 'human_approval') {
+  return <ProductOwnerApprovalGatePanel gate={currentGate} runId={activeRunId} onDone={reloadRun} />;
+}
+```
+
+**Зависит от**: шаг 4
+
+**Проверка**:
+- `cd frontend && npm run build`
+- Активный gate не ведет на отдельную страницу, а отрисовывается в центре pipeline.
+
+---
+
+### Шаг 6 — Последовательное редактирование expected output для `human_input` (сложность: high)
+**Цель**: Пользователь должен пройти все ожидаемые артефакты перед `submit-input`.
+
+**Файлы**:
+- `frontend/src/pages/ProductPipelineMvp.jsx` (или новый `frontend/src/components/pipeline/ProductOwnerInputGatePanel.jsx`) — очередь файлов, шаги `Next/Prev`, `editedByPath`.
+- `frontend/src/components/HumanFormViewer.jsx` — для `form.json` (`kind: human-form`).
+- `frontend/src/utils/monacoTheme.js` — Monaco для не-form файлов.
+
+**Детали реализации**:
+```jsx
+const artifacts = gate.payload?.human_input_artifacts || [];
+const [editedByPath, setEditedByPath] = useState({});
+const allEdited = artifacts.every((a) => {
+  const next = editedByPath[a.path];
+  return next !== undefined && next !== (a.content || '');
+});
+
+<Button type="primary" disabled={!allEdited} onClick={submitInput}>Submit input</Button>
+```
+
+**Зависит от**: шаг 5
+
+**Проверка**:
+- Нельзя отправить input, пока не изменены все expected файлы.
+- Для `form.json` включается `validateHumanForm`, и незаполненные required блокируют submit.
+
+---
+
+### Шаг 7 — Тесты и контракт (сложность: medium)
+**Цель**: Закрепить behavior `skip-gates` и фронтовую навигацию.
+
+**Файлы**:
+- `backend/src/test/java/ru/hgd/sdlc/runtime/RuntimeRegressionFlowTest.java` — сценарии skip/не-skip по `allowed_roles`.
+- `backend/src/test/java/ru/hgd/sdlc/runtime/RuntimeApiContractTest.java` — контракт run response (если добавляем `skip_gates`).
+- `frontend/src/components/AppShell.jsx` (тест/ручной чек-лист) — проверка target menu-link по ролям.
+
+**Детали реализации**:
+```java
+assertThat(run.isSkipGates()).isTrue();
+assertThat(runtimeQueryService.findCurrentGate(runId)).isEmpty(); // для non-PO gate
+
+assertThat(getRunEntity(runId).getStatus()).isEqualTo(RunStatus.WAITING_GATE); // для PO gate
+```
+
+**Зависит от**: шаги 1-6
+
+**Проверка**:
 - `cd backend && ./gradlew test --tests ru.hgd.sdlc.runtime.RuntimeRegressionFlowTest`
-- Ручной e2e:
-  - AI выдаёт HTML с `<form>` -> HumanGate рендерит форму -> submit -> gate закрыт
-  - AI выдаёт markdown -> открывается текущий editor -> submit работает как раньше
+- `cd backend && ./gradlew test --tests ru.hgd.sdlc.runtime.RuntimeApiContractTest`
+- `cd frontend && npm run build`
 
 ---
 
@@ -178,21 +227,24 @@ const handleHtmlFormSubmit = async (form) => {
 
 | Риск | Вероятность | Воздействие | Способ снижения |
 |------|-------------|-------------|-----------------|
-| `requirements.md` отсутствует в репозитории | med | low | Опираться на явно подтверждённые требования из диалога |
-| Небезопасный HTML (скрипты/инъекции) | high | high | Санитизация HTML перед рендером + запрет inline-script |
-| Потеря части ответов (`checkbox[]`, повторяющиеся name) | med | med | Нормализовать `FormData`: scalar/array, покрыть ручными кейсами |
-| Required артефакт сочтётся “неизменённым” | med | high | На form submit всегда сериализовать ответы в новый текст и сравнивать с исходным контентом |
-| Неоднозначный UX двух submit-кнопок | high | med | Зафиксировать единый сценарий (auto-submit или two-step) и явно отразить в UI |
+| Неопределено правило для multi-role пользователей (`ADMIN` + `PRODUCT_OWNER`) | low | high | Зафиксировано: при наличии `ADMIN` использовать `#/run-launch`; покрыть тестом menu routing. |
+| Auto-skip нарушит обязательные переходы `on_submit/on_approve` | med | high | Делать skip через те же transition-ветки, что и ручное прохождение gate; проверить интеграционными тестами. |
+| Меню-ссылка изменится не только для Product Owner | low | med | Внести условие строго в `userRoles.includes('PRODUCT_OWNER')` и проверить роль-зависимые сценарии вручную. |
+| Пункт `4)` в запросе не задан | high | low | Считать как отсутствующее требование и не добавлять лишний scope без уточнения. |
 
 ## Критические точки
 
-Критическая точка — выбор единой семантики submit в HTML-режиме (автосабмит формы vs двухшаговый submit). Если не зафиксировать до реализации, появятся гонки и двойные отправки.
+- Критическая точка 1: синхронизировать правило multi-role для меню и `skip-gates` (при `ADMIN` не включать PO-flow без явного решения).
+- Критическая точка 2: корректный auto-skip для `human_input` (создание/фиксация артефактов + переход по `on_submit`).
+- Критическая точка 3: UX последовательного редактирования expected output в `ProductPipelineMvp`.
 
 ## Итоговые критерии готовности
 
-- [ ] `cd frontend && npm run build` — фронтенд собирается без ошибок
-- [ ] HTML-контент с `<form>` в `human_input` рендерится в `HumanGate`
-- [ ] Контейнер `HumanGate` перехватывает `submit` формы и извлекает ответы из `FormData`
-- [ ] При submit ответы сохраняются в артефакт, объявленный выходом `human_input` ноды (`produced_artifacts`), и отправляются через текущий `/gates/{gateId}/submit-input`
-- [ ] Markdown/text `human_input` работает без изменений
-- [ ] После submit происходит переход по `on_submit` и gate закрывается штатно
+- [ ] `cd backend && ./gradlew test` — backend тесты проходят.
+- [ ] `cd frontend && npm run build` — frontend собирается без ошибок.
+- [ ] Для `PRODUCT_OWNER` без `ADMIN` пункт меню `Run Launch` ведет на `#/product-pipeline`.
+- [ ] Для `admin` и остальных ролей пункт меню `Run Launch` ведет на `#/run-launch`.
+- [ ] В `runs` хранится флаг `skip_gates`, и он корректно выставляется при создании run.
+- [ ] Runtime при `skip_gates=true` пропускает human gates, кроме gates с `allowed_roles` включающим `PRODUCT_OWNER`.
+- [ ] `human_input` в pipeline требует редактирования всех expected output перед submit.
+- [ ] Для `form.json` рендерится форма, для остальных файлов используется Monaco editor.
