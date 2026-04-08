@@ -50,6 +50,7 @@ services:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
       - workspace_data:/tmp/workspace
+      - ${QWEN_HOME_HOST_PATH:-C:/Users/igor_/.qwen}:/home/app/.qwen:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null || exit 1"]
       interval: 15s

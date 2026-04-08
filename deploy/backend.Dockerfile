@@ -10,7 +10,7 @@ RUN sed -i 's/\r$//' ./gradlew && chmod +x ./gradlew && ./gradlew --no-daemon cl
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 
-ARG QWEN_CLI_VERSION=0.14.0
+ARG QWEN_CLI_VERSION=0.14.2
 ARG NODE_VERSION=22.22.2
 ENV DEBIAN_FRONTEND=noninteractive
 
