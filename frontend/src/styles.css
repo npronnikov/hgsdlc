@@ -4435,6 +4435,68 @@ body {
   margin-top: 4px;
 }
 
+.vp-inline-gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.vp-inline-gate-instructions {
+  font-size: 13px;
+  opacity: 0.75;
+  white-space: pre-wrap;
+}
+
+.vp-inline-gate-artifact-label {
+  font-size: 12px;
+  opacity: 0.6;
+  font-family: var(--font-mono, monospace);
+}
+
+.vp-inline-gate-textarea {
+  width: 100%;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+.vp-inline-gate-steps {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vp-inline-gate-step {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vp-inline-gate-step.is-current {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.vp-inline-gate-step.is-done {
+  opacity: 0.9;
+  background: rgba(79, 70, 229, 0.15);
+}
+
+.vp-inline-gate-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .vp-summary-list {
   margin: 0;
   padding-left: 18px;

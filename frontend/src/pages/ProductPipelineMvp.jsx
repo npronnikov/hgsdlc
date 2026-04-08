@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Select, Typography, message } from 'antd';
+import { Button, Input, Select, Space, Typography, message } from 'antd';
 import { ApartmentOutlined, AppstoreOutlined, CaretRightOutlined, CloseCircleFilled } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import { parse as parseYaml } from 'yaml';
 import { apiRequest } from '../api/request.js';
+import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -88,8 +88,187 @@ function buildFlowNodeMeta(flowYaml) {
   }
 }
 
+function encodeBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function ProductOwnerInputGatePanel({ gate, onDone }) {
+  const artifacts = gate?.payload?.human_input_artifacts || [];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [editedByPath, setEditedByPath] = useState({});
+  const [formsByPath, setFormsByPath] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const currentArtifact = artifacts[currentIndex] || null;
+  const currentPath = currentArtifact?.path || '';
+  const originalContent = currentArtifact?.content || '';
+  const currentValue = editedByPath[currentPath] !== undefined ? editedByPath[currentPath] : originalContent;
+  const parsedForm = isHumanForm(currentValue);
+
+  const allEdited = artifacts.length === 0 || artifacts.every((a) => editedByPath[a.path] !== undefined);
+  const formValidationError = (() => {
+    for (const a of artifacts) {
+      const val = editedByPath[a.path] !== undefined ? editedByPath[a.path] : (a.content || '');
+      const f = formsByPath[a.path] || isHumanForm(val);
+      if (f) {
+        const err = validateHumanForm(f);
+        if (err) return err;
+      }
+    }
+    return null;
+  })();
+
+  const canSubmit = allEdited && !formValidationError;
+
+  const handleTextChange = (value) => {
+    setEditedByPath((prev) => ({ ...prev, [currentPath]: value }));
+  };
+
+  const handleFormChange = (updatedForm) => {
+    const serialized = JSON.stringify(updatedForm, null, 2);
+    setEditedByPath((prev) => ({ ...prev, [currentPath]: serialized }));
+    setFormsByPath((prev) => ({ ...prev, [currentPath]: updatedForm }));
+  };
+
+  const submitInput = async () => {
+    if (!gate || !canSubmit) return;
+    setSubmitting(true);
+    try {
+      const artifactPayload = artifacts.map((a) => ({
+        artifact_key: a.artifact_key,
+        path: a.path,
+        scope: a.scope || 'run',
+        content_base64: encodeBase64Utf8(editedByPath[a.path] !== undefined ? editedByPath[a.path] : (a.content || '')),
+      }));
+      await apiRequest(`/gates/${gate.gate_id}/submit-input`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expected_gate_version: gate.resource_version,
+          artifacts: artifactPayload,
+          comment: 'submitted from product pipeline',
+        }),
+      });
+      message.success('Input submitted');
+      onDone();
+    } catch (err) {
+      message.error(err?.message || 'Failed to submit input');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (artifacts.length === 0) {
+    return (
+      <div className="vp-inline-gate-panel">
+        <Button type="primary" loading={submitting} onClick={submitInput}>Submit input</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vp-inline-gate-panel">
+      {gate?.payload?.user_instructions && (
+        <div className="vp-inline-gate-instructions">{gate.payload.user_instructions}</div>
+      )}
+      {artifacts.length > 1 && (
+        <div className="vp-inline-gate-steps">
+          {artifacts.map((a, idx) => (
+            <button
+              key={a.path}
+              type="button"
+              className={`vp-inline-gate-step ${idx === currentIndex ? 'is-current' : ''} ${editedByPath[a.path] !== undefined ? 'is-done' : ''}`}
+              onClick={() => setCurrentIndex(idx)}
+            >
+              {idx + 1}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="vp-inline-gate-artifact-label">{currentPath}</div>
+      {parsedForm ? (
+        <HumanFormViewer
+          formJson={currentValue}
+          onChange={handleFormChange}
+        />
+      ) : (
+        <Input.TextArea
+          value={currentValue}
+          onChange={(e) => handleTextChange(e.target.value)}
+          autoSize={{ minRows: 4, maxRows: 10 }}
+          className="vp-inline-gate-textarea"
+        />
+      )}
+      <Space className="vp-inline-gate-actions">
+        {currentIndex > 0 && (
+          <Button onClick={() => setCurrentIndex((i) => i - 1)}>Prev</Button>
+        )}
+        {currentIndex < artifacts.length - 1 && (
+          <Button type="default" onClick={() => setCurrentIndex((i) => i + 1)}>Next</Button>
+        )}
+        {currentIndex === artifacts.length - 1 && (
+          <Button
+            type="primary"
+            disabled={!canSubmit}
+            loading={submitting}
+            onClick={submitInput}
+            title={formValidationError || (!allEdited ? 'Edit all artifacts first' : undefined)}
+          >
+            Submit input
+          </Button>
+        )}
+      </Space>
+    </div>
+  );
+}
+
+function ProductOwnerApprovalGatePanel({ gate, onDone }) {
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const approve = async () => {
+    if (!gate) return;
+    setSubmitting(true);
+    try {
+      await apiRequest(`/gates/${gate.gate_id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expected_gate_version: gate.resource_version,
+          comment,
+          reviewed_artifact_version_ids: [],
+        }),
+      });
+      message.success('Approved');
+      onDone();
+    } catch (err) {
+      message.error(err?.message || 'Failed to approve');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="vp-inline-gate-panel">
+      {gate?.payload?.user_instructions && (
+        <div className="vp-inline-gate-instructions">{gate.payload.user_instructions}</div>
+      )}
+      <Input.TextArea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Comment (optional)"
+        autoSize={{ minRows: 2, maxRows: 4 }}
+        className="vp-inline-gate-textarea"
+      />
+      <div className="vp-inline-gate-actions">
+        <Button type="primary" loading={submitting} onClick={approve}>Approve</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductPipelineMvp() {
-  const navigate = useNavigate();
   const shellRef = useRef(null);
   const composerRef = useRef(null);
   const launchAttemptRef = useRef(0);
@@ -526,14 +705,6 @@ export default function ProductPipelineMvp() {
     return () => window.clearInterval(timerId);
   }, [activeRunId, hasHumanGate, isStageVisible]);
 
-  const openHumanGate = () => {
-    if (!currentGate || !activeRunId) {
-      return;
-    }
-    const gatePath = currentGate.gate_kind === 'human_input' ? '/gate-input' : '/gate-approval';
-    navigate(`${gatePath}?runId=${activeRunId}&gateId=${currentGate.gate_id}&gateKind=${currentGate.gate_kind}`);
-  };
-
   const renderStageSkeleton = (title, dynamicText) => (
     <div className="vp-center-panel vp-center-panel-skeleton">
       <Text className="vp-stage-kicker">Pipeline status</Text>
@@ -565,10 +736,17 @@ export default function ProductPipelineMvp() {
           </Text>
         </div>
 
-        {hasHumanGate && (
-          <div className="vp-actions-row">
-            <Button type="primary" onClick={openHumanGate}>Перейти</Button>
-          </div>
+        {hasHumanGate && currentGate.gate_kind === 'human_input' && (
+          <ProductOwnerInputGatePanel
+            gate={currentGate}
+            onDone={() => loadRunRuntime(activeRunId)}
+          />
+        )}
+        {hasHumanGate && currentGate.gate_kind === 'human_approval' && (
+          <ProductOwnerApprovalGatePanel
+            gate={currentGate}
+            onDone={() => loadRunRuntime(activeRunId)}
+          />
         )}
       </div>
     );

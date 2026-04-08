@@ -104,6 +104,10 @@ public class RunEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "skip_gates", nullable = false)
+    @Builder.Default
+    private boolean skipGates = false;
+
     @Column(name = "created_by", nullable = false, length = 128)
     private String createdBy;
 

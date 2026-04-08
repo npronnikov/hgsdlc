@@ -16,6 +16,6 @@ public class HumanApprovalNodeExecutor implements NodeExecutor {
 
     @Override
     public boolean execute(RunStepService stepService, RunEntity run, NodeModel node, NodeExecutionEntity execution) {
-        return stepService.openGate(run, node, execution, GateKind.HUMAN_APPROVAL, GateStatus.AWAITING_DECISION);
+        return stepService.skipOrOpenGate(run, node, execution, GateKind.HUMAN_APPROVAL, GateStatus.AWAITING_DECISION);
     }
 }

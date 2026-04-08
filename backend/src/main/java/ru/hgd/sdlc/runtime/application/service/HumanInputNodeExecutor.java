@@ -16,6 +16,6 @@ public class HumanInputNodeExecutor implements NodeExecutor {
 
     @Override
     public boolean execute(RunStepService stepService, RunEntity run, NodeModel node, NodeExecutionEntity execution) {
-        return stepService.openGate(run, node, execution, GateKind.HUMAN_INPUT, GateStatus.AWAITING_INPUT);
+        return stepService.skipOrOpenGate(run, node, execution, GateKind.HUMAN_INPUT, GateStatus.AWAITING_INPUT);
     }
 }

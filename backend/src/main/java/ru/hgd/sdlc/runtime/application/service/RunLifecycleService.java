@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
@@ -160,7 +161,8 @@ public class RunLifecycleService {
                 toJson(manifestEntries),
                 runWorkspaceRoot.toString(),
                 identityPort.resolveActorId(user),
-                clockPort.now()
+                clockPort.now(),
+                resolveSkipGates(user)
         );
     }
 
@@ -755,6 +757,10 @@ public class RunLifecycleService {
         } catch (IOException ex) {
             log.warn("Failed to update git exclude for runtime metadata at {}", excludePath, ex);
         }
+    }
+
+    private boolean resolveSkipGates(User user) {
+        return user != null && user.hasRole(Role.PRODUCT_OWNER);
     }
 
     private String normalizeBranch(String branch) {

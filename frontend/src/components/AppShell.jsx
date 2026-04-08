@@ -24,16 +24,19 @@ import { apiRequest } from '../api/request.js';
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-const BASE_NAV_ITEMS = [
-  { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
-  { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
-  { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
-  { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
-  { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
-  { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
-];
+function buildNavItems(userRoles) {
+  const isProductOwnerOnly = userRoles.includes('PRODUCT_OWNER') && !userRoles.includes('ADMIN');
+  return [
+    { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
+    { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
+    { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
+    { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
+    { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
+    { key: isProductOwnerOnly ? '/product-pipeline' : '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
+    { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
+    { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
+  ];
+}
 
 const NAV_ITEM_ALLOWED_ROLES = {
   '/rules': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
@@ -126,7 +129,7 @@ export default function AppShell() {
   const [pipelineRunsLoading, setPipelineRunsLoading] = useState(false);
   const userRoles = user?.roles || [];
   const navItems = [
-    ...BASE_NAV_ITEMS.filter((item) => {
+    ...buildNavItems(userRoles).filter((item) => {
       const allowedRoles = NAV_ITEM_ALLOWED_ROLES[item.key];
       if (!allowedRoles) {
         return true;
