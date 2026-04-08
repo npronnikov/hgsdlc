@@ -170,11 +170,12 @@ export default function Settings() {
             label="Runtime coding agent"
             name="coding_agent"
             rules={[{ required: true, message: 'Select coding agent' }]}
-            extra="Selected coding_agent must match the flow coding_agent. Currently real execution is implemented only for qwen."
+            extra="Selected coding_agent must match the flow coding_agent."
           >
             <Select
               options={[
                 { value: 'qwen', label: 'qwen' },
+                { value: 'gigacode', label: 'gigacode' },
                 { value: 'claude', label: 'claude' },
               ]}
             />

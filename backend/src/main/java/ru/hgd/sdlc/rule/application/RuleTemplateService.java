@@ -50,6 +50,7 @@ public class RuleTemplateService {
     private Map<RuleProvider, List<String>> buildRequiredFrontmatter() {
         Map<RuleProvider, List<String>> required = new EnumMap<>(RuleProvider.class);
         required.put(RuleProvider.QWEN, List.of());
+        required.put(RuleProvider.GIGACODE, List.of());
         required.put(RuleProvider.CLAUDE, List.of());
         return required;
     }

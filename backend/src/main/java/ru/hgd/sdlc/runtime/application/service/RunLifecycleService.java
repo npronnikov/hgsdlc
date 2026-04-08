@@ -712,6 +712,7 @@ public class RunLifecycleService {
                     ".hgsdlc/nodes/**/prompt.md",
                     ".hgsdlc/nodes/**/step-summary.json",
                     ".qwen/",
+                    ".gigacode/",
                     ".claude/",
                     ".cursor/"
             ));
