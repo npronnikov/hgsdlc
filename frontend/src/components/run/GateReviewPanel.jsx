@@ -25,6 +25,13 @@ export function GateReviewPanel({ runId, gate, gates = [], onDecision, onRefresh
     loadChanges,
   } = changesHook;
 
+  const contextNodeIds = useMemo(() => {
+    const artifacts = gate?.payload?.execution_context_artifacts;
+    if (!Array.isArray(artifacts) || artifacts.length === 0) return null;
+    const ids = artifacts.map((a) => a.source_node_id).filter(Boolean);
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [gate?.payload?.execution_context_artifacts]);
+
   const reviewHook = useGateReview(gate, { onDecision, onRefresh });
   const {
     approveComment, setApproveComment,
@@ -40,8 +47,16 @@ export function GateReviewPanel({ runId, gate, gates = [], onDecision, onRefresh
   useEffect(() => {
     if (gateId) loadChanges().then((data) => {
       if (data && !selectedPath) {
-        const first = (data.git_changes || [])[0]?.path || '';
-        setSelectedPath(first);
+        const allChanges = data.git_changes || [];
+        let best = allChanges[0]?.path || '';
+        if (contextNodeIds) {
+          const match = allChanges.find((c) => {
+            const m = normalizePath(c.path).match(/^\.hgsdlc\/nodes\/([^/]+)\//);
+            return m && contextNodeIds.has(m[1]);
+          });
+          if (match) best = match.path;
+        }
+        setSelectedPath(best);
       }
     });
   }, [gateId]);

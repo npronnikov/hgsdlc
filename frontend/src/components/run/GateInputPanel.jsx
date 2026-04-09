@@ -21,30 +21,38 @@ export function GateInputPanel({ gate, onSubmitted }) {
         <span>Input Required</span>
         <Tag>{gate?.node_id}</Tag>
       </div>
-      {gate?.payload?.user_instructions && (
-        <div className="gate-input-instructions">{gate.payload.user_instructions}</div>
-      )}
-      {editableArtifacts.map((artifact) => {
-        const content = editedByPath[artifact.path] ?? artifact.content ?? '';
-        const formJson = isHumanForm(content);
-        return (
-          <div key={artifact.path} className="gate-input-artifact">
-            <div className="gate-input-artifact-path">{artifact.path}</div>
-            {formJson
-              ? <HumanFormViewer form={formJson} onChange={(v) => updateArtifact(artifact.path, v)} />
-              : (
-                <Editor
-                  height={300}
-                  language="markdown"
-                  theme={monacoTheme}
-                  value={content}
-                  onChange={(v) => updateArtifact(artifact.path, v ?? '')}
-                  options={{ minimap: { enabled: false }, wordWrap: 'on' }}
-                />
-              )}
-          </div>
-        );
-      })}
+      <div className="gate-input-body">
+        {gate?.payload?.user_instructions && (
+          <div className="gate-input-instructions">{gate.payload.user_instructions}</div>
+        )}
+        {editableArtifacts.map((artifact) => {
+          const content = editedByPath[artifact.path] ?? artifact.content ?? '';
+          const formJson = isHumanForm(content);
+          return (
+            <div key={artifact.path} className="gate-input-artifact">
+              <div className="gate-input-artifact-path">{artifact.path}</div>
+              {formJson
+                ? (
+                  <div className="gate-input-form-wrap">
+                    <HumanFormViewer formJson={formJson} onChange={(v) => updateArtifact(artifact.path, v)} />
+                  </div>
+                )
+                : (
+                  <div className="gate-input-editor-wrap">
+                    <Editor
+                      height="100%"
+                      language="markdown"
+                      theme={monacoTheme}
+                      value={content}
+                      onChange={(v) => updateArtifact(artifact.path, v ?? '')}
+                      options={{ minimap: { enabled: false }, wordWrap: 'on' }}
+                    />
+                  </div>
+                )}
+            </div>
+          );
+        })}
+      </div>
       <div className="gate-input-footer">
         <Button type="primary" loading={submitting} onClick={submitInput}>
           Submit
