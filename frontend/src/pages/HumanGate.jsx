@@ -329,6 +329,10 @@ export default function HumanGate() {
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const useRenderedMarkdownPreview = isApproval && selectedLanguage === 'markdown';
+  const showFloatingDiffModeControl = isApproval
+    && !selectedIsEditable
+    && !selectedIsBinary
+    && (!useRenderedMarkdownPreview || markdownViewTab === 'diff');
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
   const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;
   const currentEditableContent = selectedEditable
@@ -861,18 +865,6 @@ export default function HumanGate() {
                       ]}
                     />
                   )}
-                  {isApproval && !selectedIsEditable && (
-                    <Segmented
-                      size="small"
-                      value={diffMode}
-                      onChange={setDiffMode}
-                      options={[
-                        { label: 'Split', value: 'side-by-side' },
-                        { label: 'Unified', value: 'unified' },
-                        { label: 'Patch', value: 'patch' },
-                      ]}
-                    />
-                  )}
                   <Checkbox
                     checked={viewedFiles.has(selectedPath)}
                     onChange={() => toggleViewed(selectedPath)}
@@ -885,6 +877,20 @@ export default function HumanGate() {
             loading={loadingDiff}
           >
             <div className="human-gate-view-body">
+              {showFloatingDiffModeControl && (
+                <div className="human-gate-diff-mode-floating">
+                  <Segmented
+                    size="small"
+                    value={diffMode}
+                    onChange={setDiffMode}
+                    options={[
+                      { label: 'Split', value: 'side-by-side' },
+                      { label: 'Unified', value: 'unified' },
+                      { label: 'Patch', value: 'patch' },
+                    ]}
+                  />
+                </div>
+              )}
               {selectedIsBinary ? (
                 <div className="hg-binary-placeholder">
                   <Text type="secondary">Binary file changed. Cannot display diff.</Text>
@@ -992,8 +998,8 @@ export default function HumanGate() {
                         className="human-gate-markdown-fullscreen-toggle"
                         role="button"
                         tabIndex={0}
-                        title={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
-                        aria-label={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
+                        title={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                        aria-label={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         onClick={togglePreviewFullscreen}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {

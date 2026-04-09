@@ -834,6 +834,43 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: start;
+}
+
+.runtime-settings-card {
+  height: calc(100vh - 170px);
+  height: calc(100dvh - 170px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.runtime-settings-card .ant-card-head {
+  flex: 0 0 auto;
+}
+
+.runtime-settings-card .ant-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.catalog-settings-card {
+  height: calc(100vh - 170px);
+  height: calc(100dvh - 170px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.catalog-settings-card .ant-card-head {
+  flex: 0 0 auto;
+}
+
+.catalog-settings-card .ant-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .catalog-settings-grid {
@@ -2912,6 +2949,20 @@ body {
   .settings-layout {
     grid-template-columns: 1fr;
   }
+  .runtime-settings-card {
+    height: auto;
+    display: block;
+  }
+  .runtime-settings-card .ant-card-body {
+    overflow: visible;
+  }
+  .catalog-settings-card {
+    height: auto;
+    display: block;
+  }
+  .catalog-settings-card .ant-card-body {
+    overflow: visible;
+  }
   .catalog-settings-grid {
     grid-template-columns: 1fr;
   }
@@ -3379,6 +3430,20 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.human-gate-diff-mode-floating {
+  position: absolute;
+  top: 8px;
+  right: 72px;
+  z-index: 4;
+}
+
+.human-gate-diff-mode-floating .ant-segmented {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(2px);
 }
 
 .human-gate-fill-pane {

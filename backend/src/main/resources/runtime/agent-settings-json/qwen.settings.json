@@ -1,0 +1,65 @@
+{
+  "general": {
+    "preferredEditor": "code",
+    "vimMode": true,
+    "gitCoAuthor": false,
+    "enableAutoUpdate": true
+  },
+  "ui": {
+    "theme": "GitHub",
+    "hideTips": false
+  },
+  "tools": {
+    "approvalMode": "default",
+    "shell": {
+      "enableInteractiveShell": true
+    },
+    "core": [
+      "read_file",
+      "write_file",
+      "run_shell_command(git status)",
+      "run_shell_command(git diff)",
+      "run_shell_command(npm test)"
+    ],
+    "allowed": [
+      "run_shell_command(git status)",
+      "run_shell_command(git diff)"
+    ],
+    "exclude": [
+      "run_shell_command(rm -rf)",
+      "run_shell_command(curl *)"
+    ]
+  },
+  "context": {
+    "fileName": ["QWEN.md"],
+    "includeDirectories": []
+  },
+  "model": {
+    "name": "qwen3-coder-plus",
+    "maxSessionTurns": -1
+  },
+  "mcp": {
+    "allowed": ["github", "filesystem"],
+    "excluded": ["experimental"]
+  },
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "trust": false,
+      "description": "GitHub MCP server"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "trust": false,
+      "description": "Filesystem MCP server for current project"
+    }
+  },
+  "advanced": {
+    "excludedEnvVars": ["DEBUG", "DEBUG_MODE", "NODE_ENV"]
+  }
+}

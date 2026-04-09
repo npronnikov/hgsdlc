@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
+import { Layout, Menu, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   ApartmentOutlined,
   AuditOutlined,
@@ -365,7 +365,6 @@ export default function AppShell() {
             </div>
           </Space>
           <Space size="middle" className="hg-header-actions">
-            <Input placeholder="Search" allowClear />
             <span className="theme-toggle-wrap">
               <Button
                 type="text"
