@@ -1,0 +1,28 @@
+entity_type: flow
+id: restore-architecture-java-flow
+version: "1.0"
+canonical_name: restore-architecture-java-flow@1.0
+display_name: "Восстановление архитектурной документации (Java/C4)"
+description: >
+  Анализирует Java/Spring Boot проект и формирует архитектурную документацию
+  в модели C4 с диаграммами Mermaid (Context, Container, Component).
+  Человек проверяет результат и подтверждает или запрашивает доработки.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - architecture
+  - c4
+  - documentation
+flow_kind: analysis
+risk_level: low
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "flows/restore-architecture-java-flow/1.0"
+lifecycle_status: active
+checksum: "ef27c65ee02a43ba5304c75faccdf8d88643b2df59c30d52662ee1193502e778"

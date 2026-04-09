@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
+import { Layout, Menu, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   ApartmentOutlined,
   AuditOutlined,
@@ -24,16 +24,19 @@ import { apiRequest } from '../api/request.js';
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-const BASE_NAV_ITEMS = [
-  { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
-  { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
-  { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
-  { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
-  { key: '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
-  { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
-];
+function buildNavItems(userRoles) {
+  const isProductOwnerOnly = userRoles.includes('PRODUCT_OWNER') && !userRoles.includes('ADMIN');
+  return [
+    { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
+    { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
+    { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
+    { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
+    { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
+    { key: isProductOwnerOnly ? '/product-pipeline' : '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
+    { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
+    { key: '/settings', icon: <SettingOutlined />, label: 'Runtime Settings' },
+  ];
+}
 
 const NAV_ITEM_ALLOWED_ROLES = {
   '/rules': ['ADMIN', 'FLOW_CONFIGURATOR', 'TECH_APPROVER'],
@@ -125,8 +128,9 @@ export default function AppShell() {
   const [pipelineProjects, setPipelineProjects] = useState([]);
   const [pipelineRunsLoading, setPipelineRunsLoading] = useState(false);
   const userRoles = user?.roles || [];
+  const isProductOwnerOnly = userRoles.includes('PRODUCT_OWNER') && !userRoles.includes('ADMIN');
   const navItems = [
-    ...BASE_NAV_ITEMS.filter((item) => {
+    ...buildNavItems(userRoles).filter((item) => {
       const allowedRoles = NAV_ITEM_ALLOWED_ROLES[item.key];
       if (!allowedRoles) {
         return true;
@@ -267,7 +271,8 @@ export default function AppShell() {
                 const status = run?.status || 'unknown';
                 const tone = resolveRunStatusTone(status);
                 const statusLabel = formatRunStatusLabel(status);
-                const title = projectNameById.get(run?.project_id) || run?.project_id || run?.flow_canonical_name || runId;
+                const projectTitle = projectNameById.get(run?.project_id) || run?.project_id || '—';
+                const flowTitle = run?.flow_canonical_name || 'Flow unavailable';
                 const startedTime = formatRunStartedTime(run?.created_at);
                 const indicatorTone = resolveRunIndicatorTone(tone);
                 return (
@@ -275,10 +280,15 @@ export default function AppShell() {
                     key={runId}
                     type="button"
                     className={`pipeline-run-item ${selectedPipelineRunId === runId ? 'is-active' : ''}`}
-                    onClick={() => navigate(`/run-console?runId=${encodeURIComponent(runId)}`)}
+                    onClick={() => navigate(
+                      isProductOwnerOnly
+                        ? `/product-pipeline?runId=${encodeURIComponent(runId)}`
+                        : `/run-console?runId=${encodeURIComponent(runId)}`
+                    )}
                   >
                     <span className="pipeline-run-main">
-                      <span className="pipeline-run-title" title={title}>{title}</span>
+                      <span className="pipeline-run-title" title={projectTitle}>{projectTitle}</span>
+                      <span className="pipeline-run-flow mono" title={flowTitle}>{flowTitle}</span>
                       <span className="pipeline-run-meta">{statusLabel} · {startedTime}</span>
                     </span>
                     <span className={`pipeline-run-indicator is-${indicatorTone}`} />
@@ -289,7 +299,7 @@ export default function AppShell() {
             <button
               type="button"
               className="pipeline-run-item pipeline-run-item-show-all"
-              onClick={() => navigate('/run-console')}
+              onClick={() => navigate(isProductOwnerOnly ? '/product-pipeline' : '/run-console')}
             >
               <span className="pipeline-run-main">
                 <span className="pipeline-run-title">Show All</span>
@@ -355,7 +365,6 @@ export default function AppShell() {
             </div>
           </Space>
           <Space size="middle" className="hg-header-actions">
-            <Input placeholder="Search" allowClear />
             <span className="theme-toggle-wrap">
               <Button
                 type="text"

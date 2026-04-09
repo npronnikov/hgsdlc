@@ -261,18 +261,6 @@ export function FlowMetaPanel({ editor }) {
             onChange={(checked) => updateFlowMeta({ failOnMissingExpectedMutation: checked })}
           />
         </div>
-        <div>
-          <Text className="muted">Response schema (optional)</Text>
-          <div className="field-control">
-            <Input.TextArea
-              rows={6}
-              value={flowMeta.responseSchema}
-              placeholder="YAML/JSON schema"
-              disabled={isReadOnly}
-              onChange={(event) => updateFlowMeta({ responseSchema: event.target.value })}
-            />
-          </div>
-        </div>
       </div>
     </Card>
   );

@@ -16,6 +16,7 @@ import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.skill.domain.SkillFileEntity;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
@@ -30,6 +31,7 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
     private final AgentPromptBuilder agentPromptBuilder;
     private final CatalogContentResolver catalogContentResolver;
     private final WorkspacePort workspacePort;
+    private final SettingsService settingsService;
 
     ClaudeCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
@@ -38,7 +40,8 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
             RuntimeStepTxService runtimeStepTxService,
             AgentPromptBuilder agentPromptBuilder,
             CatalogContentResolver catalogContentResolver,
-            WorkspacePort workspacePort
+            WorkspacePort workspacePort,
+            SettingsService settingsService
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
@@ -47,6 +50,7 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         this.agentPromptBuilder = agentPromptBuilder;
         this.catalogContentResolver = catalogContentResolver;
         this.workspacePort = workspacePort;
+        this.settingsService = settingsService;
     }
 
     @Override
@@ -132,12 +136,8 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
 
-        List<String> command = List.of(
-                "claude",
-                "--dangerously-skip-permissions",
-                "--output-format", "stream-json",
-                "-p", promptPackage.prompt()
-        );
+        String launchCommand = resolveLaunchCommand(promptPackage.prompt(), promptPath);
+        List<String> command = List.of("bash", "-lc", launchCommand);
 
         return new AgentInvocationContext(
                 projectRoot,
@@ -277,5 +277,19 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to clean directory: " + directory);
         }
+    }
+
+    private String resolveLaunchCommand(String prompt, Path promptPath) {
+        String template = settingsService.getRuntimeAgentLaunchCommand(codingAgent());
+        return template
+                .replace("{{PROMPT_FILE}}", shellQuote(promptPath == null ? "" : promptPath.toString()))
+                .replace("{{PROMPT}}", shellQuote(prompt));
+    }
+
+    private String shellQuote(String value) {
+        if (value == null) {
+            return "''";
+        }
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 }

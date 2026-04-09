@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -58,6 +59,13 @@ public class ProjectController {
     @PostMapping("/{projectId}/archive")
     public ProjectResponse archive(@PathVariable UUID projectId) {
         return ProjectResponse.from(projectService.archive(projectId));
+    }
+
+    @DeleteMapping("/{projectId}")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR','PRODUCT_OWNER')")
+    public ResponseEntity<Void> delete(@PathVariable UUID projectId) {
+        projectService.delete(projectId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{projectId}/runs")

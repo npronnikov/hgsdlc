@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
@@ -160,7 +161,8 @@ public class RunLifecycleService {
                 toJson(manifestEntries),
                 runWorkspaceRoot.toString(),
                 identityPort.resolveActorId(user),
-                clockPort.now()
+                clockPort.now(),
+                resolveSkipGates(user)
         );
     }
 
@@ -289,6 +291,7 @@ public class RunLifecycleService {
                 run.getFeatureRequest(),
                 parseContextManifestEntries(run.getContextFileManifestJson())
         );
+        materializeAgentSettingsJson(run, projectRoot);
 
         runtimeStepTxService.appendAudit(
                 run.getId(),
@@ -301,6 +304,33 @@ public class RunLifecycleService {
                         "workspace_root", runWorkspaceRoot.toString(),
                         "project_root", projectRoot.toString(),
                         "run_scope_root", runScopeRoot.toString()
+                )
+        );
+    }
+
+    private void materializeAgentSettingsJson(RunEntity run, Path projectRoot) {
+        String codingAgent = resolveRunCodingAgent(run);
+        if (!"qwen".equals(codingAgent) && !"claude".equals(codingAgent)) {
+            return;
+        }
+        if (!settingsService.isRuntimeAgentSettingsJsonEnabled(codingAgent)) {
+            return;
+        }
+        String settingsJson = settingsService.getRuntimeAgentSettingsJson(codingAgent);
+        Path agentConfigRoot = projectRoot.resolve("." + codingAgent);
+        Path settingsJsonPath = agentConfigRoot.resolve("settings.json");
+        createDirectories(agentConfigRoot);
+        writeFile(settingsJsonPath, settingsJson.getBytes(StandardCharsets.UTF_8));
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                null,
+                null,
+                "agent_settings_json_materialized",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "coding_agent", codingAgent,
+                        "path", settingsJsonPath.toString()
                 )
         );
     }
@@ -758,6 +788,14 @@ public class RunLifecycleService {
         }
     }
 
+    private boolean resolveSkipGates(User user) {
+        if (user == null) {
+            return false;
+        }
+        var effectiveRoles = user.getEffectiveRoles();
+        return effectiveRoles.size() == 1 && effectiveRoles.contains(Role.PRODUCT_OWNER);
+    }
+
     private String normalizeBranch(String branch) {
         String normalized = trimToNull(branch);
         if (normalized == null) {
@@ -801,6 +839,29 @@ public class RunLifecycleService {
             throw new ValidationException("work_branch must differ from target_branch");
         }
         return resolved;
+    }
+
+    private String resolveRunCodingAgent(RunEntity run) {
+        String flowJson = trimToNull(run.getFlowSnapshotJson());
+        if (flowJson != null) {
+            try {
+                Map<?, ?> flow = objectMapper.readValue(flowJson, Map.class);
+                Object value = flow.get("coding_agent");
+                if (value instanceof String codingAgentValue) {
+                    String normalized = normalize(codingAgentValue);
+                    if (!normalized.isBlank()) {
+                        return normalized;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fallback to current runtime setting.
+            }
+        }
+        String runtimeCodingAgent = normalize(settingsService.getRuntimeCodingAgent());
+        if (!runtimeCodingAgent.isBlank()) {
+            return runtimeCodingAgent;
+        }
+        return "qwen";
     }
 
     private String toJson(Object value) {

@@ -9,11 +9,21 @@ RUN chmod +x ./gradlew && ./gradlew --no-daemon clean bootJar
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 
-ARG QWEN_CLI_VERSION=0.0.17
+ARG QWEN_CLI_VERSION=0.14.0
+ARG NODE_VERSION=23.5.0
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl nodejs npm \
+    && apt-get install -y --no-install-recommends ca-certificates curl bash git xz-utils \
+    && arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+        amd64) node_arch='x64' ;; \
+        arm64) node_arch='arm64' ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
+    && tar -xJf "node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
+    && rm -f "node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
     && npm install -g "@qwen-code/qwen-code@${QWEN_CLI_VERSION}" \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*

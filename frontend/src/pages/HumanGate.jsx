@@ -25,6 +25,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
 import MarkdownPreview from '../components/MarkdownPreview.jsx';
+import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
@@ -95,9 +96,22 @@ function matchesEditablePath(gitPath, editablePath) {
   if (!gitPath || !editablePath) {
     return false;
   }
-  const g = String(gitPath).replaceAll('\\', '/');
-  const e = String(editablePath).replaceAll('\\', '/');
+  const g = normalizePath(gitPath).replace(/^\.\/+/, '');
+  const e = normalizePath(editablePath).replace(/^\.\/+/, '');
   return g === e || g.endsWith(`/${e}`);
+}
+
+function matchesAnyEditablePath(gitPath, editablePaths) {
+  if (!gitPath || !Array.isArray(editablePaths) || editablePaths.length === 0) {
+    return false;
+  }
+  return editablePaths.some((editablePath) => (
+    matchesEditablePath(gitPath, editablePath) || matchesEditablePath(editablePath, gitPath)
+  ));
+}
+
+function artifactEditablePath(artifact) {
+  return artifact?.workspace_path || artifact?.path || '';
 }
 
 function detectLanguage(path) {
@@ -247,8 +261,18 @@ export default function HumanGate() {
   const canSubmitRework = hasAnyReworkRequests || hasManualReworkInstruction;
   const userInstructions = gate?.payload?.user_instructions || '';
   const editableArtifacts = Array.isArray(gate?.payload?.human_input_artifacts) ? gate.payload.human_input_artifacts : [];
+  const editablePaths = useMemo(
+    () => editableArtifacts.map((artifact) => artifactEditablePath(artifact)).filter(Boolean),
+    [editableArtifacts],
+  );
 
-  const filteredChanges = useMemo(() => (changes || []).filter((item) => item.path), [changes]);
+  const filteredChanges = useMemo(() => {
+    const list = (changes || []).filter((item) => item.path);
+    if (!isInput) {
+      return list;
+    }
+    return list.filter((item) => matchesAnyEditablePath(item.path, editablePaths));
+  }, [changes, editablePaths, isInput]);
   const viewFiles = useMemo(() => filteredChanges.map((item) => item.path), [filteredChanges]);
   const treeData = useMemo(() => buildTree(filteredChanges), [filteredChanges]);
 
@@ -289,13 +313,9 @@ export default function HumanGate() {
     if (!isInput || !selectedPath) {
       return null;
     }
-    const selectedNormalized = normalizePath(selectedPath);
     return editableArtifacts.find((artifact) => {
-      const workspacePath = artifact?.workspace_path;
-      if (!workspacePath) {
-        return false;
-      }
-      return normalizePath(workspacePath) === selectedNormalized;
+      const artifactPath = artifactEditablePath(artifact);
+      return matchesAnyEditablePath(selectedPath, [artifactPath]);
     }) || null;
   }, [editableArtifacts, isInput, selectedPath]);
   const selectedGitChange = useMemo(() => {
@@ -309,11 +329,16 @@ export default function HumanGate() {
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const useRenderedMarkdownPreview = isApproval && selectedLanguage === 'markdown';
+  const showFloatingDiffModeControl = isApproval
+    && !selectedIsEditable
+    && !selectedIsBinary
+    && (!useRenderedMarkdownPreview || markdownViewTab === 'diff');
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
   const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;
   const currentEditableContent = selectedEditable
     ? (editedByPath[selectedEditable.path] ?? selectedEditable.content ?? '')
     : '';
+  const currentEditableFormJson = isHumanForm(currentEditableContent);
 
   const refresh = async () => {
     if (!runId || !gateId) {
@@ -348,6 +373,19 @@ export default function HumanGate() {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, gateId]);
+
+  useEffect(() => {
+    if (viewFiles.length === 0) {
+      if (selectedPath) {
+        setSelectedPath('');
+      }
+      return;
+    }
+    const selectedExists = viewFiles.some((path) => normalizePath(path) === normalizePath(selectedPath));
+    if (!selectedExists) {
+      setSelectedPath(viewFiles[0]);
+    }
+  }, [selectedPath, viewFiles]);
 
   useEffect(() => {
     const loadDiff = async () => {
@@ -641,6 +679,13 @@ export default function HumanGate() {
       message.warning('No editable artifacts changed');
       return;
     }
+    for (const { content } of changedArtifacts) {
+      const formError = validateHumanForm(isHumanForm(content));
+      if (formError) {
+        message.warning(formError);
+        return;
+      }
+    }
     setSubmitting('submit');
     try {
       await apiRequest(`/gates/${gate.gate_id}/submit-input`, {
@@ -765,9 +810,7 @@ export default function HumanGate() {
                   setSelectedPath(String(info?.node?.path || keys[0] || ''));
                 }}
                 titleRender={(node) => {
-                  const editable = node.isLeaf && editableArtifacts.some(
-                    (a) => a?.workspace_path && normalizePath(a.workspace_path) === normalizePath(node.path)
-                  );
+                  const editable = node.isLeaf && matchesAnyEditablePath(node.path, editablePaths);
                   const ch = node.change;
                   const statusKey = String(ch?.status || '').toLowerCase();
                   const statusLabel = STATUS_LABELS[statusKey];
@@ -822,18 +865,6 @@ export default function HumanGate() {
                       ]}
                     />
                   )}
-                  {isApproval && !selectedIsEditable && (
-                    <Segmented
-                      size="small"
-                      value={diffMode}
-                      onChange={setDiffMode}
-                      options={[
-                        { label: 'Split', value: 'side-by-side' },
-                        { label: 'Unified', value: 'unified' },
-                        { label: 'Patch', value: 'patch' },
-                      ]}
-                    />
-                  )}
                   <Checkbox
                     checked={viewedFiles.has(selectedPath)}
                     onChange={() => toggleViewed(selectedPath)}
@@ -846,9 +877,33 @@ export default function HumanGate() {
             loading={loadingDiff}
           >
             <div className="human-gate-view-body">
+              {showFloatingDiffModeControl && (
+                <div className="human-gate-diff-mode-floating">
+                  <Segmented
+                    size="small"
+                    value={diffMode}
+                    onChange={setDiffMode}
+                    options={[
+                      { label: 'Split', value: 'side-by-side' },
+                      { label: 'Unified', value: 'unified' },
+                      { label: 'Patch', value: 'patch' },
+                    ]}
+                  />
+                </div>
+              )}
               {selectedIsBinary ? (
                 <div className="hg-binary-placeholder">
                   <Text type="secondary">Binary file changed. Cannot display diff.</Text>
+                </div>
+              ) : selectedIsEditable && currentEditableFormJson ? (
+                <div className="human-gate-fill-pane" style={{ overflow: 'auto', padding: 16 }}>
+                  <HumanFormViewer
+                    formJson={currentEditableFormJson}
+                    onChange={(updated) => {
+                      if (!selectedEditable) return;
+                      setEditedByPath((prev) => ({ ...prev, [selectedEditable.path]: updated }));
+                    }}
+                  />
                 </div>
               ) : selectedIsEditable ? (
                 <div className="human-gate-fill-pane">
@@ -943,8 +998,8 @@ export default function HumanGate() {
                         className="human-gate-markdown-fullscreen-toggle"
                         role="button"
                         tabIndex={0}
-                        title={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
-                        aria-label={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
+                        title={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                        aria-label={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         onClick={togglePreviewFullscreen}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {

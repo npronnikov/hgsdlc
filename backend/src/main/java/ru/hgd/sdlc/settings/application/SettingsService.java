@@ -1,6 +1,10 @@
 package ru.hgd.sdlc.settings.application;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +17,9 @@ public class SettingsService {
 
     public static final String WORKSPACE_ROOT_KEY = "runtime.workspace_root";
     public static final String CODING_AGENT_KEY = "runtime.coding_agent";
+    public static final String AGENT_LAUNCH_COMMAND_KEY_PREFIX = "runtime.agent_launch_command.";
+    public static final String AGENT_SETTINGS_JSON_KEY_PREFIX = "runtime.agent_settings_json.";
+    public static final String AGENT_SETTINGS_JSON_ENABLED_KEY_PREFIX = "runtime.agent_settings_json_enabled.";
     public static final String AI_TIMEOUT_SECONDS_KEY = "runtime.ai_timeout_seconds";
     public static final String PROMPT_LANGUAGE_KEY = "runtime.prompt_language";
     public static final String CATALOG_REPO_URL_KEY = "catalog.repo_url";
@@ -66,6 +73,50 @@ public class SettingsService {
 
     public Optional<SystemSetting> getRuntimeCodingAgentSetting() {
         return repository.findById(CODING_AGENT_KEY);
+    }
+
+    public String getRuntimeAgentLaunchCommand(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String settingKey = agentLaunchCommandKey(normalizedAgent);
+        return repository.findById(settingKey)
+                .map(SystemSetting::getSettingValue)
+                .filter((value) -> value != null && !value.isBlank())
+                .orElseGet(() -> defaultAgentLaunchCommand(normalizedAgent));
+    }
+
+    public Optional<SystemSetting> getRuntimeAgentLaunchCommandSetting(String codingAgent) {
+        return repository.findById(agentLaunchCommandKey(normalizeCodingAgent(codingAgent)));
+    }
+
+    public boolean isRuntimeAgentSettingsJsonEnabled(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        return repository.findById(agentSettingsJsonEnabledKey(normalizedAgent))
+                .map(SystemSetting::getSettingValue)
+                .map(String::trim)
+                .filter((value) -> !value.isBlank())
+                .map(Boolean::parseBoolean)
+                .orElse(false);
+    }
+
+    public Optional<SystemSetting> getRuntimeAgentSettingsJsonEnabledSetting(String codingAgent) {
+        return repository.findById(agentSettingsJsonEnabledKey(normalizeCodingAgent(codingAgent)));
+    }
+
+    public String getRuntimeAgentSettingsJsonTemplate(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String resourcePath = agentSettingsJsonTemplateResourcePath(normalizedAgent);
+        return loadClasspathResource(resourcePath);
+    }
+
+    public String getRuntimeAgentSettingsJson(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        return repository.findById(agentSettingsJsonKey(normalizedAgent))
+                .map(SystemSetting::getSettingValue)
+                .orElse("");
+    }
+
+    public Optional<SystemSetting> getRuntimeAgentSettingsJsonSetting(String codingAgent) {
+        return repository.findById(agentSettingsJsonKey(normalizeCodingAgent(codingAgent)));
     }
 
     public int getAiTimeoutSeconds() {
@@ -144,6 +195,40 @@ public class SettingsService {
         return repository.save(setting);
     }
 
+    public SystemSetting updateRuntimeAgentLaunchCommand(String codingAgent, String launchCommand, String actorId) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String normalizedCommand = normalizeAgentLaunchCommand(launchCommand);
+        SystemSetting setting = repository.findById(agentLaunchCommandKey(normalizedAgent))
+                .orElseGet(() -> SystemSetting.builder().settingKey(agentLaunchCommandKey(normalizedAgent)).build());
+        setting.setSettingValue(normalizedCommand);
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
+    public SystemSetting updateRuntimeAgentSettingsJsonEnabled(String codingAgent, boolean enabled, String actorId) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String key = agentSettingsJsonEnabledKey(normalizedAgent);
+        SystemSetting setting = repository.findById(key)
+                .orElseGet(() -> SystemSetting.builder().settingKey(key).build());
+        setting.setSettingValue(Boolean.toString(enabled));
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
+    public SystemSetting updateRuntimeAgentSettingsJson(String codingAgent, String settingsJson, String actorId) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String key = agentSettingsJsonKey(normalizedAgent);
+        String normalizedSettingsJson = normalizeAgentSettingsJson(settingsJson);
+        SystemSetting setting = repository.findById(key)
+                .orElseGet(() -> SystemSetting.builder().settingKey(key).build());
+        setting.setSettingValue(normalizedSettingsJson);
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
     // ---- Composite settings reads/writes ----
 
     @Transactional
@@ -164,18 +249,30 @@ public class SettingsService {
         Optional<SystemSetting> localGitUser        = repository.findById(CATALOG_LOCAL_GIT_USERNAME_KEY);
         Optional<SystemSetting> localGitEmail       = repository.findById(CATALOG_LOCAL_GIT_EMAIL_KEY);
         Optional<SystemSetting> promptLanguageSetting = repository.findById(PROMPT_LANGUAGE_KEY);
+        String effectiveCodingAgent = codingAgentSetting.map(SystemSetting::getSettingValue)
+                .filter((value) -> !value.isBlank())
+                .map(this::normalizeCodingAgent)
+                .orElse(DEFAULT_CODING_AGENT);
+        Optional<SystemSetting> agentLaunchCommandSetting = getRuntimeAgentLaunchCommandSetting(effectiveCodingAgent);
+        Optional<SystemSetting> agentSettingsJsonSetting = getRuntimeAgentSettingsJsonSetting(effectiveCodingAgent);
+        Optional<SystemSetting> agentSettingsJsonEnabledSetting = getRuntimeAgentSettingsJsonEnabledSetting(effectiveCodingAgent);
         SystemSetting latestSetting = latestOf(
                 workspaceSetting.orElse(null), codingAgentSetting.orElse(null), aiTimeoutSetting.orElse(null),
                 catalogRepoUrl.orElse(null), catalogBranch.orElse(null), publishMode.orElse(null),
                 sshPrivate.orElse(null), sshPublic.orElse(null), sshPass.orElse(null),
                 cert.orElse(null), certKey.orElse(null), gitUser.orElse(null), gitPassword.orElse(null),
-                localGitUser.orElse(null), localGitEmail.orElse(null), promptLanguageSetting.orElse(null)
+                localGitUser.orElse(null), localGitEmail.orElse(null), promptLanguageSetting.orElse(null),
+                agentLaunchCommandSetting.orElse(null), agentSettingsJsonSetting.orElse(null), agentSettingsJsonEnabledSetting.orElse(null)
         );
         return new RuntimeSettings(
                 workspaceSetting.map(SystemSetting::getSettingValue).orElse(getWorkspaceRoot()),
-                codingAgentSetting.map(SystemSetting::getSettingValue).orElse(getRuntimeCodingAgent()),
+                effectiveCodingAgent,
                 aiTimeoutSetting.map(SystemSetting::getSettingValue).map(Integer::parseInt).orElse(DEFAULT_AI_TIMEOUT_SECONDS),
                 promptLanguageSetting.map(SystemSetting::getSettingValue).map(this::normalizePromptLanguage).orElse(DEFAULT_PROMPT_LANGUAGE),
+                getRuntimeAgentLaunchCommand(effectiveCodingAgent),
+                getRuntimeAgentSettingsJson(effectiveCodingAgent),
+                getRuntimeAgentSettingsJsonTemplate(effectiveCodingAgent),
+                isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
                 catalogRepoUrl.map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 catalogBranch.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 publishMode.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
@@ -194,17 +291,60 @@ public class SettingsService {
     }
 
     @Transactional
-    public RuntimeSettings updateRuntimeSettings(String workspaceRoot, String codingAgent, int aiTimeoutSeconds, String promptLanguage, String actorId) {
+    public RuntimeSettings updateRuntimeSettings(
+            String workspaceRoot,
+            String codingAgent,
+            int aiTimeoutSeconds,
+            String promptLanguage,
+            String agentLaunchCommand,
+            String agentSettingsJson,
+            Boolean agentSettingsJsonEnabled,
+            String actorId
+    ) {
         SystemSetting workspaceSetting      = updateWorkspaceRoot(workspaceRoot, actorId);
         SystemSetting codingAgentSetting    = updateRuntimeCodingAgent(codingAgent, actorId);
         SystemSetting aiTimeoutSetting      = updateAiTimeoutSeconds(aiTimeoutSeconds, actorId);
         SystemSetting promptLanguageSetting = updatePromptLanguage(promptLanguage, actorId);
-        SystemSetting latestSetting         = latestOf(workspaceSetting, codingAgentSetting, aiTimeoutSetting, promptLanguageSetting);
+        String normalizedAgent = normalizeCodingAgent(codingAgentSetting.getSettingValue());
+        SystemSetting agentLaunchCommandSetting = updateRuntimeAgentLaunchCommand(
+                normalizedAgent,
+                agentLaunchCommand,
+                actorId
+        );
+        String normalizedAgentSettingsJsonValue = agentSettingsJson != null
+                ? normalizeAgentSettingsJson(agentSettingsJson)
+                : getRuntimeAgentSettingsJson(normalizedAgent);
+        SystemSetting agentSettingsJsonSetting = updateRuntimeAgentSettingsJson(
+                normalizedAgent,
+                normalizedAgentSettingsJsonValue,
+                actorId
+        );
+        boolean normalizedSettingsJsonEnabled = agentSettingsJsonEnabled != null
+                ? agentSettingsJsonEnabled
+                : isRuntimeAgentSettingsJsonEnabled(normalizedAgent);
+        SystemSetting agentSettingsJsonEnabledSetting = updateRuntimeAgentSettingsJsonEnabled(
+                normalizedAgent,
+                normalizedSettingsJsonEnabled,
+                actorId
+        );
+        SystemSetting latestSetting         = latestOf(
+                workspaceSetting,
+                codingAgentSetting,
+                aiTimeoutSetting,
+                promptLanguageSetting,
+                agentLaunchCommandSetting,
+                agentSettingsJsonSetting,
+                agentSettingsJsonEnabledSetting
+        );
         return new RuntimeSettings(
                 workspaceSetting.getSettingValue(),
-                codingAgentSetting.getSettingValue(),
+                normalizedAgent,
                 Integer.parseInt(aiTimeoutSetting.getSettingValue()),
                 promptLanguageSetting.getSettingValue(),
+                agentLaunchCommandSetting.getSettingValue(),
+                agentSettingsJsonSetting.getSettingValue(),
+                getRuntimeAgentSettingsJsonTemplate(normalizedAgent),
+                normalizedSettingsJsonEnabled,
                 repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 repository.findById(CATALOG_DEFAULT_BRANCH_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
                 repository.findById(CATALOG_PUBLISH_MODE_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
@@ -238,6 +378,7 @@ public class SettingsService {
             String localGitEmail,
             String actorId
     ) {
+        String effectiveCodingAgent = getRuntimeCodingAgent();
         SystemSetting repo      = upsert(CATALOG_REPO_URL_KEY, catalogRepoUrl == null ? "" : catalogRepoUrl.trim(), actorId);
         SystemSetting branch    = upsert(CATALOG_DEFAULT_BRANCH_KEY, normalizeBranch(catalogDefaultBranch), actorId);
         SystemSetting mode      = upsert(CATALOG_PUBLISH_MODE_KEY, normalizePublishMode(publishMode), actorId);
@@ -253,9 +394,13 @@ public class SettingsService {
         SystemSetting latest    = latestOf(repo, branch, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass, localUser, localEmail);
         return new RuntimeSettings(
                 getWorkspaceRoot(),
-                getRuntimeCodingAgent(),
+                effectiveCodingAgent,
                 getAiTimeoutSeconds(),
                 getPromptLanguage(),
+                getRuntimeAgentLaunchCommand(effectiveCodingAgent),
+                getRuntimeAgentSettingsJson(effectiveCodingAgent),
+                getRuntimeAgentSettingsJsonTemplate(effectiveCodingAgent),
+                isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
                 repo.getSettingValue(),
                 branch.getSettingValue(),
                 mode.getSettingValue(),
@@ -353,7 +498,7 @@ public class SettingsService {
         if (language == null || language.isBlank()) {
             return DEFAULT_PROMPT_LANGUAGE;
         }
-        String normalized = language.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = language.trim().toLowerCase(Locale.ROOT);
         if (!normalized.equals("en") && !normalized.equals("ru")) {
             throw new ValidationException("prompt_language must be en or ru");
         }
@@ -365,6 +510,59 @@ public class SettingsService {
             throw new ValidationException("coding_agent is required");
         }
         return codingAgent.trim().toLowerCase().replace('-', '_');
+    }
+
+    private String normalizeAgentLaunchCommand(String command) {
+        if (command == null || command.isBlank()) {
+            throw new ValidationException("agent_launch_command is required");
+        }
+        return command.trim();
+    }
+
+    private String agentLaunchCommandKey(String codingAgent) {
+        return AGENT_LAUNCH_COMMAND_KEY_PREFIX + normalizeCodingAgent(codingAgent);
+    }
+
+    private String agentSettingsJsonEnabledKey(String codingAgent) {
+        return AGENT_SETTINGS_JSON_ENABLED_KEY_PREFIX + normalizeCodingAgent(codingAgent);
+    }
+
+    private String agentSettingsJsonKey(String codingAgent) {
+        return AGENT_SETTINGS_JSON_KEY_PREFIX + normalizeCodingAgent(codingAgent);
+    }
+
+    private String agentSettingsJsonTemplateResourcePath(String codingAgent) {
+        if ("claude".equals(codingAgent)) {
+            return "runtime/agent-settings-json/claude.settings.json";
+        }
+        return "runtime/agent-settings-json/qwen.settings.json";
+    }
+
+    private String defaultAgentLaunchCommand(String codingAgent) {
+        String normalized = normalizeCodingAgent(codingAgent);
+        if ("claude".equals(normalized)) {
+            return "claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}";
+        }
+        return "qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}";
+    }
+
+    private String normalizeAgentSettingsJson(String settingsJson) {
+        if (settingsJson == null || settingsJson.isBlank()) {
+            return "";
+        }
+        return settingsJson;
+    }
+
+    private String loadClasspathResource(String path) {
+        ClassLoader classLoader = SettingsService.class.getClassLoader();
+        try (InputStream inputStream = classLoader.getResourceAsStream(path)) {
+            if (inputStream == null) {
+                return "{\n}\n";
+            }
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new ValidationException("Failed to load resource: " + path);
+        }
     }
 
     private void validateAiTimeoutSeconds(int aiTimeoutSeconds) {
@@ -383,6 +581,10 @@ public class SettingsService {
             String codingAgent,
             int aiTimeoutSeconds,
             String promptLanguage,
+            String agentLaunchCommand,
+            String agentSettingsJson,
+            String agentSettingsJsonTemplate,
+            boolean agentSettingsJsonEnabled,
             String catalogRepoUrl,
             String catalogDefaultBranch,
             String publishMode,

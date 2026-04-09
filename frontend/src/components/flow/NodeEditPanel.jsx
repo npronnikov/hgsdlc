@@ -40,6 +40,9 @@ export function NodeEditPanel({ editor }) {
     updateSelectedNode, renameSelectedNodeId,
     updateSelectedNodeList, addSelectedNodeListItem, removeSelectedNodeListItem,
   } = editor;
+  const outputsAutoManaged = selectedNodeKind === 'human_input';
+  const executionContextAutoManaged = selectedNodeKind === 'human_input';
+  const isOutputEditorReadOnly = isReadOnly || outputsAutoManaged;
 
   const renderVersionSelector = () => {
     if (flowMeta.flowId) {
@@ -177,6 +180,11 @@ export function NodeEditPanel({ editor }) {
             <div>
               <Title level={5}>Execution context</Title>
               <Text className="muted">Node input data</Text>
+              {executionContextAutoManaged && (
+                <Text type="secondary" style={{ display: 'block', marginTop: 4, marginBottom: 8 }}>
+                  Auto-managed from upstream AI/Command outputs. You can change only the modifiable flag.
+                </Text>
+              )}
               <div className="context-list">
                 {(selectedNode.data.executionContext || []).map((entry, index) => (
                   <div key={`${entry.type}-${index}`} className="context-row">
@@ -184,7 +192,7 @@ export function NodeEditPanel({ editor }) {
                       <Select
                         value={entry.type}
                         options={EXECUTION_CONTEXT_TYPES}
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || executionContextAutoManaged}
                         title="Input context type for the node."
                         onChange={(value) => updateSelectedNodeList(
                           'executionContext',
@@ -198,7 +206,7 @@ export function NodeEditPanel({ editor }) {
                         danger
                         className="artifact-delete-btn"
                         icon={<DeleteOutlined />}
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || executionContextAutoManaged}
                         onClick={() => removeSelectedNodeListItem('executionContext', index)}
                       />
                     </div>
@@ -207,7 +215,7 @@ export function NodeEditPanel({ editor }) {
                         <Select
                           value={entry.scope || 'run'}
                           options={SCOPE_OPTIONS}
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || executionContextAutoManaged}
                           title="Artifact lookup scope: run or project."
                           onChange={(value) => updateSelectedNodeList('executionContext', index, {
                             scope: value,
@@ -230,7 +238,7 @@ export function NodeEditPanel({ editor }) {
                             value={entry.node_id || undefined}
                             options={nodeIdOptions.filter((opt) => opt.value !== selectedNode.id)}
                             placeholder="source-node"
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || executionContextAutoManaged}
                             title="Source node of the artifact in the current run."
                             allowClear
                             popupClassName="node-source-select-dropdown"
@@ -239,11 +247,20 @@ export function NodeEditPanel({ editor }) {
                             onChange={(value) => updateSelectedNodeList('executionContext', index, { node_id: value || '' })}
                           />
                         )}
+                        {selectedNodeKind === 'human_input' && (
+                          <Select
+                            value={entry.modifiable === true ? 'yes' : 'no'}
+                            options={MODIFIABLE_OPTIONS}
+                            disabled={isReadOnly}
+                            title="Whether this input artifact is editable on human_input gate."
+                            onChange={(value) => updateSelectedNodeList('executionContext', index, { modifiable: value === 'yes' })}
+                          />
+                        )}
                         <Input
                           className="context-field-full"
                           value={entry.path || ''}
                           placeholder="file name"
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || executionContextAutoManaged}
                           title="Path to the input artifact."
                           onChange={(event) => updateSelectedNodeList('executionContext', index, { path: event.target.value })}
                         />
@@ -251,22 +268,24 @@ export function NodeEditPanel({ editor }) {
                     )}
                   </div>
                 ))}
-                <Button
-                  type="default"
-                  icon={<PlusOutlined />}
-                  disabled={isReadOnly}
-                  onClick={() =>
-                    addSelectedNodeListItem('executionContext', {
-                      type: 'artifact_ref',
-                      required: true,
-                      scope: 'run',
-                      path: '',
-                      transfer_mode: 'by_ref',
-                    })
-                  }
-                >
-                  Add context
-                </Button>
+                {!executionContextAutoManaged && (
+                  <Button
+                    type="default"
+                    icon={<PlusOutlined />}
+                    disabled={isReadOnly}
+                    onClick={() =>
+                      addSelectedNodeListItem('executionContext', {
+                        type: 'artifact_ref',
+                        required: true,
+                        scope: 'run',
+                        path: '',
+                        transfer_mode: 'by_ref',
+                      })
+                    }
+                  >
+                    Add context
+                  </Button>
+                )}
               </div>
             </div>
           </>
@@ -439,6 +458,11 @@ export function NodeEditPanel({ editor }) {
             <div>
               <Title level={5}>Expected outputs</Title>
               <Text className="muted">Generated artifacts</Text>
+              {outputsAutoManaged && (
+                <Text type="secondary" style={{ display: 'block', marginTop: 4, marginBottom: 8 }}>
+                  Auto-managed from execution_context entries with modifiable=true.
+                </Text>
+              )}
               <div className="context-list">
                 {(selectedNode.data.producedArtifacts || []).map((entry, index) => (
                   <div key={`artifact-${index}`} className="context-row artifact-context-row">
@@ -450,7 +474,7 @@ export function NodeEditPanel({ editor }) {
                         danger
                         className="artifact-delete-btn"
                         icon={<DeleteOutlined />}
-                        disabled={isReadOnly}
+                        disabled={isOutputEditorReadOnly}
                         onClick={() => removeSelectedNodeListItem('producedArtifacts', index)}
                       />
                     </div>
@@ -458,22 +482,15 @@ export function NodeEditPanel({ editor }) {
                       <Select
                         value={entry.scope || 'run'}
                         options={SCOPE_OPTIONS}
-                        disabled={isReadOnly}
+                        disabled={isOutputEditorReadOnly}
                         title="Scope where the artifact will be created."
                         onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { scope: value })}
-                      />
-                      <Select
-                        value={entry.modifiable === true ? 'yes' : 'no'}
-                        options={MODIFIABLE_OPTIONS}
-                        disabled={isReadOnly}
-                        title="Whether the artifact can be edited at the human_input step."
-                        onChange={(value) => updateSelectedNodeList('producedArtifacts', index, { modifiable: value === 'yes' })}
                       />
                       <Input
                         className="context-field-full artifact-path-input"
                         value={entry.path || ''}
                         placeholder="path"
-                        disabled={isReadOnly}
+                        disabled={isOutputEditorReadOnly}
                         title="Path of the produced artifact."
                         onChange={(event) =>
                           updateSelectedNodeList('producedArtifacts', index, { path: event.target.value })
@@ -482,19 +499,20 @@ export function NodeEditPanel({ editor }) {
                     </div>
                   </div>
                 ))}
-                <Button
-                  type="default"
-                  icon={<PlusOutlined />}
-                  disabled={isReadOnly}
-                  onClick={() => addSelectedNodeListItem('producedArtifacts', {
-                    path: '',
-                    required: true,
-                    scope: 'run',
-                    modifiable: false,
-                  })}
-                >
-                  Add artifact
-                </Button>
+                {!outputsAutoManaged && (
+                  <Button
+                    type="default"
+                    icon={<PlusOutlined />}
+                    disabled={isOutputEditorReadOnly}
+                    onClick={() => addSelectedNodeListItem('producedArtifacts', {
+                      path: '',
+                      required: true,
+                      scope: 'run',
+                    })}
+                  >
+                    Add artifact
+                  </Button>
+                )}
               </div>
 
               {SHOW_EXPECTED_CHANGES_EDITOR && (

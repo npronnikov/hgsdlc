@@ -69,3 +69,5 @@ databaseChangeLog:
       file: db/changelog/039-node-execution-step-summary.sql
   - include:
       file: db/changelog/040-publication-request-mode-cleanup.sql
+  - include:
+      file: db/changelog/041-runtime-skip-gates.sql

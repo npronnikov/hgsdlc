@@ -1,0 +1,27 @@
+entity_type: flow
+id: form-questions-flow
+version: "1.0"
+canonical_name: form-questions-flow@1.0
+display_name: "Тест human-form — вопросы и ответы"
+description: >
+  Минимальный тестовый флоу для проверки функционала human-form.
+  AI генерирует questions.form.json, пользователь заполняет интерактивную
+  форму в gate UI, файл сохраняется с выбранными ответами.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - human-form
+  - test
+  - clarification
+flow_kind: delivery
+risk_level: low
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-08T00:00:00Z"
+published_at: "2026-04-08T00:00:00Z"
+source_ref: main
+source_path: "flows/form-questions-flow/1.0"
+lifecycle_status: active
+checksum: "e1b7f01348c12658c470cefca1c343160b6077fe3c891508db92aa26992a4c21"

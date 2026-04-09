@@ -1,0 +1,56 @@
+id: restore-architecture-java-empty-skills-flow
+version: "1.0"
+canonical_name: restore-architecture-java-empty-skills-flow@1.0
+title: Restore architecture documentation (Java/C4, no skills)
+description: >
+  Analyzes a Java/Spring Boot project and generates C4 architecture
+  documentation with Mermaid diagrams (Context, Container, Component).
+  Human reviews and approves or requests corrections. The flow does not use skills.
+start_node_id: ai-analyze-architecture
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+rule_refs:
+  - java-backend-coding-standards@1.0
+
+nodes:
+  - id: ai-analyze-architecture
+    title: Analyze project and generate C4 architecture
+    type: ai
+    checkpoint_before_run: true
+    execution_context: []
+    instruction: |
+      Изучи весь код проекта и подготовь архитектурную документацию
+      в нотации модели C4 с использованием диаграмм Mermaid.
+
+      Сохрани результат в `docs/architecture.md` в директории проекта.
+    skill_refs: []
+    produced_artifacts:
+      - scope: project
+        path: docs/architecture.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-architecture
+    on_failure: terminal-complete
+
+  - id: approve-architecture
+    title: Review and approve architecture documentation
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Просмотри сгенерированный `docs/architecture.md` в директории проекта.
+      Проверь, что все контейнеры, компоненты и связи между ними описаны корректно.
+      Подтверди, если документация точно отражает систему, либо запроси доработку
+      с указанием того, что отсутствует или описано неверно.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: terminal-complete
+    on_rework:
+      next_node: ai-analyze-architecture
+
+  - id: terminal-complete
+    title: Complete
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

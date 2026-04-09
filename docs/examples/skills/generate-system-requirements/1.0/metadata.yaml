@@ -1,0 +1,27 @@
+entity_type: skill
+id: generate-system-requirements
+version: "1.0"
+canonical_name: generate-system-requirements@1.0
+display_name: "Формирование системных требований"
+description: >
+  Проанализируй кодовую базу и запрос пользователя, затем подготовь детальные
+  системные требования с указанием конкретных файлов и классов. Покрой
+  функциональные требования, API, модель данных, авторизацию и тесты.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - java
+  - requirements
+  - analysis
+  - qwen
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "skills/generate-system-requirements/1.0"
+lifecycle_status: active
+checksum: "e0fff220664fcf8ad1a9f33053f69c226642ba618d9c837b902759aeedd9dd58"

@@ -3,6 +3,7 @@ import { Button, Card, Col, Input, Row, Select, Space, Typography, message, Divi
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
+import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
 
 const { Title, Text } = Typography;
 
@@ -99,7 +100,14 @@ export default function GateInput() {
     if (!gate) {
       return;
     }
-    if (!answers.trim()) {
+    const parsedForm = isHumanForm(answers);
+    if (parsedForm) {
+      const formError = validateHumanForm(parsedForm);
+      if (formError) {
+        message.warning(formError);
+        return;
+      }
+    } else if (!answers.trim()) {
       message.warning('Enter answers');
       return;
     }
@@ -227,12 +235,24 @@ export default function GateInput() {
                 }))}
               />
             )}
-            <Input.TextArea
-              rows={12}
-              style={{ marginTop: 12, fontFamily: 'monospace' }}
-              value={answers}
-              onChange={(e) => setAnswers(e.target.value)}
-            />
+            {(() => {
+              const parsedForm = isHumanForm(answers);
+              if (parsedForm) {
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    <HumanFormViewer formJson={parsedForm} onChange={setAnswers} />
+                  </div>
+                );
+              }
+              return (
+                <Input.TextArea
+                  rows={12}
+                  style={{ marginTop: 12, fontFamily: 'monospace' }}
+                  value={answers}
+                  onChange={(e) => setAnswers(e.target.value)}
+                />
+              );
+            })()}
             <Divider style={{ margin: '12px 0' }} />
             <Text type="secondary">artifact_key: <span className="mono">{artifactKey || '—'}</span></Text>
             <br />

@@ -374,6 +374,51 @@ public class RunStepService {
         return false;
     }
 
+    boolean skipOrOpenGate(
+            RunEntity run,
+            NodeModel node,
+            NodeExecutionEntity execution,
+            GateKind gateKind,
+            GateStatus initialStatus) {
+        if (shouldSkipGate(run, node)) {
+            runtimeStepTxService.appendAudit(
+                    run.getId(),
+                    execution.getId(),
+                    null,
+                    "gate_auto_skipped",
+                    ActorType.SYSTEM,
+                    "runtime",
+                    mapOf(
+                            "node_id", node.getId(),
+                            "gate_kind", gateKind.name().toLowerCase(Locale.ROOT),
+                            "allowed_roles", node.getAllowedRoles() == null ? List.of() : node.getAllowedRoles()
+                    ));
+            if (gateKind == GateKind.HUMAN_INPUT) {
+                createHumanInputOutputFiles(run, node, execution);
+                runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), null);
+                applyTransition(run, execution, null, node.getOnSubmit(), "auto_on_submit");
+            } else {
+                runtimeStepTxService.markNodeExecutionSucceeded(run.getId(), execution.getId(), node.getId(), null);
+                applyTransition(run, execution, null, node.getOnApprove(), "auto_on_approve");
+            }
+            return true;
+        }
+        return openGate(run, node, execution, gateKind, initialStatus);
+    }
+
+    private boolean shouldSkipGate(RunEntity run, NodeModel node) {
+        if (!run.isSkipGates()) {
+            return false;
+        }
+        List<String> allowedRoles = node.getAllowedRoles();
+        if (allowedRoles == null || allowedRoles.isEmpty()) {
+            return true;
+        }
+        return allowedRoles.stream()
+                .filter(r -> r != null && !r.isBlank())
+                .noneMatch(r -> "PRODUCT_OWNER".equalsIgnoreCase(r.trim()));
+    }
+
     boolean completeTerminalNode(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
         RunStatus terminalStatus = resolveTerminalStatus(run.getId());
         if (terminalStatus == RunStatus.FAILED) {
@@ -658,7 +703,7 @@ public class RunStepService {
         try {
             CommandResult commandResult = runProcess(
                     run.getId(),
-                    List.of("zsh", "-lc", instruction),
+                    List.of("bash", "-lc", instruction),
                     workingDirectory,
                     settingsService.getAiTimeoutSeconds(),
                     stdoutPath,
@@ -1175,7 +1220,10 @@ public class RunStepService {
             if (sourceNode == null) {
                 continue;
             }
-            if (!isModifiableProducedArtifact(sourceNode, artifactPath, scope)) {
+            if (!Boolean.TRUE.equals(entry.getModifiable())) {
+                continue;
+            }
+            if (!isProducedArtifactDeclared(sourceNode, artifactPath, scope)) {
                 continue;
             }
             Path sourcePath = resolveArtifactRefPath(run, sourceNodeId, scope, artifactPath);
@@ -1197,7 +1245,7 @@ public class RunStepService {
         return result;
     }
 
-    private boolean isModifiableProducedArtifact(NodeModel sourceNode, String artifactPath, String scope) {
+    private boolean isProducedArtifactDeclared(NodeModel sourceNode, String artifactPath, String scope) {
         if (sourceNode == null || sourceNode.getProducedArtifacts() == null || artifactPath == null
                 || artifactPath.isBlank()) {
             return false;
@@ -1212,9 +1260,7 @@ public class RunStepService {
             if (!scope.equals(defaultScope(requirement.getScope()))) {
                 continue;
             }
-            if (Boolean.TRUE.equals(requirement.getModifiable())) {
-                return true;
-            }
+            return true;
         }
         return false;
     }

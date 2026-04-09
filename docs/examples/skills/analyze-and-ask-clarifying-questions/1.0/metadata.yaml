@@ -1,0 +1,27 @@
+entity_type: skill
+id: analyze-and-ask-clarifying-questions
+version: "1.0"
+canonical_name: analyze-and-ask-clarifying-questions@1.0
+display_name: "Анализ проекта и генерация уточняющих вопросов"
+description: >
+  Изучает кодовую базу проекта и запрос пользователя, затем формирует
+  10-15 уточняющих вопросов с вариантами ответа для снятия неоднозначностей.
+  Результат сохраняется в questions.md.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - clarification
+  - requirements
+  - analysis
+  - planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-03T00:00:00Z"
+published_at: "2026-04-03T00:00:00Z"
+source_ref: main
+source_path: "skills/analyze-and-ask-clarifying-questions/1.0"
+lifecycle_status: active
+checksum: "e7ff9baf53037f1e6c447e895c99570d696b380a21ec03162b1fc39dd8c21b50"

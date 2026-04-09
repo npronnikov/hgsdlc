@@ -1,0 +1,28 @@
+entity_type: skill
+id: analyze-and-ask-questions-html
+version: "1.0"
+canonical_name: analyze-and-ask-questions-html@1.0
+display_name: "Анализ проекта и генерация вопросов в HTML-формате"
+description: >
+  Изучает кодовую базу проекта и запрос пользователя, затем формирует
+  10-15 уточняющих вопросов. Результат сохраняется в двух файлах:
+  questions.html — красивая HTML-страница с вопросами для отображения
+  в gate UI, answers.md — шаблон для заполнения ответов владельцем продукта.
+coding_agent: qwen
+team_code: Demo
+platform_code: BACK
+tags:
+  - clarification
+  - requirements
+  - html
+  - product-owner
+skill_kind: analysis
+scope: organization
+approval_status: published
+approved_by: demo
+approved_at: "2026-04-08T00:00:00Z"
+published_at: "2026-04-08T00:00:00Z"
+source_ref: main
+source_path: "skills/analyze-and-ask-questions-html/1.0"
+lifecycle_status: active
+checksum: "2cf71637ff1256ece8ae3a14709f8fda922698da5fd6fce5fafd386e54a51efb"
