@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Drawer, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { FilterOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -35,6 +35,8 @@ export default function Rules() {
   const [hasMore, setHasMore] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
+  const [deprecateTarget, setDeprecateTarget] = useState(null);
+  const [deprecating, setDeprecating] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
@@ -140,6 +142,27 @@ export default function Rules() {
     return items;
   }, [filters]);
 
+  const canDeprecate = (rule) => (
+    canManageCatalog
+    && rule?.status === 'published'
+    && rule?.lifecycleStatus === 'active'
+  );
+
+  const requestDeprecation = async () => {
+    if (!deprecateTarget) return;
+    setDeprecating(true);
+    try {
+      await apiRequest(`/rules/${deprecateTarget.ruleId}/deprecate`, { method: 'POST' });
+      message.success('Deprecation request created');
+      setDeprecateTarget(null);
+      await loadRules({ cursor: null, append: false });
+    } catch (err) {
+      message.error(err.message || 'Failed to request deprecation');
+    } finally {
+      setDeprecating(false);
+    }
+  };
+
   return (
     <div className="cards-page">
       <div className="page-header">
@@ -187,7 +210,31 @@ export default function Rules() {
                     <span className="resource-card-name" title={rule.name}>{truncateCardName(rule.name)}</span>
                     <span className="resource-card-subtitle mono">{rule.ruleId}@{rule.version}</span>
                   </div>
-                  <span className="minimal-card-status">{formatStatusLabel(rule.status || 'unknown')}</span>
+                  <div className="resource-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <span className="minimal-card-status">{formatStatusLabel(rule.status || 'unknown')}</span>
+                    {canDeprecate(rule) ? (
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [{ key: 'deprecate', label: 'Deprecate' }],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent?.stopPropagation?.();
+                            if (key === 'deprecate') {
+                              setDeprecateTarget(rule);
+                            }
+                          },
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          className="resource-card-menu"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </Dropdown>
+                    ) : null}
+                  </div>
                 </div>
                 {rule.description && <Text type="secondary" className="resource-card-description">{rule.description}</Text>}
                 <div className="minimal-card-meta-line">
@@ -256,6 +303,29 @@ export default function Rules() {
           <Button type="default" onClick={() => setIsFilterOpen(false)}>Apply</Button>
         </div>
       </Drawer>
+      <Modal
+        title="Deprecate rule?"
+        open={!!deprecateTarget}
+        onCancel={() => setDeprecateTarget(null)}
+        onOk={requestDeprecation}
+        okText="Deprecate"
+        cancelText="Cancel"
+        confirmLoading={deprecating}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Text>
+            A publication request will be created for <span className="mono">{deprecateTarget?.canonical || deprecateTarget?.ruleId}</span> with lifecycle_status=deprecated.
+          </Text>
+          <Text type="secondary">
+            {deprecateTarget?.scope === 'team'
+              ? 'After approval, deprecation will be finalized in DB without PR.'
+              : 'After approval, deprecation will be published via Pull Request to catalog.'}
+          </Text>
+          <Text type="secondary">
+            After publication this rule will be excluded from new flow selections and new launches.
+          </Text>
+        </div>
+      </Modal>
     </div>
   );
 }

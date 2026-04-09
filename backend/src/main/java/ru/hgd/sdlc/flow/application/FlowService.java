@@ -25,8 +25,10 @@ import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.publication.application.PublicationService;
 import ru.hgd.sdlc.publication.domain.PublicationStatus;
+import ru.hgd.sdlc.rule.domain.RuleLifecycleStatus;
 import ru.hgd.sdlc.rule.domain.RuleStatus;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
+import ru.hgd.sdlc.skill.domain.SkillLifecycleStatus;
 import ru.hgd.sdlc.skill.domain.SkillStatus;
 import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
@@ -154,6 +156,47 @@ public class FlowService {
     }
 
     @Transactional
+    public FlowVersion requestDeprecation(String flowId, User user) {
+        resolveSavedBy(user);
+        FlowVersion published = repository.findFirstByFlowIdAndStatusOrderBySavedAtDesc(flowId, FlowStatus.PUBLISHED)
+                .orElseThrow(() -> new NotFoundException("Published flow not found: " + flowId));
+        if (!isActiveLifecycle(published.getLifecycleStatus())) {
+            throw new ValidationException("Only active published flow can be deprecated");
+        }
+        int[] parsedVersion = parseVersionSafe(published.getVersion());
+        if (parsedVersion == null) {
+            throw new ValidationException("Invalid version: " + published.getVersion());
+        }
+        List<FlowVersion> allVersions = repository.findByFlowIdOrderBySavedAtDesc(flowId);
+        List<FlowVersion> draftVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == FlowStatus.DRAFT)
+                .toList();
+        FlowVersion existingDraft = findDraftForMajor(draftVersions, parsedVersion[0]);
+        long resourceVersion = existingDraft == null ? 0L : existingDraft.getResourceVersion();
+        FlowSaveRequest request = new FlowSaveRequest(
+                published.getFlowId(),
+                published.getCodingAgent(),
+                published.getTeamCode(),
+                published.getPlatformCode(),
+                published.getTags(),
+                published.getFlowKind(),
+                published.getRiskLevel(),
+                published.getScope() == null ? ORGANIZATION_SCOPE : published.getScope(),
+                "deprecated",
+                published.getForkedFrom(),
+                published.getForkedBy(),
+                published.getSourceRef(),
+                published.getSourcePath(),
+                published.getFlowYaml(),
+                true,
+                false,
+                published.getVersion(),
+                resourceVersion
+        );
+        return save(flowId, request, user);
+    }
+
+    @Transactional
     public FlowVersion save(String flowId, FlowSaveRequest request, User user) {
         if (request == null) {
             throw new ValidationException("Request body is required");
@@ -203,12 +246,13 @@ public class FlowService {
         boolean publishNow = false;
         boolean requestPublish = publish;
         String flowKind = parseFlowKind(request.flowKind());
+        FlowLifecycleStatus lifecycleStatus = parseLifecycleStatus(request.lifecycleStatus());
 
         List<String> validationErrors = flowValidator.validate(model);
         if (!validationErrors.isEmpty()) {
             throw new ValidationException(validationErrors.getFirst());
         }
-        if (publish) {
+        if (publish && lifecycleStatus == FlowLifecycleStatus.ACTIVE) {
             validateReferences(model, codingAgent);
         }
 
@@ -301,7 +345,7 @@ public class FlowService {
         entity.setPublishedAt(publishNow ? entity.getPublishedAt() : null);
         entity.setSourceRef(normalizeOptional(request.sourceRef()));
         entity.setSourcePath(normalizeOptional(request.sourcePath()));
-        entity.setLifecycleStatus(parseLifecycleStatus(request.lifecycleStatus()));
+        entity.setLifecycleStatus(lifecycleStatus);
         if (requestPublish) {
             entity.setPublicationStatus(PublicationStatus.PENDING_APPROVAL);
             entity.setLastPublishError(null);
@@ -341,6 +385,10 @@ public class FlowService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
         }
+    }
+
+    private boolean isActiveLifecycle(FlowLifecycleStatus lifecycleStatus) {
+        return lifecycleStatus == null || lifecycleStatus == FlowLifecycleStatus.ACTIVE;
     }
 
     private String parseScope(String scope) {
@@ -421,6 +469,8 @@ public class FlowService {
     private void validateReferences(FlowModel model, String codingAgent) {
         List<String> brokenRules = new ArrayList<>();
         List<String> brokenSkills = new ArrayList<>();
+        List<String> deprecatedRules = new ArrayList<>();
+        List<String> deprecatedSkills = new ArrayList<>();
         List<String> mismatchedRules = new ArrayList<>();
         List<String> mismatchedSkills = new ArrayList<>();
         for (String ruleRef : model.getRuleRefs()) {
@@ -430,6 +480,10 @@ public class FlowService {
             var rule = ruleRepository.findFirstByCanonicalNameAndStatus(ruleRef, RuleStatus.PUBLISHED).orElse(null);
             if (rule == null) {
                 brokenRules.add(ruleRef);
+                continue;
+            }
+            if (rule.getLifecycleStatus() != null && rule.getLifecycleStatus() != RuleLifecycleStatus.ACTIVE) {
+                deprecatedRules.add(ruleRef);
                 continue;
             }
             if (!codingAgent.equals(rule.getCodingAgent().name().toLowerCase())) {
@@ -449,6 +503,10 @@ public class FlowService {
                     brokenSkills.add(skillRef);
                     continue;
                 }
+                if (skill.getLifecycleStatus() != null && skill.getLifecycleStatus() != SkillLifecycleStatus.ACTIVE) {
+                    deprecatedSkills.add(skillRef);
+                    continue;
+                }
                 if (!codingAgent.equals(skill.getCodingAgent().name().toLowerCase())) {
                     mismatchedSkills.add(skillRef);
                 }
@@ -459,6 +517,12 @@ public class FlowService {
         }
         if (!brokenSkills.isEmpty()) {
             throw new ValidationException("Referenced skills not published: " + String.join(", ", brokenSkills));
+        }
+        if (!deprecatedRules.isEmpty()) {
+            throw new ValidationException("Referenced rules are deprecated: " + String.join(", ", deprecatedRules));
+        }
+        if (!deprecatedSkills.isEmpty()) {
+            throw new ValidationException("Referenced skills are deprecated: " + String.join(", ", deprecatedSkills));
         }
         if (!mismatchedRules.isEmpty()) {
             throw new ValidationException("Referenced rules mismatch coding_agent: " + String.join(", ", mismatchedRules));
