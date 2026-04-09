@@ -760,7 +760,11 @@ public class RunLifecycleService {
     }
 
     private boolean resolveSkipGates(User user) {
-        return user != null && user.hasRole(Role.PRODUCT_OWNER);
+        if (user == null) {
+            return false;
+        }
+        var effectiveRoles = user.getEffectiveRoles();
+        return effectiveRoles.size() == 1 && effectiveRoles.contains(Role.PRODUCT_OWNER);
     }
 
     private String normalizeBranch(String branch) {
