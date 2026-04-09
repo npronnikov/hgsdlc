@@ -9,5 +9,6 @@ public record CreateRunCommand(
         String featureRequest,
         String publishMode,
         String workBranch,
-        String prCommitStrategy
+        String prCommitStrategy,
+        Boolean debugMode
 ) {}

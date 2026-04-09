@@ -88,7 +88,8 @@ public class RuntimeStepTxService {
             String workspaceRoot,
             String createdBy,
             Instant createdAt,
-            boolean skipGates
+            boolean skipGates,
+            boolean debugMode
     ) {
         RunEntity entity = RunEntity.builder()
                 .id(runId)
@@ -110,6 +111,7 @@ public class RuntimeStepTxService {
                 .createdBy(createdBy)
                 .createdAt(createdAt)
                 .skipGates(skipGates)
+                .debugMode(debugMode)
                 .build();
         runRepository.save(entity);
         appendAuditInternal(

@@ -162,7 +162,8 @@ public class RunLifecycleService {
                 runWorkspaceRoot.toString(),
                 identityPort.resolveActorId(user),
                 clockPort.now(),
-                resolveSkipGates(user)
+                resolveSkipGates(user, command.debugMode() != null && command.debugMode()),
+                command.debugMode() != null && command.debugMode()
         );
     }
 
@@ -759,7 +760,10 @@ public class RunLifecycleService {
         }
     }
 
-    private boolean resolveSkipGates(User user) {
+    private boolean resolveSkipGates(User user, boolean debugMode) {
+        if (debugMode) {
+            return false;
+        }
         return user != null && user.hasRole(Role.PRODUCT_OWNER);
     }
 

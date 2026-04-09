@@ -80,6 +80,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "Resume lifecycle run",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -101,6 +102,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "Cancel lifecycle run",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -121,6 +123,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "Recover running run",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -135,6 +138,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         humanInputFlowCanonicalName,
                         "Recover waiting gate run",
                         "local",
+                        null,
                         null,
                         null
                 ),
@@ -199,6 +203,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "First active run",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -213,6 +218,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                                 terminalFlowCanonicalName,
                                 "Second active run",
                                 "local",
+                                null,
                                 null,
                                 null
                         ),

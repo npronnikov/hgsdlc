@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import {
   BranchesOutlined,
+  BugOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloudUploadOutlined,
@@ -1091,6 +1092,15 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         </div>
         <Space wrap>
           <Button onClick={() => load()} loading={loading} icon={<ReloadOutlined />}>Refresh</Button>
+          {run.debug_mode && (
+            <Button
+              type="default"
+              icon={<BugOutlined />}
+              onClick={() => navigate(`/run-workspace?runId=${runId}`)}
+            >
+              Debug View
+            </Button>
+          )}
           {run.status === 'publish_failed' && (
             <Button type="primary" onClick={retryPublish}>
               Retry publish
