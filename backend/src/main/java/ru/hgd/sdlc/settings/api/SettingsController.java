@@ -64,15 +64,15 @@ public class SettingsController {
         if (request.aiTimeoutSeconds() == null) {
             throw new ValidationException("ai_timeout_seconds is required");
         }
-        if (request.agentLaunchCommand() == null || request.agentLaunchCommand().isBlank()) {
-            throw new ValidationException("agent_launch_command is required");
-        }
+        String resolvedAgentLaunchCommand = (request.agentLaunchCommand() == null || request.agentLaunchCommand().isBlank())
+                ? settingsService.getRuntimeAgentLaunchCommand(request.codingAgent())
+                : request.agentLaunchCommand();
         SettingsService.RuntimeSettings updated = settingsService.updateRuntimeSettings(
                 request.workspaceRoot(),
                 request.codingAgent(),
                 request.aiTimeoutSeconds(),
                 request.promptLanguage(),
-                request.agentLaunchCommand(),
+                resolvedAgentLaunchCommand,
                 request.agentSettingsJson(),
                 request.agentSettingsJsonEnabled(),
                 user == null ? "system" : user.getUsername()

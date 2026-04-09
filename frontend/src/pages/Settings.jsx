@@ -152,15 +152,21 @@ export default function Settings() {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      const resolvedCodingAgent = values.coding_agent || form.getFieldValue('coding_agent') || 'qwen';
+      const resolvedAgentLaunchCommand = (
+        values.agent_launch_command
+        ?? form.getFieldValue('agent_launch_command')
+        ?? defaultAgentLaunchCommand(resolvedCodingAgent)
+      );
       setSaving(true);
       await apiRequest('/settings/runtime', {
         method: 'PUT',
         body: JSON.stringify({
           workspace_root: values.workspace_root,
-          coding_agent: values.coding_agent,
+          coding_agent: resolvedCodingAgent,
           ai_timeout_seconds: values.ai_timeout_seconds,
           prompt_language: values.prompt_language,
-          agent_launch_command: values.agent_launch_command,
+          agent_launch_command: resolvedAgentLaunchCommand,
           agent_settings_json: values.agent_settings_json,
           agent_settings_json_enabled: Boolean(values.agent_settings_json_enabled),
         }),
