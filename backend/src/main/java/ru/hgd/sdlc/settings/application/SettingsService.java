@@ -535,6 +535,9 @@ public class SettingsService {
         if ("claude".equals(codingAgent)) {
             return "runtime/agent-settings-json/claude.settings.json";
         }
+        if ("gigacode".equals(codingAgent)) {
+            return "runtime/agent-settings-json/gigacode.settings.json";
+        }
         return "runtime/agent-settings-json/qwen.settings.json";
     }
 
@@ -542,6 +545,9 @@ public class SettingsService {
         String normalized = normalizeCodingAgent(codingAgent);
         if ("claude".equals(normalized)) {
             return "claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}";
+        }
+        if ("gigacode".equals(normalized)) {
+            return "gigacode -p {{PROMPT}} --approval-mode auto-edit --output-format stream-json --include-partial-messages";
         }
         return "qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}";
     }

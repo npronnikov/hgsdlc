@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.flow.domain.FlowModel;
+import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.rule.domain.RuleVersion;
 import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
@@ -30,6 +31,7 @@ class GigacodeCodingAgentStrategy implements CodingAgentStrategy {
     private final AgentPromptBuilder agentPromptBuilder;
     private final CatalogContentResolver catalogContentResolver;
     private final WorkspacePort workspacePort;
+    private final SettingsService settingsService;
 
     GigacodeCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
@@ -38,7 +40,8 @@ class GigacodeCodingAgentStrategy implements CodingAgentStrategy {
             RuntimeStepTxService runtimeStepTxService,
             AgentPromptBuilder agentPromptBuilder,
             CatalogContentResolver catalogContentResolver,
-            WorkspacePort workspacePort
+            WorkspacePort workspacePort,
+            SettingsService settingsService
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
@@ -47,6 +50,7 @@ class GigacodeCodingAgentStrategy implements CodingAgentStrategy {
         this.agentPromptBuilder = agentPromptBuilder;
         this.catalogContentResolver = catalogContentResolver;
         this.workspacePort = workspacePort;
+        this.settingsService = settingsService;
     }
 
     @Override
@@ -134,16 +138,8 @@ class GigacodeCodingAgentStrategy implements CodingAgentStrategy {
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
 
-        List<String> command = List.of(
-                "gigacode",
-                "-p",
-                promptPackage.prompt(),
-                "--approval-mode",
-                "auto-edit",
-                "--output-format",
-                "stream-json",
-                "--include-partial-messages"
-        );
+        String launchCommand = resolveLaunchCommand(promptPackage.prompt(), promptPath);
+        List<String> command = List.of("bash", "-lc", launchCommand);
 
         return new AgentInvocationContext(
                 projectRoot,
@@ -270,6 +266,20 @@ class GigacodeCodingAgentStrategy implements CodingAgentStrategy {
         } catch (RuntimeException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to set executable bit: " + path);
         }
+    }
+
+    private String resolveLaunchCommand(String prompt, Path promptPath) {
+        String template = settingsService.getRuntimeAgentLaunchCommand(codingAgent());
+        return template
+                .replace("{{PROMPT_FILE}}", shellQuote(promptPath == null ? "" : promptPath.toString()))
+                .replace("{{PROMPT}}", shellQuote(prompt));
+    }
+
+    private String shellQuote(String value) {
+        if (value == null) {
+            return "''";
+        }
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 
     private void deleteDirectoryContents(Path directory) throws CodingAgentException {

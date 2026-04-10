@@ -1,0 +1,27 @@
+{
+  "general": {
+    "preferredEditor": "code",
+    "enableAutoUpdate": true
+  },
+  "tools": {
+    "approvalMode": "auto-edit",
+    "shell": {
+      "enableInteractiveShell": true
+    },
+    "allowed": [
+      "run_shell_command(git status)",
+      "run_shell_command(git diff)"
+    ],
+    "exclude": [
+      "run_shell_command(rm -rf)",
+      "run_shell_command(curl *)"
+    ]
+  },
+  "context": {
+    "fileName": ["GIGACODE.md"],
+    "includeDirectories": []
+  },
+  "advanced": {
+    "excludedEnvVars": ["DEBUG", "DEBUG_MODE", "NODE_ENV"]
+  }
+}

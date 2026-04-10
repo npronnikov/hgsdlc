@@ -119,7 +119,7 @@ export default function Projects() {
     }
   };
 
-  const projectMenuItems = () => ([
+  const projectMenuItems = (project) => ([
     { key: 'edit', label: 'Edit', icon: <EditOutlined /> },
     {
       key: 'delete',
@@ -188,7 +188,7 @@ export default function Projects() {
                     <Dropdown
                       trigger={['click']}
                       menu={{
-                        items: projectMenuItems(),
+                        items: projectMenuItems(project),
                         onClick: ({ key }) => handleMenuClick(project, key),
                       }}
                     >
