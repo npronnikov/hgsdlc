@@ -163,6 +163,9 @@ export default function RuleEditor() {
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
+  const normalizePublicationStatus = (publication, status) => (
+    publication || (status === 'published' ? 'published' : '')
+  );
 
   const loadRule = async (ruleId) => {
     try {
@@ -183,7 +186,7 @@ export default function RuleEditor() {
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || 'organization');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setPublicationStatus(data.publication_status || '');
+      setPublicationStatus(normalizePublicationStatus(data.publication_status, data.status));
       setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
       setIsEditing(false);
@@ -241,7 +244,7 @@ export default function RuleEditor() {
       setRuleKind(data.rule_kind || '');
       setScope(data.scope || 'organization');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setPublicationStatus(data.publication_status || '');
+      setPublicationStatus(normalizePublicationStatus(data.publication_status, data.status));
       setForkedFrom(data.forked_from || '');
       setIsNewRule(false);
       setIsEditing(keepEditing);
@@ -400,9 +403,10 @@ export default function RuleEditor() {
       setResourceVersion(response.resource_version ?? resourceVersion);
       setRuleVersion(response.version || ruleVersion);
       setBaseVersion(response.version || baseVersion);
-      setCurrentStatus(response.status || currentStatus);
+      const nextStatus = response.status || currentStatus;
+      setCurrentStatus(nextStatus);
       setSelectedRuleId(response.rule_id || normalizedRuleId);
-      setPublicationStatus(response.publication_status || publicationStatus);
+      setPublicationStatus(normalizePublicationStatus(response.publication_status, nextStatus) || publicationStatus);
       setScope(response.scope || scope);
       setForkedFrom(response.forked_from || forkedFrom);
       setIsNewRule(false);
@@ -797,7 +801,7 @@ export default function RuleEditor() {
           {!isCreateRoute && (
             <div style={{ marginTop: 12 }}>
               <Text className="muted">Publication status</Text>
-              <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || 'draft'}</div>
+              <div className="mono" style={{ marginTop: 4 }}>{publicationStatus || (currentStatus === 'published' ? 'published' : 'draft')}</div>
             </div>
           )}
         </Card>

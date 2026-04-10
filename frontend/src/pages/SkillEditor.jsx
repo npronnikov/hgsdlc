@@ -217,6 +217,9 @@ export default function SkillEditor() {
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
+  const normalizePublicationStatus = (publication, status) => (
+    publication || (status === 'published' ? 'published' : '')
+  );
 
   const syncEditorWithSelectedFile = (files, preferredPath = null) => {
     const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
@@ -276,7 +279,7 @@ export default function SkillEditor() {
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setPublicationStatus(data.publication_status || '');
+      setPublicationStatus(normalizePublicationStatus(data.publication_status, data.status));
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(false);
@@ -352,7 +355,7 @@ export default function SkillEditor() {
       setTags(data.tags || []);
       setSkillKind(data.skill_kind || '');
       setLifecycleStatus(data.lifecycle_status || 'active');
-      setPublicationStatus(data.publication_status || '');
+      setPublicationStatus(normalizePublicationStatus(data.publication_status, data.status));
       setForkedFrom(data.forked_from || '');
       setIsNewSkill(false);
       setIsEditing(keepEditing);
@@ -660,8 +663,9 @@ export default function SkillEditor() {
       setResourceVersion(response.resource_version ?? resourceVersion);
       setSkillVersion(response.version || skillVersion);
       setBaseVersion(response.version || baseVersion);
-      setCurrentStatus(response.status || currentStatus);
-      setPublicationStatus(response.publication_status || publicationStatus);
+      const nextStatus = response.status || currentStatus;
+      setCurrentStatus(nextStatus);
+      setPublicationStatus(normalizePublicationStatus(response.publication_status, nextStatus) || publicationStatus);
       setScope(response.scope || scope);
       setForkedFrom(response.forked_from || forkedFrom);
       setSelectedSkillId(response.skill_id || normalizedSkillId);
@@ -1190,7 +1194,7 @@ export default function SkillEditor() {
             <div style={{ marginTop: 12 }}>
                 <Text className="muted">Publication status</Text>
                 <div style={{ marginTop: 4 }}>
-                  <StatusTag value={publicationStatus || 'draft'} />
+                  <StatusTag value={publicationStatus || (currentStatus === 'published' ? 'published' : 'draft')} />
                 </div>
               </div>
             )}
