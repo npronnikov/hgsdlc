@@ -27,6 +27,7 @@ function LiveGraphInner({ flowSnapshot, nodeExecutions = [], activeNodeId, isAct
         ...node.data,
         runStatus: latest?.status ?? null,
         nodeExecutionId: latest?.node_execution_id ?? null,
+        errorCode: latest?.error_code ?? null,
       },
     };
   }), [layout.nodes, nodeExecutions]);

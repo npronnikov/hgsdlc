@@ -33,6 +33,9 @@ export function FlowNode({ data, selected }) {
         {data.runStatus === 'waiting_gate' && (
           <span className="flow-node-run-badge is-waiting">waiting</span>
         )}
+        {data.runStatus === 'failed' && (
+          <span className="flow-node-run-badge is-failed">{data.errorCode || 'failed'}</span>
+        )}
       </div>
       <div className="flow-node-id">{data.id}</div>
       {data.isTerminal && <span className="flow-node-stop">Stop</span>}

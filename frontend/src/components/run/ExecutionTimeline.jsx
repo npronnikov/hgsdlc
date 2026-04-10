@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Tooltip, Tag } from 'antd';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -6,6 +7,7 @@ import {
   LoadingOutlined,
   MinusCircleOutlined,
   PauseCircleOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import { NODE_KIND_META } from '../../utils/flowLayout.js';
 
@@ -63,11 +65,21 @@ function TimelineItem({ item, isSelected, onSelect }) {
         <div className="etl-meta">
           <span className="etl-kind">{NODE_KIND_META[item.node_kind]?.label || item.node_kind}</span>
           {item.attempt_no > 1 && <span className="etl-attempt">↩ #{item.attempt_no}</span>}
+          {item.checkpoint_commit_sha && (
+            <Tooltip title={`Checkpoint: ${item.checkpoint_commit_sha.slice(0, 8)}`}>
+              <SaveOutlined className="etl-checkpoint" />
+            </Tooltip>
+          )}
         </div>
         <div className="etl-time">
           {running && item.started_at && <ElapsedTimer startedAt={item.started_at} />}
           {duration && <span className="etl-duration">{duration}</span>}
         </div>
+        {item.error_code && (
+          <Tooltip title={item.error_message}>
+            <Tag color="error" className="etl-error-tag">{item.error_code}</Tag>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Space, Typography, message } from 'antd';
+import { Button, Drawer, Space, Typography, message } from 'antd';
 import {
   ArrowLeftOutlined,
+  AuditOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
+  PlayCircleOutlined,
   ReloadOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
@@ -13,8 +15,10 @@ import { useRunPolling } from '../hooks/useRunPolling.js';
 import { LiveGraph } from '../components/run/LiveGraph.jsx';
 import { ExecutionTimeline } from '../components/run/ExecutionTimeline.jsx';
 import { LiveLogViewer } from '../components/run/LiveLogViewer.jsx';
+import { NodeDetailPanel } from '../components/run/NodeDetailPanel.jsx';
 import { GateInputPanel } from '../components/run/GateInputPanel.jsx';
 import { GateReviewPanel } from '../components/run/GateReviewPanel.jsx';
+import { AuditStream } from '../components/run/AuditStream.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text } = Typography;
@@ -58,6 +62,7 @@ export default function RunWorkspace() {
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [graphFocused, setGraphFocused] = useState(false);
   const [gateDismissedId, setGateDismissedId] = useState(null);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const activeNodeId = useMemo(() => {
     const running = nodeExecutions.find((e) => e.status === 'running');
@@ -116,6 +121,18 @@ export default function RunWorkspace() {
       message.error(err.message || 'Failed to cancel run');
     }
   };
+
+  const resumeRun = async () => {
+    try {
+      await apiRequest(`/runs/${runId}/resume`, { method: 'POST' });
+      message.success('Run resumed');
+      refresh();
+    } catch (err) {
+      message.error(err.message || 'Failed to resume run');
+    }
+  };
+
+  const canResume = run && ['created', 'waiting_publish', 'publish_failed'].includes(run.status);
 
   const handleGateDismiss = () => {
     if (run?.current_gate?.gate_id) {
@@ -177,8 +194,20 @@ export default function RunWorkspace() {
         <Text type="secondary" className="rw-subtitle">
           <span className="mono">{shortId(runId, 12)}</span>
           {run?.flow_canonical_name && <> · {run.flow_canonical_name}</>}
+          {run?.feature_request && (
+            <span className="rw-feature-request" title={run.feature_request}>
+              {' · '}{run.feature_request.length > 80 ? run.feature_request.slice(0, 80) + '…' : run.feature_request}
+            </span>
+          )}
         </Text>
         <Space className="rw-actions">
+          <Button
+            type="text"
+            size="small"
+            icon={<AuditOutlined />}
+            onClick={() => setAuditOpen((v) => !v)}
+            title="Audit events"
+          />
           <Button
             type="text"
             size="small"
@@ -187,6 +216,11 @@ export default function RunWorkspace() {
             title={graphFocused ? 'Show panels' : 'Focus graph'}
           />
           <Button size="small" icon={<ReloadOutlined />} onClick={() => refresh()} loading={loading} />
+          {canResume && (
+            <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={resumeRun}>
+              Resume
+            </Button>
+          )}
           {isActive && <Button size="small" danger onClick={cancelRun}>Stop</Button>}
         </Space>
       </div>
@@ -231,7 +265,12 @@ export default function RunWorkspace() {
           {!graphFocused && (
             <div className={`rw-detail ${workspaceMode === 'gate:approval' ? 'is-fullwidth' : ''}`}>
               {workspaceMode === 'execute' && (
-                <LiveLogViewer runId={runId} nodeExecutionId={logNodeExecId} />
+                <NodeDetailPanel
+                  runId={runId}
+                  nodeExecutionId={logNodeExecId}
+                  flowSnapshot={run?.flow_snapshot}
+                  nodeExecutions={nodeExecutions}
+                />
               )}
               {workspaceMode === 'gate:input' && run?.current_gate && (
                 <GateInputPanel
@@ -252,6 +291,18 @@ export default function RunWorkspace() {
           )}
         </div>
       </RunWorkspaceErrorBoundary>
+
+      <Drawer
+        title="Audit Events"
+        open={auditOpen}
+        onClose={() => setAuditOpen(false)}
+        width={420}
+        styles={{ body: { padding: 0 } }}
+      >
+        {auditOpen && (
+          <AuditStream runId={runId} nodeExecutionId={logNodeExecId} />
+        )}
+      </Drawer>
     </div>
   );
 }
