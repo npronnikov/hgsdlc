@@ -220,7 +220,9 @@ export default function RunLaunch() {
           apiRequest('/flows'),
         ]);
         setProjects(projectData || []);
-        const publishedFlows = (flowData || []).filter((flow) => flow.status === 'published');
+        const publishedFlows = (flowData || []).filter(
+          (flow) => flow.status === 'published' && (!flow.lifecycle_status || flow.lifecycle_status === 'active')
+        );
         setFlows(publishedFlows);
 
         const paramProjectId = searchParams.get('projectId');

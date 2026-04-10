@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Drawer, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { FilterOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -23,7 +23,7 @@ export default function Flows() {
     platformCode: null,
     flowKind: null,
     riskLevel: null,
-    lifecycleStatus: null,
+    lifecycleStatus: 'active',
     tag: null,
     status: null,
     version: '',
@@ -39,6 +39,8 @@ export default function Flows() {
   const [hasMore, setHasMore] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
+  const [deprecateTarget, setDeprecateTarget] = useState(null);
+  const [deprecating, setDeprecating] = useState(false);
 
   const loadFlows = async ({ cursor = null, append = false } = {}) => {
     if (append) {
@@ -127,7 +129,13 @@ export default function Flows() {
   const platformCodes = useMemo(() => Array.from(new Set(flows.map((flow) => flow.platformCode).filter(Boolean))), [flows]);
   const flowKinds = useMemo(() => Array.from(new Set(flows.map((flow) => flow.flowKind).filter(Boolean))), [flows]);
   const riskLevels = useMemo(() => Array.from(new Set(flows.map((flow) => flow.riskLevel).filter(Boolean))), [flows]);
-  const lifecycleStatuses = useMemo(() => Array.from(new Set(flows.map((flow) => flow.lifecycleStatus).filter(Boolean))), [flows]);
+  const lifecycleOptions = useMemo(
+    () => [
+      { value: 'active', label: 'active' },
+      { value: 'deprecated', label: 'deprecated' },
+    ],
+    [],
+  );
   const tags = useMemo(() => Array.from(new Set(flows.flatMap((flow) => flow.tags || []).filter(Boolean))), [flows]);
   const activeFilters = useMemo(() => {
     const items = [];
@@ -139,13 +147,36 @@ export default function Flows() {
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.flowKind) items.push({ key: 'flowKind', label: `Type: ${filters.flowKind}` });
     if (filters.riskLevel) items.push({ key: 'riskLevel', label: `Risk: ${filters.riskLevel}` });
-    if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    if (filters.lifecycleStatus && filters.lifecycleStatus !== 'active') {
+      items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    }
     if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
     if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
     if (filters.hasDescription === true) items.push({ key: 'hasDescription', label: 'Description: yes' });
     if (filters.hasDescription === false) items.push({ key: 'hasDescription', label: 'Description: no' });
     return items;
   }, [filters]);
+
+  const canDeprecate = (flow) => (
+    canManageCatalog
+    && flow?.status === 'published'
+    && (flow?.lifecycleStatus == null || flow?.lifecycleStatus === 'active')
+  );
+
+  const requestDeprecation = async () => {
+    if (!deprecateTarget) return;
+    setDeprecating(true);
+    try {
+      await apiRequest(`/flows/${deprecateTarget.flowId}/deprecate`, { method: 'POST' });
+      message.success('Deprecation request created');
+      setDeprecateTarget(null);
+      await loadFlows({ cursor: null, append: false });
+    } catch (err) {
+      message.error(err.message || 'Failed to request deprecation');
+    } finally {
+      setDeprecating(false);
+    }
+  };
 
   return (
     <div className="cards-page">
@@ -194,7 +225,31 @@ export default function Flows() {
                     <span className="resource-card-name" title={flow.name}>{truncateCardName(flow.name)}</span>
                     <span className="resource-card-subtitle mono">{flow.flowId}@{flow.version}</span>
                   </div>
-                  <span className="minimal-card-status">{formatStatusLabel(flow.status || 'unknown')}</span>
+                  <div className="resource-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <span className="minimal-card-status">{formatStatusLabel(flow.status || 'unknown')}</span>
+                    {canDeprecate(flow) ? (
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [{ key: 'deprecate', label: 'Deprecate' }],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent?.stopPropagation?.();
+                            if (key === 'deprecate') {
+                              setDeprecateTarget(flow);
+                            }
+                          },
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          className="resource-card-menu"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </Dropdown>
+                    ) : null}
+                  </div>
                 </div>
                 {flow.description && <Text type="secondary" className="resource-card-description">{flow.description}</Text>}
                 <div className="minimal-card-meta-line">
@@ -258,7 +313,7 @@ export default function Flows() {
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.flowKind} onChange={(value) => setFilters((prev) => ({ ...prev, flowKind: value || null }))} options={flowKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Risk</Text><Select allowClear value={filters.riskLevel} onChange={(value) => setFilters((prev) => ({ ...prev, riskLevel: value || null }))} options={riskLevels.map((value) => ({ value, label: value }))} placeholder="Select risk" /></div>
-          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
+          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || 'active' }))} options={lifecycleOptions} placeholder="Select lifecycle" /></div>
           <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear showSearch value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row">
             <Text className="muted">Version</Text>
@@ -294,6 +349,29 @@ export default function Flows() {
           </Button>
         </div>
       </Drawer>
+      <Modal
+        title="Deprecate flow?"
+        open={!!deprecateTarget}
+        onCancel={() => setDeprecateTarget(null)}
+        onOk={requestDeprecation}
+        okText="Deprecate"
+        cancelText="Cancel"
+        confirmLoading={deprecating}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Text>
+            A publication request will be created for <span className="mono">{deprecateTarget?.canonical || deprecateTarget?.flowId}</span> with lifecycle_status=deprecated.
+          </Text>
+          <Text type="secondary">
+            {deprecateTarget?.scope === 'team'
+              ? 'After approval, deprecation will be finalized in DB without PR.'
+              : 'After approval, deprecation will be published via Pull Request to catalog.'}
+          </Text>
+          <Text type="secondary">
+            After publication this flow will be excluded from launch and new selections.
+          </Text>
+        </div>
+      </Modal>
     </div>
   );
 }

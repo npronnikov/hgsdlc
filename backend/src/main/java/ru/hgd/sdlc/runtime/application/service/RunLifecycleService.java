@@ -23,7 +23,9 @@ import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.application.FlowYamlParser;
+import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowModel;
+import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
@@ -109,6 +111,12 @@ public class RunLifecycleService {
                 .orElseThrow(() -> new NotFoundException("Project not found: " + command.projectId()));
         FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
                 .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
+        if (flowVersion.getStatus() != FlowStatus.PUBLISHED) {
+            throw new ValidationException("Flow is not published: " + command.flowCanonicalName());
+        }
+        if (flowVersion.getLifecycleStatus() != null && flowVersion.getLifecycleStatus() != FlowLifecycleStatus.ACTIVE) {
+            throw new ValidationException("Flow is deprecated and cannot be launched: " + command.flowCanonicalName());
+        }
         FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
         if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
             throw new ValidationException("Flow has no nodes");

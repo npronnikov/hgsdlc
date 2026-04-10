@@ -59,3 +59,15 @@ lifecycle_status у скилов/рулов/флоу
 on_{}:
       {attr}: value
       next_node: {implementation-plan}
+
+
+      
+переключись в ветку giga и сделай следующее
+1) для gigacode coding agent сделай поддержку Agent Launch Command и Agent Settings аналогично qwen (с четом отличий по команде запуска, а settings.json шаблон - полный аналог qwen)
+2) затем добавь в ветку все изменения из main
+
+
+- skipgates должен отвечать на вопросы самостоятельно - если они есть!!!
+- управление сессиями при запуске
+- бенчмарк
+
