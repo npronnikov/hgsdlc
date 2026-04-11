@@ -44,10 +44,20 @@ public class SettingsController {
         }
         String normalizedAgent = codingAgent.trim().toLowerCase();
         String launchCommand = settingsService.getRuntimeAgentLaunchCommand(normalizedAgent);
+        String initCommand = settingsService.getRuntimeAgentInitCommand(normalizedAgent);
+        boolean autoInitWhenNoRule = settingsService.isRuntimeAgentAutoInitWhenNoRule(normalizedAgent);
         String settingsJson = settingsService.getRuntimeAgentSettingsJson(normalizedAgent);
         String settingsJsonTemplate = settingsService.getRuntimeAgentSettingsJsonTemplate(normalizedAgent);
         boolean settingsJsonEnabled = settingsService.isRuntimeAgentSettingsJsonEnabled(normalizedAgent);
-        return new AgentCommandResponse(normalizedAgent, launchCommand, settingsJson, settingsJsonTemplate, settingsJsonEnabled);
+        return new AgentCommandResponse(
+                normalizedAgent,
+                launchCommand,
+                initCommand,
+                autoInitWhenNoRule,
+                settingsJson,
+                settingsJsonTemplate,
+                settingsJsonEnabled
+        );
     }
 
     @PutMapping("/runtime")
@@ -67,12 +77,17 @@ public class SettingsController {
         String resolvedAgentLaunchCommand = (request.agentLaunchCommand() == null || request.agentLaunchCommand().isBlank())
                 ? settingsService.getRuntimeAgentLaunchCommand(request.codingAgent())
                 : request.agentLaunchCommand();
+        String resolvedAgentInitCommand = (request.agentInitCommand() == null || request.agentInitCommand().isBlank())
+                ? settingsService.getRuntimeAgentInitCommand(request.codingAgent())
+                : request.agentInitCommand();
         SettingsService.RuntimeSettings updated = settingsService.updateRuntimeSettings(
                 request.workspaceRoot(),
                 request.codingAgent(),
                 request.aiTimeoutSeconds(),
                 request.promptLanguage(),
                 resolvedAgentLaunchCommand,
+                resolvedAgentInitCommand,
+                request.autoInitWhenNoRule(),
                 request.agentSettingsJson(),
                 request.agentSettingsJsonEnabled(),
                 user == null ? "system" : user.getUsername()
@@ -134,6 +149,7 @@ public class SettingsController {
     private RuntimeSettingsResponse toResponse(SettingsService.RuntimeSettings s) {
         return new RuntimeSettingsResponse(
                 s.workspaceRoot(), s.codingAgent(), s.aiTimeoutSeconds(), s.promptLanguage(), s.agentLaunchCommand(),
+                s.agentInitCommand(), s.autoInitWhenNoRule(),
                 s.agentSettingsJson(), s.agentSettingsJsonTemplate(), s.agentSettingsJsonEnabled(),
                 s.catalogRepoUrl(), s.catalogDefaultBranch(), s.publishMode(),
                 s.gitSshPrivateKey(), s.gitSshPublicKey(), s.gitSshPassphrase(),
@@ -150,6 +166,8 @@ public class SettingsController {
             @JsonProperty("ai_timeout_seconds") Integer aiTimeoutSeconds,
             @JsonProperty("prompt_language") String promptLanguage,
             @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") Boolean autoInitWhenNoRule,
             @JsonProperty("agent_settings_json") String agentSettingsJson,
             @JsonProperty("agent_settings_json_enabled") Boolean agentSettingsJsonEnabled
     ) {}
@@ -160,6 +178,8 @@ public class SettingsController {
             @JsonProperty("ai_timeout_seconds") int aiTimeoutSeconds,
             @JsonProperty("prompt_language") String promptLanguage,
             @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") boolean autoInitWhenNoRule,
             @JsonProperty("agent_settings_json") String agentSettingsJson,
             @JsonProperty("agent_settings_json_template") String agentSettingsJsonTemplate,
             @JsonProperty("agent_settings_json_enabled") boolean agentSettingsJsonEnabled,
@@ -182,6 +202,8 @@ public class SettingsController {
     public record AgentCommandResponse(
             @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") boolean autoInitWhenNoRule,
             @JsonProperty("agent_settings_json") String agentSettingsJson,
             @JsonProperty("agent_settings_json_template") String agentSettingsJsonTemplate,
             @JsonProperty("agent_settings_json_enabled") boolean agentSettingsJsonEnabled

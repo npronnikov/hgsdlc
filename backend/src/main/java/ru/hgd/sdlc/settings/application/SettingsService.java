@@ -18,6 +18,8 @@ public class SettingsService {
     public static final String WORKSPACE_ROOT_KEY = "runtime.workspace_root";
     public static final String CODING_AGENT_KEY = "runtime.coding_agent";
     public static final String AGENT_LAUNCH_COMMAND_KEY_PREFIX = "runtime.agent_launch_command.";
+    public static final String AGENT_INIT_COMMAND_KEY_PREFIX = "runtime.agent_init_command.";
+    public static final String AGENT_AUTO_INIT_WHEN_NO_RULE_KEY_PREFIX = "runtime.auto_init_when_no_rule.";
     public static final String AGENT_SETTINGS_JSON_KEY_PREFIX = "runtime.agent_settings_json.";
     public static final String AGENT_SETTINGS_JSON_ENABLED_KEY_PREFIX = "runtime.agent_settings_json_enabled.";
     public static final String AI_TIMEOUT_SECONDS_KEY = "runtime.ai_timeout_seconds";
@@ -86,6 +88,33 @@ public class SettingsService {
 
     public Optional<SystemSetting> getRuntimeAgentLaunchCommandSetting(String codingAgent) {
         return repository.findById(agentLaunchCommandKey(normalizeCodingAgent(codingAgent)));
+    }
+
+    public String getRuntimeAgentInitCommand(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String settingKey = agentInitCommandKey(normalizedAgent);
+        return repository.findById(settingKey)
+                .map(SystemSetting::getSettingValue)
+                .filter((value) -> value != null && !value.isBlank())
+                .orElseGet(() -> defaultAgentInitCommand(normalizedAgent));
+    }
+
+    public Optional<SystemSetting> getRuntimeAgentInitCommandSetting(String codingAgent) {
+        return repository.findById(agentInitCommandKey(normalizeCodingAgent(codingAgent)));
+    }
+
+    public boolean isRuntimeAgentAutoInitWhenNoRule(String codingAgent) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        return repository.findById(agentAutoInitWhenNoRuleKey(normalizedAgent))
+                .map(SystemSetting::getSettingValue)
+                .map(String::trim)
+                .filter((value) -> !value.isBlank())
+                .map(Boolean::parseBoolean)
+                .orElse(false);
+    }
+
+    public Optional<SystemSetting> getRuntimeAgentAutoInitWhenNoRuleSetting(String codingAgent) {
+        return repository.findById(agentAutoInitWhenNoRuleKey(normalizeCodingAgent(codingAgent)));
     }
 
     public boolean isRuntimeAgentSettingsJsonEnabled(String codingAgent) {
@@ -206,6 +235,29 @@ public class SettingsService {
         return repository.save(setting);
     }
 
+    public SystemSetting updateRuntimeAgentInitCommand(String codingAgent, String initCommand, String actorId) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String normalizedCommand = normalizeAgentInitCommand(initCommand);
+        String key = agentInitCommandKey(normalizedAgent);
+        SystemSetting setting = repository.findById(key)
+                .orElseGet(() -> SystemSetting.builder().settingKey(key).build());
+        setting.setSettingValue(normalizedCommand);
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
+    public SystemSetting updateRuntimeAgentAutoInitWhenNoRule(String codingAgent, boolean enabled, String actorId) {
+        String normalizedAgent = normalizeCodingAgent(codingAgent);
+        String key = agentAutoInitWhenNoRuleKey(normalizedAgent);
+        SystemSetting setting = repository.findById(key)
+                .orElseGet(() -> SystemSetting.builder().settingKey(key).build());
+        setting.setSettingValue(Boolean.toString(enabled));
+        setting.setUpdatedAt(Instant.now());
+        setting.setUpdatedBy(actorId == null || actorId.isBlank() ? "system" : actorId);
+        return repository.save(setting);
+    }
+
     public SystemSetting updateRuntimeAgentSettingsJsonEnabled(String codingAgent, boolean enabled, String actorId) {
         String normalizedAgent = normalizeCodingAgent(codingAgent);
         String key = agentSettingsJsonEnabledKey(normalizedAgent);
@@ -254,6 +306,8 @@ public class SettingsService {
                 .map(this::normalizeCodingAgent)
                 .orElse(DEFAULT_CODING_AGENT);
         Optional<SystemSetting> agentLaunchCommandSetting = getRuntimeAgentLaunchCommandSetting(effectiveCodingAgent);
+        Optional<SystemSetting> agentInitCommandSetting = getRuntimeAgentInitCommandSetting(effectiveCodingAgent);
+        Optional<SystemSetting> agentAutoInitWhenNoRuleSetting = getRuntimeAgentAutoInitWhenNoRuleSetting(effectiveCodingAgent);
         Optional<SystemSetting> agentSettingsJsonSetting = getRuntimeAgentSettingsJsonSetting(effectiveCodingAgent);
         Optional<SystemSetting> agentSettingsJsonEnabledSetting = getRuntimeAgentSettingsJsonEnabledSetting(effectiveCodingAgent);
         SystemSetting latestSetting = latestOf(
@@ -262,7 +316,9 @@ public class SettingsService {
                 sshPrivate.orElse(null), sshPublic.orElse(null), sshPass.orElse(null),
                 cert.orElse(null), certKey.orElse(null), gitUser.orElse(null), gitPassword.orElse(null),
                 localGitUser.orElse(null), localGitEmail.orElse(null), promptLanguageSetting.orElse(null),
-                agentLaunchCommandSetting.orElse(null), agentSettingsJsonSetting.orElse(null), agentSettingsJsonEnabledSetting.orElse(null)
+                agentLaunchCommandSetting.orElse(null), agentInitCommandSetting.orElse(null),
+                agentAutoInitWhenNoRuleSetting.orElse(null), agentSettingsJsonSetting.orElse(null),
+                agentSettingsJsonEnabledSetting.orElse(null)
         );
         return new RuntimeSettings(
                 workspaceSetting.map(SystemSetting::getSettingValue).orElse(getWorkspaceRoot()),
@@ -270,6 +326,8 @@ public class SettingsService {
                 aiTimeoutSetting.map(SystemSetting::getSettingValue).map(Integer::parseInt).orElse(DEFAULT_AI_TIMEOUT_SECONDS),
                 promptLanguageSetting.map(SystemSetting::getSettingValue).map(this::normalizePromptLanguage).orElse(DEFAULT_PROMPT_LANGUAGE),
                 getRuntimeAgentLaunchCommand(effectiveCodingAgent),
+                getRuntimeAgentInitCommand(effectiveCodingAgent),
+                isRuntimeAgentAutoInitWhenNoRule(effectiveCodingAgent),
                 getRuntimeAgentSettingsJson(effectiveCodingAgent),
                 getRuntimeAgentSettingsJsonTemplate(effectiveCodingAgent),
                 isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
@@ -297,6 +355,8 @@ public class SettingsService {
             int aiTimeoutSeconds,
             String promptLanguage,
             String agentLaunchCommand,
+            String agentInitCommand,
+            Boolean autoInitWhenNoRule,
             String agentSettingsJson,
             Boolean agentSettingsJsonEnabled,
             String actorId
@@ -309,6 +369,22 @@ public class SettingsService {
         SystemSetting agentLaunchCommandSetting = updateRuntimeAgentLaunchCommand(
                 normalizedAgent,
                 agentLaunchCommand,
+                actorId
+        );
+        String normalizedAgentInitCommand = (agentInitCommand != null && !agentInitCommand.isBlank())
+                ? agentInitCommand
+                : getRuntimeAgentInitCommand(normalizedAgent);
+        SystemSetting agentInitCommandSetting = updateRuntimeAgentInitCommand(
+                normalizedAgent,
+                normalizedAgentInitCommand,
+                actorId
+        );
+        boolean normalizedAutoInitWhenNoRule = autoInitWhenNoRule != null
+                ? autoInitWhenNoRule
+                : isRuntimeAgentAutoInitWhenNoRule(normalizedAgent);
+        SystemSetting autoInitWhenNoRuleSetting = updateRuntimeAgentAutoInitWhenNoRule(
+                normalizedAgent,
+                normalizedAutoInitWhenNoRule,
                 actorId
         );
         String normalizedAgentSettingsJsonValue = agentSettingsJson != null
@@ -333,6 +409,8 @@ public class SettingsService {
                 aiTimeoutSetting,
                 promptLanguageSetting,
                 agentLaunchCommandSetting,
+                agentInitCommandSetting,
+                autoInitWhenNoRuleSetting,
                 agentSettingsJsonSetting,
                 agentSettingsJsonEnabledSetting
         );
@@ -342,6 +420,8 @@ public class SettingsService {
                 Integer.parseInt(aiTimeoutSetting.getSettingValue()),
                 promptLanguageSetting.getSettingValue(),
                 agentLaunchCommandSetting.getSettingValue(),
+                agentInitCommandSetting.getSettingValue(),
+                normalizedAutoInitWhenNoRule,
                 agentSettingsJsonSetting.getSettingValue(),
                 getRuntimeAgentSettingsJsonTemplate(normalizedAgent),
                 normalizedSettingsJsonEnabled,
@@ -398,6 +478,8 @@ public class SettingsService {
                 getAiTimeoutSeconds(),
                 getPromptLanguage(),
                 getRuntimeAgentLaunchCommand(effectiveCodingAgent),
+                getRuntimeAgentInitCommand(effectiveCodingAgent),
+                isRuntimeAgentAutoInitWhenNoRule(effectiveCodingAgent),
                 getRuntimeAgentSettingsJson(effectiveCodingAgent),
                 getRuntimeAgentSettingsJsonTemplate(effectiveCodingAgent),
                 isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
@@ -519,6 +601,13 @@ public class SettingsService {
         return command.trim();
     }
 
+    private String normalizeAgentInitCommand(String command) {
+        if (command == null || command.isBlank()) {
+            throw new ValidationException("agent_init_command is required");
+        }
+        return command.trim();
+    }
+
     private String agentLaunchCommandKey(String codingAgent) {
         return AGENT_LAUNCH_COMMAND_KEY_PREFIX + normalizeCodingAgent(codingAgent);
     }
@@ -529,6 +618,14 @@ public class SettingsService {
 
     private String agentSettingsJsonKey(String codingAgent) {
         return AGENT_SETTINGS_JSON_KEY_PREFIX + normalizeCodingAgent(codingAgent);
+    }
+
+    private String agentInitCommandKey(String codingAgent) {
+        return AGENT_INIT_COMMAND_KEY_PREFIX + normalizeCodingAgent(codingAgent);
+    }
+
+    private String agentAutoInitWhenNoRuleKey(String codingAgent) {
+        return AGENT_AUTO_INIT_WHEN_NO_RULE_KEY_PREFIX + normalizeCodingAgent(codingAgent);
     }
 
     private String agentSettingsJsonTemplateResourcePath(String codingAgent) {
@@ -544,6 +641,14 @@ public class SettingsService {
             return "claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}";
         }
         return "qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}";
+    }
+
+    private String defaultAgentInitCommand(String codingAgent) {
+        String normalized = normalizeCodingAgent(codingAgent);
+        if ("claude".equals(normalized)) {
+            return "claude init";
+        }
+        return "qwen init";
     }
 
     private String normalizeAgentSettingsJson(String settingsJson) {
@@ -582,6 +687,8 @@ public class SettingsService {
             int aiTimeoutSeconds,
             String promptLanguage,
             String agentLaunchCommand,
+            String agentInitCommand,
+            boolean autoInitWhenNoRule,
             String agentSettingsJson,
             String agentSettingsJsonTemplate,
             boolean agentSettingsJsonEnabled,

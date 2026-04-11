@@ -159,8 +159,13 @@ export default function Projects() {
         <Title level={3} style={{ margin: 0 }}>Projects</Title>
         <Space size={12}>
           <Space size={8}>
-            <Switch checked={showInactive} onChange={setShowInactive} size="small" />
             <Text type="secondary">Show inactive</Text>
+            <Switch
+              checked={showInactive}
+              onChange={setShowInactive}
+              checkedChildren="Вкл"
+              unCheckedChildren="Выкл"
+            />
           </Space>
           {canCreateProject(user?.role) ? (
             <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>

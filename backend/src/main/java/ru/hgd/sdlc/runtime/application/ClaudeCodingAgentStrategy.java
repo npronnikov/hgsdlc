@@ -80,8 +80,11 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
 
         List<RuleVersion> rules = resolveFlowRules(flowModel);
         List<SkillVersion> skills = resolveNodeSkills(flowModel, node);
+        boolean autoInitWithoutRules = shouldAutoInitWhenNoRule(flowModel, rules);
 
-        writeFile(rulesPath, renderClaudeRules(flowModel, rules).getBytes(StandardCharsets.UTF_8));
+        if (!autoInitWithoutRules) {
+            writeFile(rulesPath, renderClaudeRules(flowModel, rules).getBytes(StandardCharsets.UTF_8));
+        }
         runtimeStepTxService.appendAudit(
                 run.getId(),
                 request.execution().getId(),
@@ -91,7 +94,8 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
                 "runtime",
                 mapOf(
                         "path", rulesPath.toString(),
-                        "rule_refs", flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs()
+                        "rule_refs", flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs(),
+                        "materialization_mode", autoInitWithoutRules ? "agent_init" : "flow_rules"
                 )
         );
 
@@ -139,8 +143,13 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
 
-        String launchCommand = resolveLaunchCommand(promptPackage.prompt(), promptPath);
-        List<String> command = List.of("bash", "-lc", launchCommand);
+        String launchCommand = resolveLaunchCommand(promptPackage.prompt(), promptPath, projectRoot);
+        String commandScript = launchCommand;
+        if (autoInitWithoutRules) {
+            String initCommand = resolveInitCommand(promptPackage.prompt(), promptPath, projectRoot);
+            commandScript = initCommand + " && " + launchCommand;
+        }
+        List<String> command = List.of("bash", "-lc", commandScript);
 
         return new AgentInvocationContext(
                 projectRoot,
@@ -219,6 +228,20 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         return sb.toString();
     }
 
+    private boolean shouldAutoInitWhenNoRule(FlowModel flowModel, List<RuleVersion> resolvedRules) {
+        if (!settingsService.isRuntimeAgentAutoInitWhenNoRule(codingAgent())) {
+            return false;
+        }
+        if (resolvedRules != null && !resolvedRules.isEmpty()) {
+            return false;
+        }
+        List<String> refs = flowModel.getRuleRefs();
+        if (refs == null || refs.isEmpty()) {
+            return true;
+        }
+        return refs.stream().noneMatch((ref) -> ref != null && !ref.isBlank());
+    }
+
     private String normalize(String value) {
         if (value == null) {
             return "";
@@ -283,11 +306,21 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         }
     }
 
-    private String resolveLaunchCommand(String prompt, Path promptPath) {
+    private String resolveLaunchCommand(String prompt, Path promptPath, Path projectRoot) {
         String template = settingsService.getRuntimeAgentLaunchCommand(codingAgent());
+        return applyCommandTemplate(template, prompt, promptPath, projectRoot);
+    }
+
+    private String resolveInitCommand(String prompt, Path promptPath, Path projectRoot) {
+        String template = settingsService.getRuntimeAgentInitCommand(codingAgent());
+        return applyCommandTemplate(template, prompt, promptPath, projectRoot);
+    }
+
+    private String applyCommandTemplate(String template, String prompt, Path promptPath, Path projectRoot) {
         return template
                 .replace("{{PROMPT_FILE}}", shellQuote(promptPath == null ? "" : promptPath.toString()))
-                .replace("{{PROMPT}}", shellQuote(prompt));
+                .replace("{{PROMPT}}", shellQuote(prompt))
+                .replace("{{PROJECT_ROOT}}", shellQuote(projectRoot == null ? "" : projectRoot.toString()));
     }
 
     private String shellQuote(String value) {

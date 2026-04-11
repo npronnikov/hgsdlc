@@ -31,6 +31,14 @@ function defaultAgentLaunchCommand(agent) {
   return 'qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}';
 }
 
+function defaultAgentInitCommand(agent) {
+  const normalized = String(agent || '').trim().toLowerCase();
+  if (normalized === 'claude') {
+    return 'claude init';
+  }
+  return 'qwen init';
+}
+
 function defaultAgentSettingsJsonTemplate(agent) {
   const normalized = String(agent || '').trim().toLowerCase();
   if (normalized === 'claude') {
@@ -61,6 +69,8 @@ export default function Settings() {
         ai_timeout_seconds: data?.ai_timeout_seconds ?? 900,
         prompt_language: data?.prompt_language || 'en',
         agent_launch_command: data?.agent_launch_command || defaultAgentLaunchCommand(data?.coding_agent || 'qwen'),
+        agent_init_command: data?.agent_init_command || defaultAgentInitCommand(data?.coding_agent || 'qwen'),
+        auto_init_when_no_rule: Boolean(data?.auto_init_when_no_rule),
         agent_settings_json: typeof data?.agent_settings_json === 'string' ? data.agent_settings_json : '',
         agent_settings_json_enabled: Boolean(data?.agent_settings_json_enabled),
         catalog_repo_url: data?.catalog_repo_url || DEFAULT_CATALOG_REPO_URL,
@@ -82,6 +92,8 @@ export default function Settings() {
         ai_timeout_seconds: 900,
         prompt_language: 'en',
         agent_launch_command: defaultAgentLaunchCommand('qwen'),
+        agent_init_command: defaultAgentInitCommand('qwen'),
+        auto_init_when_no_rule: false,
         agent_settings_json: '',
         agent_settings_json_enabled: false,
         catalog_repo_url: DEFAULT_CATALOG_REPO_URL,
@@ -123,10 +135,14 @@ export default function Settings() {
           return;
         }
         const launchCommand = data?.agent_launch_command || defaultAgentLaunchCommand(codingAgentValue);
+        const initCommand = data?.agent_init_command || defaultAgentInitCommand(codingAgentValue);
+        const autoInitWhenNoRule = Boolean(data?.auto_init_when_no_rule);
         const settingsJsonTemplate = data?.agent_settings_json_template || defaultAgentSettingsJsonTemplate(codingAgentValue);
         const settingsJson = typeof data?.agent_settings_json === 'string' ? data.agent_settings_json : '';
         const settingsJsonEnabled = Boolean(data?.agent_settings_json_enabled);
         form.setFieldValue('agent_launch_command', launchCommand);
+        form.setFieldValue('agent_init_command', initCommand);
+        form.setFieldValue('auto_init_when_no_rule', autoInitWhenNoRule);
         form.setFieldValue('agent_settings_json', settingsJson);
         form.setFieldValue('agent_settings_json_enabled', settingsJsonEnabled);
         setAgentSettingsDefaults(settingsJsonTemplate);
@@ -136,6 +152,8 @@ export default function Settings() {
           return;
         }
         form.setFieldValue('agent_launch_command', defaultAgentLaunchCommand(codingAgentValue));
+        form.setFieldValue('agent_init_command', defaultAgentInitCommand(codingAgentValue));
+        form.setFieldValue('auto_init_when_no_rule', false);
         form.setFieldValue('agent_settings_json', '');
         form.setFieldValue('agent_settings_json_enabled', false);
         setAgentSettingsDefaults(defaultAgentSettingsJsonTemplate(codingAgentValue));
@@ -167,6 +185,8 @@ export default function Settings() {
           ai_timeout_seconds: values.ai_timeout_seconds,
           prompt_language: values.prompt_language,
           agent_launch_command: resolvedAgentLaunchCommand,
+          agent_init_command: values.agent_init_command,
+          auto_init_when_no_rule: Boolean(values.auto_init_when_no_rule),
           agent_settings_json: values.agent_settings_json,
           agent_settings_json_enabled: Boolean(values.agent_settings_json_enabled),
         }),
@@ -308,7 +328,7 @@ export default function Settings() {
                     key: 'agent-launch-command',
                     label: (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                        <span>Agent Launch Command</span>
+                        <span>Agent Commands</span>
                         <Button
                           size="small"
                           type="default"
@@ -316,6 +336,7 @@ export default function Settings() {
                           onClick={(event) => {
                             event.stopPropagation();
                             form.setFieldValue('agent_launch_command', defaultAgentLaunchCommand(codingAgentValue || 'qwen'));
+                            form.setFieldValue('agent_init_command', defaultAgentInitCommand(codingAgentValue || 'qwen'));
                           }}
                         >
                           Load Defaults
@@ -323,23 +344,51 @@ export default function Settings() {
                       </div>
                     ),
                     children: (
-                      <Form.Item
-                        style={{ marginBottom: 0 }}
-                        name="agent_launch_command"
-                        trigger="onChange"
-                        getValueFromEvent={(value) => value ?? ''}
-                        getValueProps={(value) => ({ value: value ?? '' })}
-                        rules={[{ required: true, message: 'Specify launch command' }]}
-                        extra="Editable shell command used to start the selected coding agent. Supported placeholders: {{PROMPT}} and {{PROMPT_FILE}}."
-                      >
-                        <Editor
-                          height="190px"
-                          language="shell"
-                          beforeMount={configureMonacoThemes}
-                          theme={monacoTheme}
-                          options={SHELL_EDITOR_OPTIONS}
-                        />
-                      </Form.Item>
+                      <>
+                        <Form.Item
+                          style={{ marginBottom: 12 }}
+                          name="agent_launch_command"
+                          trigger="onChange"
+                          getValueFromEvent={(value) => value ?? ''}
+                          getValueProps={(value) => ({ value: value ?? '' })}
+                          rules={[{ required: true, message: 'Specify launch command' }]}
+                          extra="Editable shell command used to start the selected coding agent. Supported placeholders: {{PROMPT}} and {{PROMPT_FILE}}."
+                        >
+                          <Editor
+                            height="95px"
+                            language="shell"
+                            beforeMount={configureMonacoThemes}
+                            theme={monacoTheme}
+                            options={SHELL_EDITOR_OPTIONS}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          style={{ marginBottom: 12 }}
+                          name="agent_init_command"
+                          trigger="onChange"
+                          getValueFromEvent={(value) => value ?? ''}
+                          getValueProps={(value) => ({ value: value ?? '' })}
+                          rules={[{ required: true, message: 'Specify init command' }]}
+                          extra="Bootstrap command executed before launch when auto init is enabled and flow has no rules. Supported placeholders: {{PROMPT}}, {{PROMPT_FILE}}, {{PROJECT_ROOT}}."
+                        >
+                          <Editor
+                            height="65px"
+                            language="shell"
+                            beforeMount={configureMonacoThemes}
+                            theme={monacoTheme}
+                            options={SHELL_EDITOR_OPTIONS}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          style={{ marginBottom: 0 }}
+                          label="Auto init when flow has no rules"
+                          name="auto_init_when_no_rule"
+                          valuePropName="checked"
+                          extra="If enabled, runtime runs Agent Init Command before Agent Launch Command only when flow.rule_refs is empty."
+                        >
+                          <Switch />
+                        </Form.Item>
+                      </>
                     ),
                   },
                   {
