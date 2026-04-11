@@ -41,6 +41,11 @@ auth:
       password: admin
       roles: [TECH_APPROVER]
 
+logging:
+  level:
+    ru.hgd.sdlc.benchmark: DEBUG
+    ru.hgd.sdlc.runtime.application.ClaudeCodingAgentStrategy: DEBUG
+
 catalog:
   seed:
     repo-url: https://github.com/npronnikov/catalog.git

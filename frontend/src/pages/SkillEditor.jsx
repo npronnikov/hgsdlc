@@ -216,6 +216,7 @@ export default function SkillEditor() {
   const editorRef = useRef(null);
   const previewRef = useRef(null);
   const isSyncingScroll = useRef(false);
+
   const previewContent = useMemo(() => splitFrontmatter(editorValue), [editorValue]);
   const normalizePublicationStatus = (publication, status) => (
     publication || (status === 'published' ? 'published' : '')
