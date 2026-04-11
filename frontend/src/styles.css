@@ -5410,20 +5410,21 @@ body {
   border-style: dashed;
 }
 
-.benchmark-line-comment-glyph {
+.monaco-editor .benchmark-line-comment-glyph {
   margin-left: 6px;
   margin-top: 5px;
   width: 8px !important;
   height: 8px !important;
   border-radius: 999px;
   background: var(--primary);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.22);
 }
 
-.benchmark-line-comment-line {
+.monaco-editor .benchmark-line-comment-line {
   background: rgba(15, 118, 110, 0.08);
 }
 
-:root[data-theme="dark"] .benchmark-line-comment-line {
+:root[data-theme="dark"] .monaco-editor .benchmark-line-comment-line {
   background: rgba(20, 184, 166, 0.16);
 }
 

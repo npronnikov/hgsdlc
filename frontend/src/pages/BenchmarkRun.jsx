@@ -167,13 +167,30 @@ function isFileDifferent(file) {
   return contentA !== contentB;
 }
 
+function normalizeId(value) {
+  const text = String(value || '').trim();
+  return text ? text.toLowerCase() : null;
+}
+
+function isCommentForRun(commentRunId, runRef, benchmarkRunId) {
+  const commentId = normalizeId(commentRunId);
+  if (!commentId) return true;
+  const runId = normalizeId(runRef);
+  const benchId = normalizeId(benchmarkRunId);
+  if (runId && commentId === runId) return true;
+  // Backward compatibility: old drafts sometimes persisted benchmark_run_id into run_id.
+  if (benchId && commentId === benchId) return true;
+  return false;
+}
+
 function normalizeLineComments(value) {
   if (!Array.isArray(value)) return [];
   return value.reduce((acc, item) => {
     const path = String(item?.path || '').trim();
     const side = String(item?.side || '').toUpperCase();
-    const benchmarkRunId = String(item?.benchmark_run_id || '').trim();
-    const runId = String(item?.run_id || '').trim();
+    const benchmarkRunId = normalizeId(item?.benchmark_run_id);
+    const runIdRaw = normalizeId(item?.run_id);
+    const runId = runIdRaw && runIdRaw !== benchmarkRunId ? runIdRaw : null;
     const line = Number(item?.line || 0);
     const text = String(item?.text || '').trim();
     if (!path || (side !== 'A' && side !== 'B') || !Number.isInteger(line) || line < 1 || !text) {
@@ -181,8 +198,8 @@ function normalizeLineComments(value) {
     }
     acc.push({
       id: item?.id ? String(item.id) : `${benchmarkRunId || 'benchmark'}:${runId || side}:${path}:${line}`,
-      benchmark_run_id: benchmarkRunId || null,
-      run_id: runId || null,
+      benchmark_run_id: benchmarkRunId,
+      run_id: runId,
       path,
       side,
       line,
@@ -682,7 +699,7 @@ export default function BenchmarkRun() {
     const existing = lineComments.find(
       (item) => item.path === effectivePath
         && item.side === side
-        && (item.run_id === effectiveRunId || !item.run_id)
+        && isCommentForRun(item.run_id, effectiveRunId, runId)
         && item.line === line,
     );
     setLineCommentDraft({
@@ -792,7 +809,7 @@ export default function BenchmarkRun() {
       const relevant = path
         ? lineComments.filter((item) => item.path === path
           && item.side === side
-          && (item.run_id === runRef || !item.run_id))
+          && isCommentForRun(item.run_id, runRef, runId))
         : [];
 
       const decorations = relevant.map((comment) => ({
@@ -810,7 +827,7 @@ export default function BenchmarkRun() {
         decorations,
       );
     });
-  }, [lineComments, selectedFile?.path, runIdBySide]);
+  }, [lineComments, selectedFile?.path, runIdBySide, runId]);
 
   useEffect(() => () => {
     ['A', 'B'].forEach((side) => {
@@ -994,14 +1011,17 @@ export default function BenchmarkRun() {
     const runRef = contextMenuState.side ? runIdBySide[contextMenuState.side] : null;
     return lineComments.some((item) => item.path === contextMenuState.path
       && item.side === contextMenuState.side
-      && (item.run_id === runRef || !item.run_id)
+      && isCommentForRun(item.run_id, runRef, runId)
       && item.line === contextMenuState.line);
-  }, [contextMenuState, lineComments, runIdBySide]);
+  }, [contextMenuState, lineComments, runIdBySide, runId]);
 
   const commentGroups = useMemo(() => {
     const groups = new Map();
     lineCommentsSorted.forEach((item) => {
-      const runRef = item.run_id || (item.side === 'A' ? runIdBySide.A : runIdBySide.B) || 'unknown';
+      const sideRunId = item.side === 'A' ? runIdBySide.A : runIdBySide.B;
+      const runRef = isCommentForRun(item.run_id, sideRunId, runId) && item.run_id
+        ? item.run_id
+        : sideRunId || item.run_id || 'unknown';
       const key = `${runRef}::${item.path}::${item.side}`;
       if (!groups.has(key)) {
         groups.set(key, {
@@ -1015,7 +1035,7 @@ export default function BenchmarkRun() {
       groups.get(key).comments.push(item);
     });
     return Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [lineCommentsSorted, runIdBySide]);
+  }, [lineCommentsSorted, runIdBySide, runId]);
 
   if (loading) {
     return (
