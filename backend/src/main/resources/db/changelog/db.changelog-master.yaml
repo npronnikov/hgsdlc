@@ -75,3 +75,7 @@ databaseChangeLog:
       file: db/changelog/042-benchmark-entities.sql
   - include:
       file: db/changelog/043-benchmark-case-artifact.sql
+  - include:
+      file: db/changelog/044-benchmark-run-comments.sql
+  - include:
+      file: db/changelog/045-benchmark-second-artifact.sql

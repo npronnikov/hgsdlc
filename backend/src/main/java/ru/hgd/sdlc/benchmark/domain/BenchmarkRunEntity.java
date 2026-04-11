@@ -40,6 +40,16 @@ public class BenchmarkRunEntity {
     @Column(name = "artifact_version_id")
     private UUID artifactVersionId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "artifact_b_type", length = 16)
+    private ArtifactType artifactBType;
+
+    @Column(name = "artifact_b_id", length = 255)
+    private String artifactBId;
+
+    @Column(name = "artifact_b_version_id")
+    private UUID artifactBVersionId;
+
     @Column(name = "coding_agent", nullable = false, length = 64)
     private String codingAgent;
 
@@ -57,6 +67,12 @@ public class BenchmarkRunEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "human_verdict", length = 32)
     private BenchmarkVerdict humanVerdict;
+
+    @Column(name = "review_comment", columnDefinition = "TEXT")
+    private String reviewComment;
+
+    @Column(name = "line_comments_json", columnDefinition = "TEXT")
+    private String lineCommentsJson;
 
     @Column(name = "judge_result", columnDefinition = "TEXT")
     private String judgeResult;

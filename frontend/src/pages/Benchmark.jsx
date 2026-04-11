@@ -5,22 +5,10 @@ import {
 } from 'antd';
 import { DeleteOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text, Paragraph } = Typography;
-
-const STATUS_COLOR = {
-  RUNNING: 'processing',
-  WAITING_COMPARISON: 'warning',
-  COMPLETED: 'success',
-  FAILED: 'error',
-};
-
-const VERDICT_COLOR = {
-  SKILL_USEFUL: 'green',
-  SKILL_NOT_HELPFUL: 'red',
-  NEUTRAL: 'default',
-};
 
 function formatDate(value) {
   if (!value) return '—';
@@ -104,6 +92,8 @@ export default function Benchmark() {
           name: values.name || null,
           artifact_type: values.artifact_type || null,
           artifact_id: values.artifact_id || null,
+          artifact_type_b: values.artifact_id_b ? (values.artifact_type || null) : null,
+          artifact_id_b: values.artifact_id_b || null,
         }),
       });
       message.success('Benchmark case created');
@@ -182,7 +172,7 @@ export default function Benchmark() {
         if (!caseRuns.some((r) => r.status === statusFilter)) return false;
       }
       if (!q) return true;
-      return [bc.name, bc.instruction, bc.artifact_id, bc.artifact_type, projectName(bc.project_id)]
+      return [bc.name, bc.instruction, bc.artifact_id, bc.artifact_id_b, bc.artifact_type, projectName(bc.project_id)]
         .filter(Boolean).join(' ').toLowerCase().includes(q);
     });
   }, [cases, searchText, statusFilter, runsByCaseId]);
@@ -204,13 +194,23 @@ export default function Benchmark() {
     {
       title: 'Case',
       key: 'case',
+      width: 220,
       render: (_, bc) => (
-        <div>
-          <div style={{ fontWeight: 500 }}>{bc.name || bc.instruction.slice(0, 60)}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary, #888)', marginTop: 2 }}>
-            <span style={{ marginRight: 8 }}>{projectName(bc.project_id)}</span>
+        <div className="benchmark-table-case">
+          <div className="benchmark-table-case-main">{bc.name || bc.instruction.slice(0, 60)}</div>
+          <div className="benchmark-table-case-meta">
+            <span>{projectName(bc.project_id)}</span>
             {bc.artifact_type && (
-              <Tag style={{ margin: 0 }}>{bc.artifact_type}: {bc.artifact_id}</Tag>
+              <div className="benchmark-table-artifact-compact">
+                <div className="benchmark-table-artifact-line">
+                  <span className="benchmark-table-artifact-label">Run A:</span>
+                  <span className="benchmark-table-artifact-value">{bc.artifact_id}</span>
+                </div>
+                <div className="benchmark-table-artifact-line">
+                  <span className="benchmark-table-artifact-label">Run B:</span>
+                  <span className="benchmark-table-artifact-value">{bc.artifact_id_b || 'control'}</span>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -219,9 +219,9 @@ export default function Benchmark() {
     {
       title: 'Instruction',
       key: 'instruction',
-      width: 280,
+      width: 420,
       render: (_, bc) => (
-        <Paragraph ellipsis={{ rows: 2, tooltip: bc.instruction }} style={{ margin: 0, fontSize: 13 }}>
+        <Paragraph className="benchmark-table-instruction" ellipsis={{ rows: 2, tooltip: bc.instruction }}>
           {bc.instruction}
         </Paragraph>
       ),
@@ -229,26 +229,32 @@ export default function Benchmark() {
     {
       title: 'Runs',
       key: 'runs',
-      width: 220,
+      width: 340,
       render: (_, bc) => {
-        const caseRuns = runsByCaseId[bc.id] || [];
-        if (caseRuns.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>No runs</Text>;
+        const caseRuns = [...(runsByCaseId[bc.id] || [])]
+          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        if (caseRuns.length === 0) return <Text type="secondary" className="benchmark-table-empty-runs">No runs</Text>;
         return (
-          <Space wrap size={4}>
+          <div className="benchmark-table-runs">
             {caseRuns.map((run) => (
-              <Tag
+              <button
                 key={run.id}
-                color={STATUS_COLOR[run.status] || 'default'}
-                style={{ cursor: 'pointer', margin: 0 }}
+                type="button"
+                className="benchmark-table-run-chip"
                 onClick={(e) => { e.stopPropagation(); navigate(`/benchmark/${run.id}`); }}
               >
-                {run.artifact_id || run.artifact_type || formatStatus(run.status)}
-                {run.human_verdict && (
-                  <span style={{ marginLeft: 4 }}>·{formatStatus(run.human_verdict)}</span>
-                )}
-              </Tag>
+                <div className="benchmark-table-run-title">
+                  {run.artifact_id || run.artifact_type || formatStatus(run.status)}
+                  {' vs '}
+                  {run.artifact_id_b || 'control'}
+                </div>
+                <div className="benchmark-table-run-meta">
+                  <StatusTag value={String(run.status || '').toLowerCase()} />
+                  {run.human_verdict && <Tag>{formatStatus(run.human_verdict)}</Tag>}
+                </div>
+              </button>
             ))}
-          </Space>
+          </div>
         );
       },
     },
@@ -258,7 +264,7 @@ export default function Benchmark() {
       key: 'created_at',
       width: 140,
       responsive: ['xl'],
-      render: (v) => <span className="mono" style={{ fontSize: 12 }}>{formatDate(v)}</span>,
+      render: (v) => <span className="mono benchmark-table-created">{formatDate(v)}</span>,
     },
     {
       title: '',
@@ -270,8 +276,8 @@ export default function Benchmark() {
             size="small"
             icon={<PlayCircleOutlined />}
             onClick={() => openRunModal(bc)}
-            disabled={!bc.artifact_type}
-            title={!bc.artifact_type ? 'No artifact configured' : 'Start run'}
+            disabled={!bc.artifact_type || !bc.artifact_id}
+            title={(!bc.artifact_type || !bc.artifact_id) ? 'No artifact A configured' : 'Start run'}
           />
           <Popconfirm
             title="Delete this benchmark case?"
@@ -347,7 +353,7 @@ export default function Benchmark() {
         </Col>
       </Row>
 
-      <Card className="gates-inbox-table-card">
+      <Card className="gates-inbox-table-card benchmark-table-card">
         <Table
           columns={columns}
           dataSource={rows}
@@ -357,6 +363,7 @@ export default function Benchmark() {
           tableLayout="fixed"
           scroll={{ x: 800 }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No benchmark cases" /> }}
+          rowClassName={() => 'benchmark-table-row'}
         />
       </Card>
 
@@ -377,6 +384,7 @@ export default function Benchmark() {
             if (changed.artifact_type !== undefined) {
               setArtifactType(changed.artifact_type || null);
               caseForm.setFieldValue('artifact_id', undefined);
+              caseForm.setFieldValue('artifact_id_b', undefined);
               loadArtifacts(changed.artifact_type);
             }
           }}
@@ -395,10 +403,21 @@ export default function Benchmark() {
             />
           </Form.Item>
           {artifactType && (
-            <Form.Item label={artifactType === 'SKILL' ? 'Skill' : 'Rule'} name="artifact_id">
+            <Form.Item label={artifactType === 'SKILL' ? 'Skill A' : 'Rule A'} name="artifact_id">
               <Select
                 showSearch
                 placeholder={`Select ${artifactType.toLowerCase()}`}
+                filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={artifactOptions}
+              />
+            </Form.Item>
+          )}
+          {artifactType && (
+            <Form.Item label={artifactType === 'SKILL' ? 'Skill B (optional)' : 'Rule B (optional)'} name="artifact_id_b">
+              <Select
+                allowClear
+                showSearch
+                placeholder={`Select ${artifactType.toLowerCase()} for B (optional)`}
                 filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 options={artifactOptions}
               />
@@ -433,7 +452,9 @@ export default function Benchmark() {
       {/* Start Run Modal */}
       <Modal
         open={runModalOpen}
-        title={runModalCase ? `Start Run — ${runModalCase.artifact_type}: ${runModalCase.artifact_id}` : 'Start Run'}
+        title={runModalCase
+          ? `Start Run — ${runModalCase.artifact_type}: ${runModalCase.artifact_id} vs ${runModalCase.artifact_id_b || 'control'}`
+          : 'Start Run'}
         onCancel={() => { setRunModalOpen(false); runForm.resetFields(); }}
         footer={null}
         destroyOnClose

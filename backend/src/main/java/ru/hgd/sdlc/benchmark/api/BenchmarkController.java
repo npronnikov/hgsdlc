@@ -49,6 +49,8 @@ public class BenchmarkController {
                 request.name(),
                 request.artifactType(),
                 request.artifactId(),
+                request.artifactTypeB(),
+                request.artifactIdB(),
                 actor
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(CaseResponse.from(entity));
@@ -119,7 +121,13 @@ public class BenchmarkController {
             throw new ValidationException("Request body is required");
         }
         String actor = user != null ? user.getUsername() : "system";
-        return RunResponse.from(benchmarkService.submitVerdict(runId, request.verdict(), actor));
+        return RunResponse.from(benchmarkService.submitVerdict(
+                runId,
+                request.verdict(),
+                actor,
+                request.reviewComment(),
+                request.lineCommentsJson()
+        ));
     }
 
     // --- Exception handlers ---
@@ -141,7 +149,9 @@ public class BenchmarkController {
             @JsonProperty("project_id") UUID projectId,
             @JsonProperty("name") String name,
             @JsonProperty("artifact_type") String artifactType,
-            @JsonProperty("artifact_id") String artifactId
+            @JsonProperty("artifact_id") String artifactId,
+            @JsonProperty("artifact_type_b") String artifactTypeB,
+            @JsonProperty("artifact_id_b") String artifactIdB
     ) {}
 
     public record StartRunRequest(
@@ -152,7 +162,9 @@ public class BenchmarkController {
     ) {}
 
     public record VerdictRequest(
-            @JsonProperty("verdict") String verdict
+            @JsonProperty("verdict") String verdict,
+            @JsonProperty("review_comment") String reviewComment,
+            @JsonProperty("line_comments_json") String lineCommentsJson
     ) {}
 
     public record FileComparisonResponse(
@@ -201,12 +213,15 @@ public class BenchmarkController {
             @JsonProperty("project_id") UUID projectId,
             @JsonProperty("artifact_type") String artifactType,
             @JsonProperty("artifact_id") String artifactId,
+            @JsonProperty("artifact_type_b") String artifactTypeB,
+            @JsonProperty("artifact_id_b") String artifactIdB,
             @JsonProperty("created_by") String createdBy,
             @JsonProperty("created_at") Instant createdAt
     ) {
         static CaseResponse from(BenchmarkCaseEntity e) {
             return new CaseResponse(e.getId(), e.getName(), e.getInstruction(), e.getProjectId(),
-                    e.getArtifactType(), e.getArtifactId(), e.getCreatedBy(), e.getCreatedAt());
+                    e.getArtifactType(), e.getArtifactId(), e.getArtifactBType(), e.getArtifactBId(),
+                    e.getCreatedBy(), e.getCreatedAt());
         }
     }
 
@@ -216,11 +231,16 @@ public class BenchmarkController {
             @JsonProperty("artifact_type") String artifactType,
             @JsonProperty("artifact_id") String artifactId,
             @JsonProperty("artifact_version_id") UUID artifactVersionId,
+            @JsonProperty("artifact_type_b") String artifactTypeB,
+            @JsonProperty("artifact_id_b") String artifactIdB,
+            @JsonProperty("artifact_version_id_b") UUID artifactVersionIdB,
             @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("run_a_id") UUID runAId,
             @JsonProperty("run_b_id") UUID runBId,
             @JsonProperty("status") String status,
             @JsonProperty("human_verdict") String humanVerdict,
+            @JsonProperty("review_comment") String reviewComment,
+            @JsonProperty("line_comments_json") String lineCommentsJson,
             @JsonProperty("diff_a") String diffA,
             @JsonProperty("diff_b") String diffB,
             @JsonProperty("diff_of_diffs") String diffOfDiffs,
@@ -236,11 +256,16 @@ public class BenchmarkController {
                     e.getArtifactType() != null ? e.getArtifactType().name() : null,
                     e.getArtifactId(),
                     e.getArtifactVersionId(),
+                    e.getArtifactBType() != null ? e.getArtifactBType().name() : null,
+                    e.getArtifactBId(),
+                    e.getArtifactBVersionId(),
                     e.getCodingAgent(),
                     e.getRunAId(),
                     e.getRunBId(),
                     e.getStatus() != null ? e.getStatus().name() : null,
                     e.getHumanVerdict() != null ? e.getHumanVerdict().name() : null,
+                    e.getReviewComment(),
+                    e.getLineCommentsJson(),
                     e.getDiffA(),
                     e.getDiffB(),
                     e.getDiffOfDiffs(),

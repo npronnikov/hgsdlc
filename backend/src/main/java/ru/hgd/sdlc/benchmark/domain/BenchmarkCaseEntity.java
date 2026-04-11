@@ -39,6 +39,12 @@ public class BenchmarkCaseEntity {
     @Column(name = "artifact_id", length = 255)
     private String artifactId;
 
+    @Column(name = "artifact_b_type", length = 16)
+    private String artifactBType;
+
+    @Column(name = "artifact_b_id", length = 255)
+    private String artifactBId;
+
     @Column(name = "created_by", nullable = false, length = 128)
     private String createdBy;
 

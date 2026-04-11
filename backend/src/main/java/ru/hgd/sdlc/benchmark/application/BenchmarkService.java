@@ -119,7 +119,9 @@ public class BenchmarkService {
 
     @Transactional
     public BenchmarkCaseEntity createCase(String instruction, UUID projectId, String name,
-                                          String artifactType, String artifactId, String createdBy) {
+                                          String artifactType, String artifactId,
+                                          String artifactTypeB, String artifactIdB,
+                                          String createdBy) {
         if (instruction == null || instruction.isBlank()) {
             throw new ValidationException("instruction is required");
         }
@@ -134,11 +136,33 @@ public class BenchmarkService {
         if (normalizedArtifactType == null ^ normalizedArtifactId == null) {
             throw new ValidationException("artifact_type and artifact_id must be provided together");
         }
+        String normalizedArtifactTypeB = normalizeOptional(artifactTypeB);
+        String normalizedArtifactIdB = normalizeOptional(artifactIdB);
+        if (normalizedArtifactTypeB == null && normalizedArtifactIdB != null) {
+            normalizedArtifactTypeB = normalizedArtifactType;
+        }
+        if (normalizedArtifactTypeB == null ^ normalizedArtifactIdB == null) {
+            throw new ValidationException("artifact_type_b and artifact_id_b must be provided together");
+        }
+        if (normalizedArtifactIdB != null && normalizedArtifactId == null) {
+            throw new ValidationException("artifact A must be configured when artifact B is provided");
+        }
+
+        ArtifactType parsedTypeA = null;
+        ArtifactType parsedTypeB = null;
         if (normalizedArtifactType != null) {
-            ArtifactType parsedType = parseArtifactType(normalizedArtifactType);
+            parsedTypeA = parseArtifactType(normalizedArtifactType);
             // Validate configured artifact up-front so Start Run does not fail later.
-            resolveArtifactCanonicalName(parsedType, normalizedArtifactId, null);
-            normalizedArtifactType = parsedType.name();
+            resolveArtifactCanonicalName(parsedTypeA, normalizedArtifactId, null);
+            normalizedArtifactType = parsedTypeA.name();
+        }
+        if (normalizedArtifactTypeB != null) {
+            parsedTypeB = parseArtifactType(normalizedArtifactTypeB);
+            if (parsedTypeA != null && parsedTypeA != parsedTypeB) {
+                throw new ValidationException("artifact B type must match artifact A type");
+            }
+            resolveArtifactCanonicalName(parsedTypeB, normalizedArtifactIdB, null);
+            normalizedArtifactTypeB = parsedTypeB.name();
         }
 
         BenchmarkCaseEntity entity = BenchmarkCaseEntity.builder()
@@ -148,6 +172,8 @@ public class BenchmarkService {
                 .name(name != null ? name.trim() : null)
                 .artifactType(normalizedArtifactType)
                 .artifactId(normalizedArtifactId)
+                .artifactBType(normalizedArtifactTypeB)
+                .artifactBId(normalizedArtifactIdB)
                 .createdBy(createdBy)
                 .createdAt(Instant.now())
                 .build();
@@ -178,28 +204,44 @@ public class BenchmarkService {
             throw new ValidationException("Benchmark case has no artifact configured");
         }
 
-        String artifactRef = normalizeOptional(benchCase.getArtifactId());
-        if (artifactRef == null) {
+        String artifactRefA = normalizeOptional(benchCase.getArtifactId());
+        if (artifactRefA == null) {
             throw new ValidationException("Benchmark case has invalid artifact_id");
         }
 
-        ArtifactType type = parseArtifactType(benchCase.getArtifactType());
-        String canonicalName = resolveArtifactCanonicalName(type, artifactRef, null);
-        log.debug("startRun: resolved canonicalName='{}' for artifactRef='{}'", canonicalName, artifactRef);
+        ArtifactType typeA = parseArtifactType(benchCase.getArtifactType());
+        String canonicalNameA = resolveArtifactCanonicalName(typeA, artifactRefA, null);
+        log.debug("startRun: resolved canonicalNameA='{}' for artifactRefA='{}'", canonicalNameA, artifactRefA);
+
+        String artifactRefB = normalizeOptional(benchCase.getArtifactBId());
+        String artifactTypeBRaw = normalizeOptional(benchCase.getArtifactBType());
+        ArtifactType typeB = null;
+        String canonicalNameB = null;
+        if (artifactRefB != null || artifactTypeBRaw != null) {
+            if (artifactRefB == null) {
+                throw new ValidationException("Benchmark case has invalid artifact_id_b");
+            }
+            typeB = artifactTypeBRaw != null ? parseArtifactType(artifactTypeBRaw) : typeA;
+            if (typeA != typeB) {
+                throw new ValidationException("artifact B type must match artifact A type");
+            }
+            canonicalNameB = resolveArtifactCanonicalName(typeB, artifactRefB, null);
+            log.debug("startRun: resolved canonicalNameB='{}' for artifactRefB='{}'", canonicalNameB, artifactRefB);
+        }
 
         UUID effectiveProjectId = projectIdOverride != null ? projectIdOverride : benchCase.getProjectId();
         Project project = projectRepository.findById(effectiveProjectId)
                 .orElseThrow(() -> new NotFoundException("Project not found: " + effectiveProjectId));
 
-        String effectiveCodingAgent = resolveEffectiveCodingAgent(codingAgent, type, artifactRef);
+        String effectiveCodingAgent = resolveEffectiveCodingAgent(codingAgent, typeA, artifactRefA, typeB, artifactRefB);
         String instruction = (instructionOverride != null && !instructionOverride.isBlank())
                 ? instructionOverride.trim() : benchCase.getInstruction();
 
         UUID benchmarkRunId = UUID.randomUUID();
 
         // Build flow snapshots
-        FlowModel flowA = buildFlow(benchmarkRunId, "a", instruction, type, canonicalName, effectiveCodingAgent);
-        FlowModel flowB = buildFlow(benchmarkRunId, "b", instruction, null, null, effectiveCodingAgent);
+        FlowModel flowA = buildFlow(benchmarkRunId, "a", instruction, typeA, canonicalNameA, effectiveCodingAgent);
+        FlowModel flowB = buildFlow(benchmarkRunId, "b", instruction, typeB, canonicalNameB, effectiveCodingAgent);
 
         String flowAJson = toJson(flowA);
         String flowBJson = toJson(flowB);
@@ -261,9 +303,12 @@ public class BenchmarkService {
         BenchmarkRunEntity benchmarkRun = BenchmarkRunEntity.builder()
                 .id(benchmarkRunId)
                 .caseId(caseId)
-                .artifactType(type)
-                .artifactId(artifactRef)
+                .artifactType(typeA)
+                .artifactId(artifactRefA)
                 .artifactVersionId(null)
+                .artifactBType(typeB)
+                .artifactBId(artifactRefB)
+                .artifactBVersionId(null)
                 .codingAgent(effectiveCodingAgent)
                 .runAId(runAId)
                 .runBId(runBId)
@@ -307,7 +352,13 @@ public class BenchmarkService {
     }
 
     @Transactional
-    public BenchmarkRunEntity submitVerdict(UUID benchmarkRunId, String verdictStr, String actorUsername) {
+    public BenchmarkRunEntity submitVerdict(
+            UUID benchmarkRunId,
+            String verdictStr,
+            String actorUsername,
+            String reviewComment,
+            String lineCommentsJson
+    ) {
         BenchmarkRunEntity br = runRepository.findById(benchmarkRunId)
                 .orElseThrow(() -> new NotFoundException("BenchmarkRun not found: " + benchmarkRunId));
 
@@ -322,6 +373,8 @@ public class BenchmarkService {
         approveRunGate(br.getRunBId(), actorUsername);
 
         br.setHumanVerdict(verdict);
+        br.setReviewComment(normalizeOptional(reviewComment));
+        br.setLineCommentsJson(normalizeOptional(lineCommentsJson));
         br.setStatus(BenchmarkStatus.COMPLETED);
         br.setCompletedAt(Instant.now());
         return runRepository.save(br);
@@ -504,13 +557,25 @@ public class BenchmarkService {
         }
     }
 
-    private String resolveEffectiveCodingAgent(String requestedAgent, ArtifactType type, String artifactRef) {
+    private String resolveEffectiveCodingAgent(
+            String requestedAgent,
+            ArtifactType typeA,
+            String artifactRefA,
+            ArtifactType typeB,
+            String artifactRefB
+    ) {
         if (requestedAgent != null && !requestedAgent.isBlank()) {
             return requestedAgent.trim();
         }
-        // Fall back to skill/rule coding agent
-        if (type == ArtifactType.SKILL) {
-            SkillVersion skill = resolveSkillByReference(artifactRef);
+        // Use the same coding agent for both arms. Prefer configured skill agent from arm A, then arm B.
+        if (typeA == ArtifactType.SKILL && artifactRefA != null) {
+            SkillVersion skill = resolveSkillByReference(artifactRefA);
+            if (skill.getCodingAgent() != null) {
+                return skill.getCodingAgent().name().toLowerCase();
+            }
+        }
+        if (typeB == ArtifactType.SKILL && artifactRefB != null) {
+            SkillVersion skill = resolveSkillByReference(artifactRefB);
             return skill.getCodingAgent() != null
                     ? skill.getCodingAgent().name().toLowerCase()
                     : "claude";
