@@ -34,9 +34,9 @@ function defaultAgentLaunchCommand(agent) {
 function defaultAgentInitCommand(agent) {
   const normalized = String(agent || '').trim().toLowerCase();
   if (normalized === 'claude') {
-    return 'claude init';
+    return 'claude -p "/init" --permission-mode acceptEdits';
   }
-  return 'qwen init';
+  return 'qwen -p "/init" --approval-mode yolo';
 }
 
 function defaultAgentSettingsJsonTemplate(agent) {
@@ -176,6 +176,15 @@ export default function Settings() {
         ?? form.getFieldValue('agent_launch_command')
         ?? defaultAgentLaunchCommand(resolvedCodingAgent)
       );
+      const resolvedAgentInitCommand = (
+        values.agent_init_command
+        ?? form.getFieldValue('agent_init_command')
+        ?? defaultAgentInitCommand(resolvedCodingAgent)
+      );
+      const resolvedAutoInitWhenNoRule = (
+        values.auto_init_when_no_rule
+        ?? form.getFieldValue('auto_init_when_no_rule')
+      );
       setSaving(true);
       await apiRequest('/settings/runtime', {
         method: 'PUT',
@@ -185,10 +194,10 @@ export default function Settings() {
           ai_timeout_seconds: values.ai_timeout_seconds,
           prompt_language: values.prompt_language,
           agent_launch_command: resolvedAgentLaunchCommand,
-          agent_init_command: values.agent_init_command,
-          auto_init_when_no_rule: Boolean(values.auto_init_when_no_rule),
+          agent_init_command: resolvedAgentInitCommand,
+          auto_init_when_no_rule: resolvedAutoInitWhenNoRule ?? null,
           agent_settings_json: values.agent_settings_json,
-          agent_settings_json_enabled: Boolean(values.agent_settings_json_enabled),
+          agent_settings_json_enabled: values.agent_settings_json_enabled ?? null,
         }),
       });
       await apiRequest('/settings/catalog', {
@@ -326,6 +335,7 @@ export default function Settings() {
                 items={[
                   {
                     key: 'agent-launch-command',
+                    forceRender: true,
                     label: (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                         <span>Agent Commands</span>

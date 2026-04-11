@@ -646,9 +646,9 @@ public class SettingsService {
     private String defaultAgentInitCommand(String codingAgent) {
         String normalized = normalizeCodingAgent(codingAgent);
         if ("claude".equals(normalized)) {
-            return "claude init";
+            return "claude -p \"/init\" --permission-mode acceptEdits";
         }
-        return "qwen init";
+        return "qwen -p \"/init\" --approval-mode yolo";
     }
 
     private String normalizeAgentSettingsJson(String settingsJson) {

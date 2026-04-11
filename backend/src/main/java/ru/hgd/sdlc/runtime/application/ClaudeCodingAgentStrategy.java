@@ -76,6 +76,7 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         Path stderrPath = nodeExecutionRoot.resolve("agent.stderr.log");
 
         createDirectories(commandsRoot);
+        ensureGitIgnoreContains(projectRoot, "CLAUDE.md");
         deleteDirectoryContents(commandsRoot);
 
         List<RuleVersion> rules = resolveFlowRules(flowModel);
@@ -280,6 +281,43 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to write file: " + path);
         }
+    }
+
+    private void ensureGitIgnoreContains(Path projectRoot, String entry) throws CodingAgentException {
+        if (projectRoot == null || entry == null || entry.isBlank()) {
+            return;
+        }
+        Path gitIgnorePath = projectRoot.resolve(".gitignore");
+        try {
+            String content = workspacePort.exists(gitIgnorePath)
+                    ? workspacePort.readString(gitIgnorePath, StandardCharsets.UTF_8)
+                    : "";
+            if (hasGitIgnoreEntry(content, entry)) {
+                return;
+            }
+            StringBuilder updated = new StringBuilder(content == null ? "" : content);
+            if (!updated.isEmpty() && updated.charAt(updated.length() - 1) != '\n') {
+                updated.append('\n');
+            }
+            updated.append(entry).append('\n');
+            workspacePort.writeString(gitIgnorePath, updated.toString(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to update .gitignore: " + gitIgnorePath);
+        }
+    }
+
+    private boolean hasGitIgnoreEntry(String content, String entry) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        String[] lines = content.split("\\R");
+        for (String line : lines) {
+            String normalized = line == null ? "" : line.trim();
+            if (normalized.equals(entry) || normalized.equals("/" + entry)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void setExecutable(Path path) throws CodingAgentException {

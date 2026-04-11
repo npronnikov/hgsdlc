@@ -67,7 +67,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         Path nodeExecutionRoot = request.nodeExecutionRoot();
 
         Path qwenRoot = projectRoot.resolve(".qwen");
-        Path rulesPath = qwenRoot.resolve("QWEN.md");
+        Path rulesPath = projectRoot.resolve("QWEN.md");
         Path skillsRoot = qwenRoot.resolve("skills");
         Path promptPath = nodeExecutionRoot.resolve("prompt.md");
         Path stdoutPath = nodeExecutionRoot.resolve("agent.stdout.log");
@@ -75,6 +75,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
 
         createDirectories(qwenRoot);
         createDirectories(skillsRoot);
+        ensureGitIgnoreContains(projectRoot, "QWEN.md");
         deleteDirectoryContents(skillsRoot);
 
         List<RuleVersion> rules = resolveFlowRules(flowModel);
@@ -278,6 +279,43 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to write file: " + path);
         }
+    }
+
+    private void ensureGitIgnoreContains(Path projectRoot, String entry) throws CodingAgentException {
+        if (projectRoot == null || entry == null || entry.isBlank()) {
+            return;
+        }
+        Path gitIgnorePath = projectRoot.resolve(".gitignore");
+        try {
+            String content = workspacePort.exists(gitIgnorePath)
+                    ? workspacePort.readString(gitIgnorePath, StandardCharsets.UTF_8)
+                    : "";
+            if (hasGitIgnoreEntry(content, entry)) {
+                return;
+            }
+            StringBuilder updated = new StringBuilder(content == null ? "" : content);
+            if (!updated.isEmpty() && updated.charAt(updated.length() - 1) != '\n') {
+                updated.append('\n');
+            }
+            updated.append(entry).append('\n');
+            workspacePort.writeString(gitIgnorePath, updated.toString(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to update .gitignore: " + gitIgnorePath);
+        }
+    }
+
+    private boolean hasGitIgnoreEntry(String content, String entry) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        String[] lines = content.split("\\R");
+        for (String line : lines) {
+            String normalized = line == null ? "" : line.trim();
+            if (normalized.equals(entry) || normalized.equals("/" + entry)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void setExecutable(Path path) throws CodingAgentException {
