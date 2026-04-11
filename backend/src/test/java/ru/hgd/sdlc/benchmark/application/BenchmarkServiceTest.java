@@ -31,7 +31,7 @@ import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 class BenchmarkServiceTest {
 
     @Test
-    void startRunInfersGigacodeAgentFromRuleArtifacts() {
+    void startRunInfersAgentFromRuleArtifacts() {
         BenchmarkCaseRepository caseRepository = Mockito.mock(BenchmarkCaseRepository.class);
         BenchmarkRunRepository benchmarkRunRepository = Mockito.mock(BenchmarkRunRepository.class);
         ProjectRepository projectRepository = Mockito.mock(ProjectRepository.class);
@@ -88,7 +88,7 @@ class BenchmarkServiceTest {
                 .id(UUID.randomUUID())
                 .ruleId("rule-a")
                 .canonicalName("rule-a@1.0")
-                .codingAgent(RuleProvider.GIGACODE)
+                .codingAgent(RuleProvider.CLAUDE)
                 .status(RuleStatus.PUBLISHED)
                 .build();
 
@@ -104,7 +104,7 @@ class BenchmarkServiceTest {
 
         BenchmarkRunEntity run = service.startRun(caseId, null, null, null, "tester");
 
-        Assertions.assertEquals("gigacode", run.getCodingAgent());
+        Assertions.assertEquals("claude", run.getCodingAgent());
     }
 
     @Test
@@ -164,14 +164,14 @@ class BenchmarkServiceTest {
                 .id(UUID.randomUUID())
                 .ruleId("rule-a")
                 .canonicalName("rule-a@1.0")
-                .codingAgent(RuleProvider.GIGACODE)
+                .codingAgent(RuleProvider.CLAUDE)
                 .status(RuleStatus.PUBLISHED)
                 .build();
         RuleVersion ruleB = RuleVersion.builder()
                 .id(UUID.randomUUID())
                 .ruleId("rule-b")
                 .canonicalName("rule-b@1.0")
-                .codingAgent(RuleProvider.CLAUDE)
+                .codingAgent(RuleProvider.QWEN)
                 .status(RuleStatus.PUBLISHED)
                 .build();
 
