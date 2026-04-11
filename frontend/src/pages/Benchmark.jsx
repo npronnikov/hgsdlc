@@ -23,6 +23,12 @@ function formatStatus(s) {
   return (s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function formatWithoutArtifactLabel(artifactType) {
+  if (artifactType === 'SKILL') return 'without skill';
+  if (artifactType === 'RULE') return 'without rule';
+  return 'without artifact';
+}
+
 export default function Benchmark() {
   const navigate = useNavigate();
 
@@ -208,7 +214,7 @@ export default function Benchmark() {
                 </div>
                 <div className="benchmark-table-artifact-line">
                   <span className="benchmark-table-artifact-label">Run B:</span>
-                  <span className="benchmark-table-artifact-value">{bc.artifact_id_b || 'control'}</span>
+                  <span className="benchmark-table-artifact-value">{bc.artifact_id_b || formatWithoutArtifactLabel(bc.artifact_type)}</span>
                 </div>
               </div>
             )}
@@ -246,7 +252,7 @@ export default function Benchmark() {
                 <div className="benchmark-table-run-title">
                   {run.artifact_id || run.artifact_type || formatStatus(run.status)}
                   {' vs '}
-                  {run.artifact_id_b || 'control'}
+                  {run.artifact_id_b || formatWithoutArtifactLabel(run.artifact_type)}
                 </div>
                 <div className="benchmark-table-run-meta">
                   <StatusTag value={String(run.status || '').toLowerCase()} />
@@ -453,7 +459,7 @@ export default function Benchmark() {
       <Modal
         open={runModalOpen}
         title={runModalCase
-          ? `Start Run — ${runModalCase.artifact_type}: ${runModalCase.artifact_id} vs ${runModalCase.artifact_id_b || 'control'}`
+          ? `Start Run — ${runModalCase.artifact_type}: ${runModalCase.artifact_id} vs ${runModalCase.artifact_id_b || formatWithoutArtifactLabel(runModalCase.artifact_type)}`
           : 'Start Run'}
         onCancel={() => { setRunModalOpen(false); runForm.resetFields(); }}
         footer={null}

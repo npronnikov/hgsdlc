@@ -22,36 +22,38 @@ import {
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
+  DownloadOutlined,
   MinusCircleOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { apiRequest } from '../api/request.js';
+import StatusTag from '../components/StatusTag.jsx';
+import MarkdownPreview from '../components/MarkdownPreview.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
 
 const { Title, Text } = Typography;
-
-const STATUS_LABEL = {
-  RUNNING: 'Running',
-  WAITING_COMPARISON: 'Ready for Comparison',
-  COMPLETED: 'Completed',
-  FAILED: 'Failed',
-};
-
-const STATUS_COLOR = {
-  RUNNING: 'processing',
-  WAITING_COMPARISON: 'warning',
-  COMPLETED: 'success',
-  FAILED: 'error',
-};
 
 const FILE_FILTER_OPTIONS = [
   { label: 'Different', value: 'different' },
   { label: 'All', value: 'all' },
   { label: 'Same', value: 'same' },
 ];
+
+function formatWithoutArtifactLabel(artifactType) {
+  if (artifactType === 'SKILL') return 'without skill';
+  if (artifactType === 'RULE') return 'without rule';
+  return 'without artifact';
+}
+
+function shortArtifactId(value, max = 25) {
+  const text = String(value || '');
+  if (!text || text.length <= max) return text;
+  return `${text.slice(0, max)}...`;
+}
 
 function formatVerdictLabel(verdict, run) {
   const hasArtifactB = Boolean(run?.artifact_id_b);
@@ -253,18 +255,75 @@ function clearDraft(runId) {
   }
 }
 
+function normalizeInlineText(value, fallback = '—') {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  return normalized || fallback;
+}
+
+function formatReportDate(value) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('ru-RU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function resolveComparedLabel(artifactType, artifactId, fallbackLabel = 'control') {
+  if (!artifactId) {
+    return fallbackLabel;
+  }
+  const type = artifactType ? String(artifactType).toLowerCase() : 'artifact';
+  return `${type}:${artifactId}`;
+}
+
+function resolveDecisionVerdictLabel(verdict) {
+  if (verdict === 'SKILL_USEFUL') return 'A better';
+  if (verdict === 'SKILL_NOT_HELPFUL') return 'B better';
+  return 'tie';
+}
+
+function extractPrimaryReason(reviewComment) {
+  if (!reviewComment) return null;
+  const firstLine = String(reviewComment)
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find(Boolean);
+  if (!firstLine) return null;
+  return firstLine.length > 220 ? `${firstLine.slice(0, 217)}...` : firstLine;
+}
+
+function stripFirstMarkdownHeading(markdown) {
+  const lines = String(markdown || '').split('\n');
+  if (!lines.length || !lines[0].startsWith('# ')) {
+    return markdown || '';
+  }
+  let start = 1;
+  while (start < lines.length && lines[start].trim() === '') {
+    start += 1;
+  }
+  return lines.slice(start).join('\n');
+}
+
 export default function BenchmarkRun() {
   const navigate = useNavigate();
   const { runId } = useParams();
+  const { user } = useAuth();
   const { isDark } = useThemeMode();
 
   const [run, setRun] = useState(null);
+  const [benchmarkCase, setBenchmarkCase] = useState(null);
+  const [projectNameById, setProjectNameById] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [fileComparison, setFileComparison] = useState([]);
   const [fileComparisonLoading, setFileComparisonLoading] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState(null);
   const [verdictOpen, setVerdictOpen] = useState(false);
+  const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
   const [fileFilter, setFileFilter] = useState('different');
   const [reviewComment, setReviewComment] = useState('');
   const [lineComments, setLineComments] = useState([]);
@@ -351,8 +410,46 @@ export default function BenchmarkRun() {
     setReviewComment('');
     setLineComments([]);
     setLineCommentDraft(null);
+    setBenchmarkCase(null);
+    setProjectNameById({});
+    setReportPreviewOpen(false);
     setContextMenuState({ open: false, x: 0, y: 0, side: null, line: null, path: null });
   }, [runId]);
+
+  useEffect(() => {
+    let active = true;
+    const loadCaseAndProject = async () => {
+      if (!run?.case_id) {
+        setBenchmarkCase(null);
+        return;
+      }
+      try {
+        const [casesData, projectsData] = await Promise.all([
+          apiRequest('/benchmark/cases'),
+          apiRequest('/projects'),
+        ]);
+        if (!active) return;
+        const cases = Array.isArray(casesData) ? casesData : [];
+        const projects = Array.isArray(projectsData) ? projectsData : [];
+        setBenchmarkCase(cases.find((item) => item?.id === run.case_id) || null);
+        const map = {};
+        projects.forEach((project) => {
+          if (project?.id) {
+            map[project.id] = project.name || project.id;
+          }
+        });
+        setProjectNameById(map);
+      } catch {
+        if (!active) return;
+        setBenchmarkCase(null);
+        setProjectNameById({});
+      }
+    };
+    loadCaseAndProject();
+    return () => {
+      active = false;
+    };
+  }, [run?.case_id]);
 
   useEffect(() => {
     if (!run) return;
@@ -452,7 +549,7 @@ export default function BenchmarkRun() {
     : 'Run A';
   const artifactLabelB = run?.artifact_id_b
     ? `${run?.artifact_type_b || run?.artifact_type || 'Artifact'}: ${run.artifact_id_b}`
-    : 'control';
+    : formatWithoutArtifactLabel(run?.artifact_type);
   const verdictPrompt = hasArtifactB
     ? 'Which run result is better?'
     : `Did the ${run?.artifact_type?.toLowerCase()} improve the result?`;
@@ -474,6 +571,107 @@ export default function BenchmarkRun() {
     if (a.side !== b.side) return a.side.localeCompare(b.side);
     return a.line - b.line;
   }), [lineComments]);
+
+  const reportMarkdown = useMemo(() => {
+    if (!run) return '';
+    const caseName = normalizeInlineText(benchmarkCase?.name || 'Untitled');
+    const reportRunId = normalizeInlineText(run.id, '');
+    const benchmarkLink = reportRunId ? `#/benchmark/${reportRunId}` : '#/benchmark';
+    const instruction = normalizeInlineText(benchmarkCase?.instruction || run?.instruction);
+    const caseId = normalizeInlineText(run.case_id);
+    const projectId = benchmarkCase?.project_id;
+    const project = projectId ? (projectNameById[projectId] || projectId) : '—';
+    const author = normalizeInlineText(
+      user?.username || user?.display_name || user?.displayName || run?.created_by || 'unknown',
+      'unknown',
+    );
+    const comparedA = resolveComparedLabel(run?.artifact_type, run?.artifact_id, 'control');
+    const comparedB = run?.artifact_id_b
+      ? resolveComparedLabel(run?.artifact_type_b || run?.artifact_type, run?.artifact_id_b, 'control')
+      : `control (${formatWithoutArtifactLabel(run?.artifact_type)})`;
+    const lineCommentsBlock = lineCommentsSorted.length > 0
+      ? lineCommentsSorted.map((item) => (
+        `- [${item.side}] ${item.path}:${item.line} — ${normalizeInlineText(item.text, '')}`
+      )).join('\n')
+      : '- none';
+    const decisionVerdict = resolveDecisionVerdictLabel(run?.human_verdict);
+    const reasonFromComment = extractPrimaryReason(reviewComment);
+    const reasons = [
+      reasonFromComment || `Manual verdict: ${formatVerdictLabel(run?.human_verdict, run)}.`,
+      `File deltas: changed A ${summary.changedA} / B ${summary.changedB}, different ${summary.different}, same ${summary.same}.`,
+      lineCommentsSorted.length > 0
+        ? `Risks: ${lineCommentsSorted.length} line comment(s) were recorded and should be reviewed before rollout.`
+        : 'Risks/tradeoffs: no line-level risks were explicitly recorded.',
+    ];
+    const generalComment = String(reviewComment || '').trim() || 'No general comment.';
+
+    return [
+      `# Benchmark Report: ${caseName}`,
+      `Benchmark: [${caseName}](${benchmarkLink})`,
+      '',
+      `Date: ${formatReportDate(run?.completed_at || run?.created_at)}`,
+      '',
+      `Author: ${author}`,
+      '',
+      `Case: ${caseId}`,
+      '',
+      `Project: ${project}`,
+      '',
+      `Instruction: ${instruction}`,
+      '',
+      '## Compared',
+      `- Run A: ${comparedA}`,
+      `- Run B: ${comparedB}`,
+      `- Coding agent: ${normalizeInlineText(run?.coding_agent)}`,
+      '',
+      '## Summary',
+      `- Files changed: A ${summary.changedA} / B ${summary.changedB}`,
+      `- Files different: ${summary.different}`,
+      `- Files same: ${summary.same}`,
+      '',
+      '## Review Notes',
+      '### Line comments',
+      lineCommentsBlock,
+      '',
+      '### General comment',
+      generalComment,
+      '',
+      '## Decision',
+      `- Verdict: ${decisionVerdict}`,
+      '- Why:',
+      `  1. ${reasons[0]}`,
+      `  2. ${reasons[1]}`,
+      `  3. ${reasons[2]}`,
+      '',
+    ].join('\n');
+  }, [benchmarkCase, lineCommentsSorted, projectNameById, reviewComment, run, summary, user]);
+
+  const reportPreviewTitle = useMemo(
+    () => `Benchmark Report: ${normalizeInlineText(benchmarkCase?.name || 'Untitled')}`,
+    [benchmarkCase?.name],
+  );
+  const reportMarkdownPreviewBody = useMemo(
+    () => stripFirstMarkdownHeading(reportMarkdown),
+    [reportMarkdown],
+  );
+
+  const canExportReport = isCompleted && Boolean(run?.human_verdict);
+
+  const exportMarkdownReport = useCallback(() => {
+    if (!reportMarkdown || typeof window === 'undefined') {
+      return;
+    }
+    const blob = new Blob([reportMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `benchmark-report-${run?.id || runId}.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+    message.success('Markdown report exported');
+  }, [reportMarkdown, run?.id, runId]);
 
   const openLineCommentDraft = useCallback((side, line, path) => {
     const effectivePath = path || selectedFilePathRef.current;
@@ -841,9 +1039,9 @@ export default function BenchmarkRun() {
         <div>
           <Title level={4} style={{ margin: 0 }}>
             Benchmark Run
-            <Tag color={STATUS_COLOR[run.status] || 'default'} style={{ marginLeft: 12, verticalAlign: 'middle' }}>
-              {STATUS_LABEL[run.status] || run.status}
-            </Tag>
+            <span style={{ marginLeft: 12, verticalAlign: 'middle', display: 'inline-flex' }}>
+              <StatusTag value={String(run.status || '').toLowerCase()} />
+            </span>
           </Title>
           <Text type="secondary">
             {artifactLabelA} vs <strong>{artifactLabelB}</strong>
@@ -851,8 +1049,15 @@ export default function BenchmarkRun() {
         </div>
         <Space>
           <Button onClick={() => setVerdictOpen(true)} disabled={!canOpenVerdict}>
-            Review panel
+            Review Panel
           </Button>
+          {canExportReport && (
+            <>
+              <Button onClick={() => setReportPreviewOpen(true)}>
+                Preview Report
+              </Button>
+            </>
+          )}
           <Button
             icon={<ReloadOutlined />}
             onClick={async () => {
@@ -923,26 +1128,31 @@ export default function BenchmarkRun() {
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
                 <Card size="small">
                   <Space direction="vertical" size={2}>
-                    <div>
-                      <Text type="secondary">Run A{run?.artifact_id ? ` (${run.artifact_id})` : ''}:</Text>
+                    <div className="benchmark-run-link-row">
+                      <Text type="secondary" className="benchmark-run-link-label">
+                        Run A{run?.artifact_id ? ` (${shortArtifactId(run.artifact_id)})` : ''}:
+                      </Text>
                       {run.run_a_id ? (
-                        <Button type="link" size="small" style={{ padding: 0, marginLeft: 6 }} onClick={() => openRunConsole(run.run_a_id)}>
+                        <Button className="benchmark-run-id-link" type="link" size="small" style={{ padding: 0 }} onClick={() => openRunConsole(run.run_a_id)} title={String(run.run_a_id)}>
                           {run.run_a_id}
                         </Button>
                       ) : (
-                        <Text type="secondary" style={{ marginLeft: 6 }}>—</Text>
+                        <Text type="secondary">—</Text>
                       )}
                     </div>
-                    <div>
-                      <Text type="secondary">
-                        Run B{hasArtifactB ? ` (${run?.artifact_id_b || 'B'})` : ' (control)'}:
+                    <div className="benchmark-run-link-row">
+                      <Text type="secondary" className="benchmark-run-link-label">
+                        Run B{hasArtifactB
+                          ? ` (${shortArtifactId(run?.artifact_id_b || 'B')})`
+                          : ` (${formatWithoutArtifactLabel(run?.artifact_type)})`}
+                        :
                       </Text>
                       {run.run_b_id ? (
-                        <Button type="link" size="small" style={{ padding: 0, marginLeft: 6 }} onClick={() => openRunConsole(run.run_b_id)}>
+                        <Button className="benchmark-run-id-link" type="link" size="small" style={{ padding: 0 }} onClick={() => openRunConsole(run.run_b_id)} title={String(run.run_b_id)}>
                           {run.run_b_id}
                         </Button>
                       ) : (
-                        <Text type="secondary" style={{ marginLeft: 6 }}>—</Text>
+                        <Text type="secondary">—</Text>
                       )}
                     </div>
                   </Space>
@@ -1021,7 +1231,7 @@ export default function BenchmarkRun() {
 
                   <div className="benchmark-column">
                     <div className="benchmark-column-head">
-                      <Text strong>{hasArtifactB ? `Run B · ${run?.artifact_id_b || 'B'}` : 'Run B · control'}</Text>
+                      <Text strong>{hasArtifactB ? `Run B · ${run?.artifact_id_b || 'B'}` : `Run B · ${formatWithoutArtifactLabel(run?.artifact_type)}`}</Text>
                       <Tag>{selectedFile?.status_b || 'unchanged'}</Tag>
                     </div>
                     {renderPaneContent('B')}
@@ -1222,6 +1432,33 @@ export default function BenchmarkRun() {
           <Text type="secondary">Verdict becomes available after run comparison is ready.</Text>
         )}
       </Drawer>
+
+      <Modal
+        title="Descision Report"
+        open={reportPreviewOpen}
+        width={900}
+        onCancel={() => setReportPreviewOpen(false)}
+        styles={{ body: { height: 560, display: 'flex', flexDirection: 'column' } }}
+        footer={(
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={exportMarkdownReport}
+            >
+              Download
+            </Button>
+          </div>
+        )}
+      >
+        <div className="benchmark-report-preview-head">
+          <Title level={4} style={{ margin: 0 }}>
+            {reportPreviewTitle}
+          </Title>
+        </div>
+        <div className="benchmark-report-preview-scroll">
+          <MarkdownPreview markdown={reportMarkdownPreviewBody} />
+        </div>
+      </Modal>
     </div>
   );
 }

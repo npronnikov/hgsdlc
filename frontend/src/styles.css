@@ -5214,30 +5214,38 @@ body {
 }
 
 .benchmark-running-alert.ant-alert-info {
-  border: 1px solid rgba(14, 165, 233, 0.35);
-  background: linear-gradient(165deg, #eff9ff 0%, #f8fdff 100%);
+  border: 1px solid var(--border);
+  background: linear-gradient(165deg, var(--surface) 0%, var(--surface-3) 100%);
+}
+
+.benchmark-running-alert.ant-alert-info .ant-alert-icon {
+  color: #0891b2;
 }
 
 .benchmark-running-alert.ant-alert-info .ant-alert-message {
-  color: #0f3b57;
+  color: var(--text);
   font-weight: 600;
 }
 
 .benchmark-running-alert.ant-alert-info .ant-alert-description {
-  color: #2f5c79;
+  color: var(--text-secondary);
 }
 
 :root[data-theme="dark"] .benchmark-running-alert.ant-alert-info {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: rgba(14, 116, 144, 0.2);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .benchmark-running-alert.ant-alert-info .ant-alert-icon {
+  color: #38bdf8;
 }
 
 :root[data-theme="dark"] .benchmark-running-alert.ant-alert-info .ant-alert-message {
-  color: #bae6fd;
+  color: var(--text);
 }
 
 :root[data-theme="dark"] .benchmark-running-alert.ant-alert-info .ant-alert-description {
-  color: #cfeeff;
+  color: var(--text-secondary);
 }
 
 .benchmark-summary-card {
@@ -5256,6 +5264,46 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.benchmark-run-link-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.benchmark-run-link-label {
+  flex: 0 0 auto;
+}
+
+.benchmark-run-id-link.ant-btn-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+}
+
+.benchmark-run-id-link.ant-btn-link > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-report-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+
+.benchmark-report-preview-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .benchmark-file-tree-row {
