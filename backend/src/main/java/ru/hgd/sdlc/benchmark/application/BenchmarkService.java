@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -567,20 +568,31 @@ public class BenchmarkService {
         if (requestedAgent != null && !requestedAgent.isBlank()) {
             return requestedAgent.trim();
         }
-        // Use the same coding agent for both arms. Prefer configured skill agent from arm A, then arm B.
-        if (typeA == ArtifactType.SKILL && artifactRefA != null) {
-            SkillVersion skill = resolveSkillByReference(artifactRefA);
-            if (skill.getCodingAgent() != null) {
-                return skill.getCodingAgent().name().toLowerCase();
-            }
+        // Use a single coding agent for both benchmark arms.
+        String agentA = resolveArtifactCodingAgent(typeA, artifactRefA);
+        String agentB = resolveArtifactCodingAgent(typeB, artifactRefB);
+        if (agentA != null && agentB != null && !agentA.equals(agentB)) {
+            throw new ValidationException("artifact A and B must use the same coding_agent");
         }
-        if (typeB == ArtifactType.SKILL && artifactRefB != null) {
-            SkillVersion skill = resolveSkillByReference(artifactRefB);
-            return skill.getCodingAgent() != null
-                    ? skill.getCodingAgent().name().toLowerCase()
-                    : "claude";
+        if (agentA != null) {
+            return agentA;
+        }
+        if (agentB != null) {
+            return agentB;
         }
         return "claude";
+    }
+
+    private String resolveArtifactCodingAgent(ArtifactType type, String artifactRef) {
+        if (type == null || artifactRef == null) {
+            return null;
+        }
+        if (type == ArtifactType.SKILL) {
+            SkillVersion skill = resolveSkillByReference(artifactRef);
+            return skill.getCodingAgent() == null ? null : skill.getCodingAgent().name().toLowerCase(Locale.ROOT);
+        }
+        RuleVersion rule = resolveRuleByReference(artifactRef);
+        return rule.getCodingAgent() == null ? null : rule.getCodingAgent().name().toLowerCase(Locale.ROOT);
     }
 
     private SkillVersion resolveSkillByReference(String artifactRef) {
