@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
@@ -24,6 +26,7 @@ import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @Component
 class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
+    private static final Logger log = LoggerFactory.getLogger(ClaudeCodingAgentStrategy.class);
     private final RuleVersionRepository ruleVersionRepository;
     private final SkillVersionRepository skillVersionRepository;
     private final SkillFileRepository skillFileRepository;
@@ -183,6 +186,7 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
             if (ref == null || ref.isBlank()) {
                 continue;
             }
+            log.debug("resolveNodeSkills: looking up canonicalName='{}' codingAgent='{}'", ref, codingAgent);
             SkillVersion skill = skillVersionRepository.findFirstByCanonicalName(ref)
                     .orElseThrow(() -> new CodingAgentException(
                             "SKILL_NOT_FOUND",

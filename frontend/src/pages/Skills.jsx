@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Drawer, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { FilterOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -23,6 +23,7 @@ export default function Skills() {
     scope: null,
     platformCode: null,
     skillKind: null,
+    lifecycleStatus: 'active',
     tag: null,
   };
   const [skills, setSkills] = useState([]);
@@ -32,6 +33,8 @@ export default function Skills() {
   const [hasMore, setHasMore] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
+  const [deprecateTarget, setDeprecateTarget] = useState(null);
+  const [deprecating, setDeprecating] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
@@ -53,6 +56,7 @@ export default function Skills() {
       if (filters.scope) params.set('scope', filters.scope);
       if (filters.platformCode) params.set('platformCode', filters.platformCode);
       if (filters.skillKind) params.set('skillKind', filters.skillKind);
+      if (filters.lifecycleStatus) params.set('lifecycleStatus', filters.lifecycleStatus);
       if (filters.tag) params.set('tag', filters.tag);
 
       const data = await apiRequest(`/skills/query?${params.toString()}`);
@@ -65,6 +69,7 @@ export default function Skills() {
         teamCode: skill.team_code,
         scope: skill.scope,
         status: skill.status,
+        lifecycleStatus: skill.lifecycle_status,
         platformCode: skill.platform_code,
         tags: skill.tags || [],
         skillKind: skill.skill_kind,
@@ -102,6 +107,7 @@ export default function Skills() {
     filters.scope,
     filters.platformCode,
     filters.skillKind,
+    filters.lifecycleStatus,
     filters.tag,
   ]);
 
@@ -111,6 +117,13 @@ export default function Skills() {
   const scopes = useMemo(() => Array.from(new Set(skills.map((s) => s.scope).filter(Boolean))), [skills]);
   const platforms = useMemo(() => Array.from(new Set(skills.map((s) => s.platformCode).filter(Boolean))), [skills]);
   const skillKinds = useMemo(() => Array.from(new Set(skills.map((s) => s.skillKind).filter(Boolean))), [skills]);
+  const lifecycleOptions = useMemo(
+    () => [
+      { value: 'active', label: 'active' },
+      { value: 'deprecated', label: 'deprecated' },
+    ],
+    [],
+  );
   const tags = useMemo(() => Array.from(new Set(skills.flatMap((s) => s.tags || []).filter(Boolean))), [skills]);
   const activeFilters = useMemo(() => {
     const items = [];
@@ -121,9 +134,33 @@ export default function Skills() {
     if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.skillKind) items.push({ key: 'skillKind', label: `Type: ${filters.skillKind}` });
+    if (filters.lifecycleStatus && filters.lifecycleStatus !== 'active') {
+      items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    }
     if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
     return items;
   }, [filters]);
+
+  const canDeprecate = (skill) => (
+    canManageCatalog
+    && skill?.status === 'published'
+    && (skill?.lifecycleStatus == null || skill?.lifecycleStatus === 'active')
+  );
+
+  const requestDeprecation = async () => {
+    if (!deprecateTarget) return;
+    setDeprecating(true);
+    try {
+      await apiRequest(`/skills/${deprecateTarget.skillId}/deprecate`, { method: 'POST' });
+      message.success('Deprecation request created');
+      setDeprecateTarget(null);
+      await loadSkills({ cursor: null, append: false });
+    } catch (err) {
+      message.error(err.message || 'Failed to request deprecation');
+    } finally {
+      setDeprecating(false);
+    }
+  };
 
   return (
     <div className="cards-page">
@@ -176,7 +213,31 @@ export default function Skills() {
                     <span className="resource-card-name" title={skill.name}>{truncateCardName(skill.name)}</span>
                     <span className="resource-card-subtitle mono">{skill.skillId}@{skill.version}</span>
                   </div>
-                  <span className="skill-card-status">{formatStatusLabel(skill.status || 'unknown')}</span>
+                  <div className="resource-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <span className="skill-card-status">{formatStatusLabel(skill.status || 'unknown')}</span>
+                    {canDeprecate(skill) ? (
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [{ key: 'deprecate', label: 'Deprecate' }],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent?.stopPropagation?.();
+                            if (key === 'deprecate') {
+                              setDeprecateTarget(skill);
+                            }
+                          },
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          className="resource-card-menu"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </Dropdown>
+                    ) : null}
+                  </div>
                 </div>
                 {skill.description && <Text type="secondary" className="resource-card-description">{skill.description}</Text>}
                 <div className="skill-card-meta-line">
@@ -230,6 +291,7 @@ export default function Skills() {
           <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platforms.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.skillKind} onChange={(value) => setFilters((prev) => ({ ...prev, skillKind: value || null }))} options={skillKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
+          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || 'active' }))} options={lifecycleOptions} placeholder="Select lifecycle" /></div>
           <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear showSearch value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
         </div>
         <div className="filter-drawer-footer">
@@ -242,6 +304,29 @@ export default function Skills() {
           <Button type="default" onClick={() => setIsFilterOpen(false)}>Apply</Button>
         </div>
       </Drawer>
+      <Modal
+        title="Deprecate skill?"
+        open={!!deprecateTarget}
+        onCancel={() => setDeprecateTarget(null)}
+        onOk={requestDeprecation}
+        okText="Deprecate"
+        cancelText="Cancel"
+        confirmLoading={deprecating}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Text>
+            A publication request will be created for <span className="mono">{deprecateTarget?.canonical || deprecateTarget?.skillId}</span> with lifecycle_status=deprecated.
+          </Text>
+          <Text type="secondary">
+            {deprecateTarget?.scope === 'team'
+              ? 'After approval, deprecation will be finalized in DB without PR.'
+              : 'After approval, deprecation will be published via Pull Request to catalog.'}
+          </Text>
+          <Text type="secondary">
+            After publication this skill will be excluded from new flow selections.
+          </Text>
+        </div>
+      </Modal>
     </div>
   );
 }

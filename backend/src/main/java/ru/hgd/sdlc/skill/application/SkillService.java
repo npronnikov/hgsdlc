@@ -103,6 +103,7 @@ public class SkillService {
                 normalizeFilter(query.scope()),
                 normalizeFilter(query.platformCode()),
                 normalizeKindFilter(query.skillKind()),
+                normalizeEnumFilter(query.lifecycleStatus()),
                 normalizeFilter(query.version()),
                 normalizeFilter(query.tag()),
                 query.hasDescription(),
@@ -186,6 +187,55 @@ public class SkillService {
         }
         ensureDraftIsEditable(entity);
         repository.delete(entity);
+    }
+
+    @Transactional
+    public SkillVersion requestDeprecation(String skillId, User user) {
+        resolveSavedBy(user);
+        SkillVersion published = repository.findFirstBySkillIdAndStatusOrderBySavedAtDesc(skillId, SkillStatus.PUBLISHED)
+                .orElseThrow(() -> new NotFoundException("Published skill not found: " + skillId));
+        if (!isActiveLifecycle(published.getLifecycleStatus())) {
+            throw new ValidationException("Only active published skill can be deprecated");
+        }
+        int[] parsedVersion = parseVersionSafe(published.getVersion());
+        if (parsedVersion == null) {
+            throw new ValidationException("Invalid version: " + published.getVersion());
+        }
+        List<SkillVersion> allVersions = repository.findBySkillIdOrderBySavedAtDesc(skillId);
+        List<SkillVersion> draftVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == SkillStatus.DRAFT)
+                .toList();
+        SkillVersion existingDraft = findDraftForMajor(draftVersions, parsedVersion[0]);
+        long resourceVersion = existingDraft == null ? 0L : existingDraft.getResourceVersion();
+        List<SkillSaveRequest.SkillFileSaveRequest> files = listFiles(skillId, published.getVersion()).stream()
+                .map((file) -> new SkillSaveRequest.SkillFileSaveRequest(
+                        file.getPath(),
+                        file.getTextContent(),
+                        file.isExecutable()
+                ))
+                .toList();
+        SkillSaveRequest request = new SkillSaveRequest(
+                published.getName(),
+                published.getDescription(),
+                published.getSkillId(),
+                toApiCodingAgent(published.getCodingAgent()),
+                published.getTeamCode(),
+                published.getPlatformCode(),
+                published.getTags(),
+                published.getSkillKind(),
+                published.getScope() == null ? ORGANIZATION_SCOPE : published.getScope(),
+                "deprecated",
+                published.getForkedFrom(),
+                published.getForkedBy(),
+                published.getSourceRef(),
+                published.getSourcePath(),
+                files,
+                true,
+                false,
+                published.getVersion(),
+                resourceVersion
+        );
+        return save(skillId, request, user);
     }
 
     @Transactional(readOnly = true)
@@ -640,6 +690,17 @@ public class SkillService {
         }
     }
 
+    private boolean isActiveLifecycle(SkillLifecycleStatus lifecycleStatus) {
+        return lifecycleStatus == null || lifecycleStatus == SkillLifecycleStatus.ACTIVE;
+    }
+
+    private String toApiCodingAgent(SkillProvider codingAgent) {
+        if (codingAgent == null) {
+            return null;
+        }
+        return codingAgent.name().toLowerCase().replace('_', '-');
+    }
+
     private String parseScope(String scope) {
         String normalized = normalizeOptional(scope);
         if (normalized == null) {
@@ -799,6 +860,7 @@ public class SkillService {
             String scope,
             String platformCode,
             String skillKind,
+            String lifecycleStatus,
             String version,
             String tag,
             Boolean hasDescription

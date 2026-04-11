@@ -186,7 +186,7 @@ export function FlowMetaPanel({ editor }) {
         {!isCreateMode && (
           <div>
             <Text className="muted">Publication status</Text>
-            <div className="mono">{flowMeta.publicationStatus || 'draft'}</div>
+            <div className="mono">{flowMeta.publicationStatus || (flowMeta.status === 'published' ? 'published' : 'draft')}</div>
           </div>
         )}
         <div>

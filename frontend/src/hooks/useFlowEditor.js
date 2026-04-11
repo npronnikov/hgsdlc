@@ -144,7 +144,8 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   const canEditNodeId = currentStatus === 'draft' && isEditing;
 
   const filteredRules = rulesCatalog.filter(
-    (rule) => !flowMeta.codingAgent || rule.codingAgent === flowMeta.codingAgent
+    (rule) => (!flowMeta.codingAgent || rule.codingAgent === flowMeta.codingAgent)
+      && (rule.lifecycleStatus == null || rule.lifecycleStatus === 'active')
   );
   const ruleOptions = filteredRules.map((rule) => ({
     value: rule.canonical,
@@ -153,7 +154,8 @@ export function useFlowEditor({ flowId, isCreateMode }) {
   }));
 
   const filteredSkills = skillsCatalog.filter(
-    (skill) => !flowMeta.codingAgent || skill.codingAgent === flowMeta.codingAgent
+    (skill) => (!flowMeta.codingAgent || skill.codingAgent === flowMeta.codingAgent)
+      && (skill.lifecycleStatus == null || skill.lifecycleStatus === 'active')
   );
   const skillOptions = filteredSkills.map((skill) => ({
     value: skill.canonical,
@@ -469,6 +471,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         scope: rule.scope || 'organization',
         codingAgent: rule.coding_agent,
         status: rule.status,
+        lifecycleStatus: rule.lifecycle_status,
         version: rule.version,
         canonical: rule.canonical_name,
       }));
@@ -489,6 +492,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         scope: skill.scope || 'organization',
         codingAgent: skill.coding_agent,
         status: skill.status,
+        lifecycleStatus: skill.lifecycle_status,
         version: skill.version,
         canonical: skill.canonical_name,
       }));
@@ -536,7 +540,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
         lifecycleStatus: data.lifecycle_status || 'active',
-        publicationStatus: data.publication_status || 'draft',
+        publicationStatus: data.publication_status || (data.status === 'published' ? 'published' : 'draft'),
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,
@@ -579,7 +583,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
         scope: data.scope || 'organization',
         forkedFrom: data.forked_from || '',
         lifecycleStatus: data.lifecycle_status || 'active',
-        publicationStatus: data.publication_status || 'draft',
+        publicationStatus: data.publication_status || (data.status === 'published' ? 'published' : 'draft'),
         failOnMissingDeclaredOutput: data.fail_on_missing_declared_output ?? prev.failOnMissingDeclaredOutput,
         failOnMissingExpectedMutation: data.fail_on_missing_expected_mutation ?? prev.failOnMissingExpectedMutation,
         responseSchema: data.response_schema ? JSON.stringify(data.response_schema, null, 2) : prev.responseSchema,

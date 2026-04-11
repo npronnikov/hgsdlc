@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Input, Select, Space, Typography, message } from 'antd';
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Drawer, Dropdown, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { FilterOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -22,7 +22,7 @@ export default function Rules() {
     platformCode: null,
     ruleKind: null,
     scope: null,
-    lifecycleStatus: null,
+    lifecycleStatus: 'active',
     tag: null,
     status: null,
     version: '',
@@ -35,6 +35,8 @@ export default function Rules() {
   const [hasMore, setHasMore] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
+  const [deprecateTarget, setDeprecateTarget] = useState(null);
+  const [deprecating, setDeprecating] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManageCatalog = user?.roles?.includes('ADMIN') || user?.roles?.includes('FLOW_CONFIGURATOR');
@@ -121,7 +123,13 @@ export default function Rules() {
   const platformCodes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.platformCode).filter(Boolean))), [rules]);
   const ruleKinds = useMemo(() => Array.from(new Set(rules.map((rule) => rule.ruleKind).filter(Boolean))), [rules]);
   const scopes = useMemo(() => Array.from(new Set(rules.map((rule) => rule.scope).filter(Boolean))), [rules]);
-  const lifecycleStatuses = useMemo(() => Array.from(new Set(rules.map((rule) => rule.lifecycleStatus).filter(Boolean))), [rules]);
+  const lifecycleOptions = useMemo(
+    () => [
+      { value: 'active', label: 'active' },
+      { value: 'deprecated', label: 'deprecated' },
+    ],
+    [],
+  );
   const tags = useMemo(() => Array.from(new Set(rules.flatMap((rule) => rule.tags || []).filter(Boolean))), [rules]);
   const activeFilters = useMemo(() => {
     const items = [];
@@ -132,13 +140,36 @@ export default function Rules() {
     if (filters.platformCode) items.push({ key: 'platformCode', label: `Platform: ${filters.platformCode}` });
     if (filters.ruleKind) items.push({ key: 'ruleKind', label: `Type: ${filters.ruleKind}` });
     if (filters.scope) items.push({ key: 'scope', label: `Scope: ${filters.scope}` });
-    if (filters.lifecycleStatus) items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    if (filters.lifecycleStatus && filters.lifecycleStatus !== 'active') {
+      items.push({ key: 'lifecycleStatus', label: `Lifecycle: ${filters.lifecycleStatus}` });
+    }
     if (filters.tag) items.push({ key: 'tag', label: `Tag: ${filters.tag}` });
     if (filters.version.trim()) items.push({ key: 'version', label: `Version: ${filters.version.trim()}` });
     if (filters.hasDescription === true) items.push({ key: 'hasDescription', label: 'Description: yes' });
     if (filters.hasDescription === false) items.push({ key: 'hasDescription', label: 'Description: no' });
     return items;
   }, [filters]);
+
+  const canDeprecate = (rule) => (
+    canManageCatalog
+    && rule?.status === 'published'
+    && (rule?.lifecycleStatus == null || rule?.lifecycleStatus === 'active')
+  );
+
+  const requestDeprecation = async () => {
+    if (!deprecateTarget) return;
+    setDeprecating(true);
+    try {
+      await apiRequest(`/rules/${deprecateTarget.ruleId}/deprecate`, { method: 'POST' });
+      message.success('Deprecation request created');
+      setDeprecateTarget(null);
+      await loadRules({ cursor: null, append: false });
+    } catch (err) {
+      message.error(err.message || 'Failed to request deprecation');
+    } finally {
+      setDeprecating(false);
+    }
+  };
 
   return (
     <div className="cards-page">
@@ -187,7 +218,31 @@ export default function Rules() {
                     <span className="resource-card-name" title={rule.name}>{truncateCardName(rule.name)}</span>
                     <span className="resource-card-subtitle mono">{rule.ruleId}@{rule.version}</span>
                   </div>
-                  <span className="minimal-card-status">{formatStatusLabel(rule.status || 'unknown')}</span>
+                  <div className="resource-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <span className="minimal-card-status">{formatStatusLabel(rule.status || 'unknown')}</span>
+                    {canDeprecate(rule) ? (
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [{ key: 'deprecate', label: 'Deprecate' }],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent?.stopPropagation?.();
+                            if (key === 'deprecate') {
+                              setDeprecateTarget(rule);
+                            }
+                          },
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          className="resource-card-menu"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </Dropdown>
+                    ) : null}
+                  </div>
                 </div>
                 {rule.description && <Text type="secondary" className="resource-card-description">{rule.description}</Text>}
                 <div className="minimal-card-meta-line">
@@ -241,7 +296,7 @@ export default function Rules() {
           <div className="filter-row"><Text className="muted">Platform</Text><Select allowClear value={filters.platformCode} onChange={(value) => setFilters((prev) => ({ ...prev, platformCode: value || null }))} options={platformCodes.map((value) => ({ value, label: value }))} placeholder="Select platform" /></div>
           <div className="filter-row"><Text className="muted">Type</Text><Select allowClear value={filters.ruleKind} onChange={(value) => setFilters((prev) => ({ ...prev, ruleKind: value || null }))} options={ruleKinds.map((value) => ({ value, label: value }))} placeholder="Select type" /></div>
           <div className="filter-row"><Text className="muted">Scope</Text><Select allowClear value={filters.scope} onChange={(value) => setFilters((prev) => ({ ...prev, scope: value || null }))} options={scopes.map((value) => ({ value, label: value }))} placeholder="Select scope" /></div>
-          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select allowClear value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || null }))} options={lifecycleStatuses.map((value) => ({ value, label: value }))} placeholder="Select lifecycle" /></div>
+          <div className="filter-row"><Text className="muted">Lifecycle</Text><Select value={filters.lifecycleStatus} onChange={(value) => setFilters((prev) => ({ ...prev, lifecycleStatus: value || 'active' }))} options={lifecycleOptions} placeholder="Select lifecycle" /></div>
           <div className="filter-row filter-row-span-2"><Text className="muted">Tag</Text><Select allowClear value={filters.tag} onChange={(value) => setFilters((prev) => ({ ...prev, tag: value || null }))} options={tags.map((value) => ({ value, label: value }))} placeholder="Select tag" /></div>
           <div className="filter-row"><Text className="muted">Version</Text><Input value={filters.version} onChange={(event) => setFilters((prev) => ({ ...prev, version: event.target.value }))} placeholder="For example 1.0.0" /></div>
           <div className="filter-row"><Text className="muted">Description</Text><Select allowClear value={filters.hasDescription} onChange={(value) => setFilters((prev) => ({ ...prev, hasDescription: value ?? null }))} options={[{ value: true, label: 'Has description' }, { value: false, label: 'No description' }]} placeholder="Any" /></div>
@@ -256,6 +311,29 @@ export default function Rules() {
           <Button type="default" onClick={() => setIsFilterOpen(false)}>Apply</Button>
         </div>
       </Drawer>
+      <Modal
+        title="Deprecate rule?"
+        open={!!deprecateTarget}
+        onCancel={() => setDeprecateTarget(null)}
+        onOk={requestDeprecation}
+        okText="Deprecate"
+        cancelText="Cancel"
+        confirmLoading={deprecating}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Text>
+            A publication request will be created for <span className="mono">{deprecateTarget?.canonical || deprecateTarget?.ruleId}</span> with lifecycle_status=deprecated.
+          </Text>
+          <Text type="secondary">
+            {deprecateTarget?.scope === 'team'
+              ? 'After approval, deprecation will be finalized in DB without PR.'
+              : 'After approval, deprecation will be published via Pull Request to catalog.'}
+          </Text>
+          <Text type="secondary">
+            After publication this rule will be excluded from new flow selections and new launches.
+          </Text>
+        </div>
+      </Modal>
     </div>
   );
 }

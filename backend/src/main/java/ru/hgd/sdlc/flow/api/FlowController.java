@@ -143,6 +143,17 @@ public class FlowController {
         );
     }
 
+    @PostMapping("/{flowId}/deprecate")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
+    public FlowResponse deprecate(
+            @PathVariable String flowId,
+            @AuthenticationPrincipal User user
+    ) {
+        var saved = flowService.requestDeprecation(flowId, user);
+        var model = flowYamlParser.parse(saved.getFlowYaml());
+        return FlowResponse.from(saved, model);
+    }
+
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<String> handleValidation(ValidationException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
