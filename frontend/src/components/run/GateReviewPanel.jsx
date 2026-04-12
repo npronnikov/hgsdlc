@@ -216,49 +216,63 @@ export function GateReviewPanel({ runId, gate, gates = [], onDecision, onRefresh
       </div>
 
       <div className="gate-review-actions">
-        <div className="gate-review-action-approve">
-          <Input.TextArea
-            placeholder="Approve comment (optional)"
+        <div className="gate-review-actions-buttons">
+          <Input
+            placeholder="Comment (optional)"
             value={approveComment}
             onChange={(e) => setApproveComment(e.target.value)}
-            rows={2}
+            size="small"
+            style={{ flex: 1, minWidth: 0 }}
           />
           <Button type="primary" loading={submitting === 'approve'} onClick={approve}>
             Approve
           </Button>
-        </div>
-        <div className="gate-review-action-rework">
-          {reworkRequests.length > 0 && <Collapse size="small" items={reworkItems} />}
-          <Input.TextArea
-            placeholder="Rework comment (visible in audit log)"
-            value={reworkComment}
-            onChange={(e) => setReworkComment(e.target.value)}
-            rows={1}
-          />
-          <Input.TextArea
-            placeholder="General rework instruction"
-            value={reworkInstruction}
-            onChange={(e) => setReworkInstruction(e.target.value)}
-            rows={2}
-          />
-          {keepChangesSelectable && (
-            <div className="gate-review-keep-switch">
-              <Switch
-                checked={keepChanges}
-                onChange={handleKeepChangesToggle}
-                size="small"
-              />
-              <span>{keepChanges ? 'Keep changes' : 'Discard to checkpoint'}</span>
-            </div>
-          )}
+          <div className="gate-review-actions-divider" />
           <Button
             loading={submitting === 'rework'}
             disabled={!canSubmitRework || reworkDiscardBlocked}
             onClick={requestRework}
+            danger
           >
-            Request Rework{reworkRequests.length > 0 ? ` (${reworkRequests.length})` : ''}
+            Rework{reworkRequests.length > 0 ? ` (${reworkRequests.length})` : ''}
           </Button>
         </div>
+
+        <Collapse
+          size="small"
+          className="gate-review-rework-details"
+          items={[{
+            key: 'rework',
+            label: <Text type="secondary" style={{ fontSize: 12 }}>Rework details</Text>,
+            children: (
+              <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                {reworkRequests.length > 0 && <Collapse size="small" items={reworkItems} />}
+                <Input.TextArea
+                  placeholder="Rework instruction — describe what needs to change"
+                  value={reworkInstruction}
+                  onChange={(e) => setReworkInstruction(e.target.value)}
+                  autoSize={{ minRows: 2, maxRows: 5 }}
+                />
+                <Input
+                  placeholder="Rework comment (audit log)"
+                  value={reworkComment}
+                  onChange={(e) => setReworkComment(e.target.value)}
+                  size="small"
+                />
+                {keepChangesSelectable && (
+                  <div className="gate-review-keep-switch">
+                    <Switch
+                      checked={keepChanges}
+                      onChange={handleKeepChangesToggle}
+                      size="small"
+                    />
+                    <span>{keepChanges ? 'Keep changes' : 'Discard to checkpoint'}</span>
+                  </div>
+                )}
+              </Space>
+            ),
+          }]}
+        />
       </div>
 
       <Modal
