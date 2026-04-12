@@ -144,7 +144,13 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
 
-        String launchCommand = resolveLaunchCommand(promptPackage.prompt(), promptPath, projectRoot);
+        String launchCommand = resolveLaunchCommand(
+                promptPackage.prompt(),
+                promptPath,
+                projectRoot,
+                request.sessionCommandMode(),
+                request.sessionId()
+        );
         String commandScript = launchCommand;
         if (autoInitWithoutRules) {
             String initCommand = resolveInitCommand(promptPackage.prompt(), promptPath, projectRoot);
@@ -344,9 +350,16 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
         }
     }
 
-    private String resolveLaunchCommand(String prompt, Path promptPath, Path projectRoot) {
+    private String resolveLaunchCommand(
+            String prompt,
+            Path promptPath,
+            Path projectRoot,
+            AgentSessionCommandMode sessionCommandMode,
+            String sessionId
+    ) {
         String template = settingsService.getRuntimeAgentLaunchCommand(codingAgent());
-        return applyCommandTemplate(template, prompt, promptPath, projectRoot);
+        String baseCommand = applyCommandTemplate(template, prompt, promptPath, projectRoot);
+        return appendSessionCommand(baseCommand, sessionCommandMode, sessionId);
     }
 
     private String resolveInitCommand(String prompt, Path promptPath, Path projectRoot) {
@@ -359,6 +372,16 @@ class ClaudeCodingAgentStrategy implements CodingAgentStrategy {
                 .replace("{{PROMPT_FILE}}", shellQuote(promptPath == null ? "" : promptPath.toString()))
                 .replace("{{PROMPT}}", shellQuote(prompt))
                 .replace("{{PROJECT_ROOT}}", shellQuote(projectRoot == null ? "" : projectRoot.toString()));
+    }
+
+    private String appendSessionCommand(String baseCommand, AgentSessionCommandMode mode, String sessionId) {
+        if (mode == null || sessionId == null || sessionId.isBlank()) {
+            return baseCommand;
+        }
+        if (mode == AgentSessionCommandMode.RESUME_PREVIOUS_SESSION) {
+            return baseCommand + " --resume " + shellQuote(sessionId);
+        }
+        return baseCommand + " --session-id " + shellQuote(sessionId);
     }
 
     private String shellQuote(String value) {

@@ -163,8 +163,8 @@ export default function Projects() {
             <Switch
               checked={showInactive}
               onChange={setShowInactive}
-              checkedChildren="Вкл"
-              unCheckedChildren="Выкл"
+              checkedChildren="On"
+              unCheckedChildren="Off"
             />
           </Space>
           {canCreateProject(user?.role) ? (

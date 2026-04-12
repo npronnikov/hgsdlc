@@ -1,6 +1,7 @@
 package ru.hgd.sdlc.runtime.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -38,6 +39,17 @@ public class RunEntity {
 
     @Column(name = "flow_snapshot_json", nullable = false, columnDefinition = "TEXT")
     private String flowSnapshotJson;
+
+    @Convert(converter = AiSessionModeConverter.class)
+    @Column(name = "ai_session_mode", nullable = false, length = 64)
+    private AiSessionMode aiSessionMode;
+
+    @Column(name = "run_session_id", length = 255)
+    private String runSessionId;
+
+    @Convert(converter = ReworkSessionPolicyConverter.class)
+    @Column(name = "pending_rework_session_policy", length = 64)
+    private ReworkSessionPolicy pendingReworkSessionPolicy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "publish_mode", nullable = false, length = 16)

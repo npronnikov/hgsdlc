@@ -32,6 +32,7 @@ import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.flow.domain.PathRequirement;
 import ru.hgd.sdlc.runtime.application.AgentInvocationContext;
+import ru.hgd.sdlc.runtime.application.AgentSessionCommandMode;
 import ru.hgd.sdlc.runtime.application.AgentPromptBuilder;
 import ru.hgd.sdlc.runtime.application.CodingAgentException;
 import ru.hgd.sdlc.runtime.application.CodingAgentStrategy;
@@ -44,12 +45,14 @@ import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
 import ru.hgd.sdlc.runtime.domain.ArtifactKind;
 import ru.hgd.sdlc.runtime.domain.ArtifactScope;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.GateKind;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
+import ru.hgd.sdlc.runtime.domain.ReworkSessionPolicy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunPublishMode;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
@@ -195,6 +198,13 @@ public class RunStepService {
         List<Map<String, Object>> resolvedContext = resolveExecutionContext(run, node);
         List<AgentPromptBuilder.WorkflowProgressEntry> workflowProgress = loadWorkflowProgress(run.getId());
         CodingAgentStrategy strategy = resolveCodingAgentStrategy(flowModel);
+        AgentSessionSelection agentSessionSelection = selectAgentSession(run, node);
+        runtimeStepTxService.assignAgentSession(
+                run.getId(),
+                execution.getId(),
+                agentSessionSelection.sessionMode(),
+                agentSessionSelection.sessionId()
+        );
         AgentInvocationContext agentInvocationContext;
         try {
             agentInvocationContext = strategy.materializeWorkspace(new CodingAgentStrategy.MaterializationRequest(
@@ -205,7 +215,9 @@ public class RunStepService {
                     resolvedContext,
                     resolveProjectRoot(run),
                     resolveNodeExecutionRoot(run, execution),
-                    workflowProgress));
+                    workflowProgress,
+                    agentSessionSelection.commandMode(),
+                    agentSessionSelection.sessionId()));
         } catch (CodingAgentException ex) {
             throw new NodeFailureException(ex.getErrorCode(), ex.getMessage(), false, ex.getDetails());
         }
@@ -237,7 +249,9 @@ public class RunStepService {
                         node,
                         agentInvocationContext.promptPackage().promptChecksum(),
                         agentInvocationContext.workingDirectory().toString(),
-                        agentInvocationContext.command()));
+                        agentInvocationContext.command(),
+                        agentSessionSelection.sessionMode().apiValue(),
+                        agentSessionSelection.sessionId()));
 
         Map<String, String> beforeMutations = snapshotMutations(run, node.getExpectedMutations());
         CommandResult agentResult;
@@ -253,6 +267,22 @@ public class RunStepService {
             runtimeStepTxService.markNodeExecutionCancelled(run.getId(), execution.getId(), ex.getMessage());
             return false;
         } catch (IOException ex) {
+            if (agentSessionSelection.commandMode() == AgentSessionCommandMode.RESUME_PREVIOUS_SESSION) {
+                runtimeStepTxService.appendAudit(
+                        run.getId(),
+                        execution.getId(),
+                        null,
+                        "agent_session_resume_failed",
+                        ActorType.SYSTEM,
+                        "runtime",
+                        mapOf(
+                                "session_id", agentSessionSelection.sessionId(),
+                                "node_execution_id", execution.getId(),
+                                "reason", ex.getMessage()
+                        )
+                );
+                throw new NodeFailureException("AGENT_SESSION_RESUME_FAILED", ex.getMessage(), false);
+            }
             throw new NodeFailureException("AGENT_EXECUTION_FAILED", ex.getMessage(), false);
         }
         if (isRunCancelled(run.getId())) {
@@ -260,6 +290,33 @@ public class RunStepService {
             return false;
         }
         if (agentResult.exitCode() != 0) {
+            if (agentSessionSelection.commandMode() == AgentSessionCommandMode.RESUME_PREVIOUS_SESSION) {
+                runtimeStepTxService.appendAudit(
+                        run.getId(),
+                        execution.getId(),
+                        null,
+                        "agent_session_resume_failed",
+                        ActorType.SYSTEM,
+                        "runtime",
+                        mapOf(
+                                "session_id", agentSessionSelection.sessionId(),
+                                "node_execution_id", execution.getId(),
+                                "reason", "exit_code=" + agentResult.exitCode(),
+                                "stdout", truncate(agentResult.stdout(), 4000),
+                                "stderr", truncate(agentResult.stderr(), 4000)
+                        )
+                );
+                throw new NodeFailureException(
+                        "AGENT_SESSION_RESUME_FAILED",
+                        capitalize(strategy.codingAgent()) + " session resume failed with exit code " + agentResult.exitCode(),
+                        false,
+                        mapOf(
+                                "exit_code", agentResult.exitCode(),
+                                "session_id", agentSessionSelection.sessionId(),
+                                "stdout", truncate(agentResult.stdout(), 4000),
+                                "stderr", truncate(agentResult.stderr(), 4000))
+                );
+            }
             throw new NodeFailureException(
                     "AGENT_EXECUTION_FAILED",
                     capitalize(strategy.codingAgent()) + " execution failed with exit code " + agentResult.exitCode(),
@@ -1001,6 +1058,54 @@ public class RunStepService {
                 .map(NodeExecutionEntity::getAttemptNo)
                 .orElse(0) + 1;
         return runtimeStepTxService.createNodeExecution(run.getId(), node.getId(), nodeKind, attempt);
+    }
+
+    private AgentSessionSelection selectAgentSession(RunEntity run, NodeModel node) {
+        AiSessionMode runSessionMode = run.getAiSessionMode() == null
+                ? AiSessionMode.ISOLATED_ATTEMPT_SESSIONS
+                : run.getAiSessionMode();
+
+        if (runSessionMode == AiSessionMode.SHARED_RUN_SESSION) {
+            String runSessionId = trimToNull(run.getRunSessionId());
+            if (runSessionId == null) {
+                throw new NodeFailureException(
+                        "RUN_SESSION_NOT_INITIALIZED",
+                        "shared_run_session requires run_session_id",
+                        false
+                );
+            }
+            AgentSessionCommandMode commandMode = nodeExecutionRepository.existsByRunIdAndAgentSessionId(run.getId(), runSessionId)
+                    ? AgentSessionCommandMode.RESUME_PREVIOUS_SESSION
+                    : AgentSessionCommandMode.NEW_SESSION;
+            return new AgentSessionSelection(runSessionMode, commandMode, runSessionId);
+        }
+
+        ReworkSessionPolicy pendingPolicy = runtimeStepTxService.consumePendingReworkSessionPolicy(run.getId());
+        if (pendingPolicy == ReworkSessionPolicy.RESUME_PREVIOUS_SESSION) {
+            String previousSessionId = nodeExecutionRepository
+                    .findFirstByRunIdAndNodeIdAndAgentSessionIdIsNotNullOrderByAttemptNoDesc(run.getId(), node.getId())
+                    .map(NodeExecutionEntity::getAgentSessionId)
+                    .map(this::trimToNull)
+                    .orElse(null);
+            if (previousSessionId == null) {
+                throw new NodeFailureException(
+                        "AGENT_SESSION_RESUME_FAILED",
+                        "Requested resume_previous_session, but previous agent session was not found",
+                        false
+                );
+            }
+            return new AgentSessionSelection(
+                    runSessionMode,
+                    AgentSessionCommandMode.RESUME_PREVIOUS_SESSION,
+                    previousSessionId
+            );
+        }
+
+        return new AgentSessionSelection(
+                runSessionMode,
+                AgentSessionCommandMode.NEW_SESSION,
+                UUID.randomUUID().toString()
+        );
     }
 
     private void createCheckpointBeforeExecution(
@@ -1940,6 +2045,12 @@ public class RunStepService {
             return null;
         }
     }
+
+    private record AgentSessionSelection(
+            AiSessionMode sessionMode,
+            AgentSessionCommandMode commandMode,
+            String sessionId
+    ) {}
 
     private static class RunCancelledException extends RuntimeException {
         private RunCancelledException(String message) {

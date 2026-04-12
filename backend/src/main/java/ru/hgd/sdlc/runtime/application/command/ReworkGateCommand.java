@@ -8,5 +8,6 @@ public record ReworkGateCommand(
         String comment,
         String instruction,
         Boolean keepChanges,
+        String sessionPolicy,
         List<UUID> reviewedArtifactVersionIds
 ) {}

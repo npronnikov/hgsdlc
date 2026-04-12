@@ -87,6 +87,7 @@ function ApprovalForm({ gate, onComplete }) {
           comment,
           instruction,
           keep_changes: keepChanges,
+          session_policy: 'new_session',
           reviewed_artifact_version_ids: [],
         }),
       });

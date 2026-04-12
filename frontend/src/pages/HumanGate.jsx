@@ -12,6 +12,7 @@ import {
   Progress,
   Row,
   Segmented,
+  Select,
   Space,
   Switch,
   Tag,
@@ -238,6 +239,7 @@ export default function HumanGate() {
   const [markdownViewTab, setMarkdownViewTab] = useState('source');
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [keepChanges, setKeepChanges] = useState(true);
+  const [reworkSessionPolicy, setReworkSessionPolicy] = useState('new_session');
   const screens = Grid.useBreakpoint();
 
   const diffEditorRef = useRef(null);
@@ -248,6 +250,9 @@ export default function HumanGate() {
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
   const keepChangesSelectable = gate?.payload?.rework_keep_changes_selectable === true;
+  const runAiSessionMode = run?.ai_session_mode || null;
+  const isIsolatedAttemptSessionMode = runAiSessionMode === 'isolated_attempt_sessions';
+  const isSharedRunSessionMode = runAiSessionMode === 'shared_run_session';
   const reworkMode = keepChanges ? 'keep' : 'discard';
   const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
   const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
@@ -257,6 +262,10 @@ export default function HumanGate() {
   const effectiveDiscardAvailable = reworkDiscardAvailable && !discardBlockedByRequests;
   const reworkDiscardBlockedReason = resolveReworkDiscardBlockedReason(reworkDiscardUnavailableReason, discardBlockedByRequests);
   const reworkDiscardBlocked = isDiscardPolicy && !effectiveDiscardAvailable;
+  const showSessionPolicySelector = keepChanges && isIsolatedAttemptSessionMode;
+  const effectiveSessionPolicy = !keepChanges
+    ? 'new_session'
+    : (isIsolatedAttemptSessionMode ? reworkSessionPolicy : 'resume_previous_session');
   const hasManualReworkInstruction = !!(reworkInstruction || '').trim();
   const canSubmitRework = hasAnyReworkRequests || hasManualReworkInstruction;
   const userInstructions = gate?.payload?.user_instructions || '';
@@ -453,6 +462,10 @@ export default function HumanGate() {
   useEffect(() => {
     setKeepChanges(gate?.payload?.rework_keep_changes !== false);
   }, [gate?.gate_id, gate?.resource_version, gate?.payload?.rework_keep_changes]);
+
+  useEffect(() => {
+    setReworkSessionPolicy('new_session');
+  }, [gate?.gate_id, gate?.resource_version]);
 
   useEffect(() => {
     if (discardBlockedByRequests && !keepChanges) {
@@ -652,6 +665,7 @@ export default function HumanGate() {
           comment: reworkComment,
           instruction: mergedInstruction,
           keep_changes: keepChanges,
+          session_policy: effectiveSessionPolicy,
           reviewed_artifact_version_ids: [],
         }),
       });
@@ -1228,6 +1242,28 @@ export default function HumanGate() {
                     <Text type="danger">{reworkDiscardBlockedReason}</Text>
                   )}
                 </div>
+
+                <Text className="muted">Session policy</Text>
+                {showSessionPolicySelector ? (
+                  <Select
+                    value={reworkSessionPolicy}
+                    onChange={setReworkSessionPolicy}
+                    disabled={submitting !== null}
+                    options={[
+                      { value: 'resume_previous_session', label: 'Resume Previous Session' },
+                      { value: 'new_session', label: 'Start New Session' },
+                    ]}
+                  />
+                ) : (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <Tag style={{ width: 'fit-content' }}>
+                      {effectiveSessionPolicy === 'new_session' ? 'Start New Session' : 'Resume Previous Session'}
+                    </Tag>
+                    {keepChanges && isSharedRunSessionMode && (
+                      <Text type="secondary">Session mode is fixed at run level.</Text>
+                    )}
+                  </div>
+                )}
 
                 <Text className="muted">Comment</Text>
                 <Input.TextArea

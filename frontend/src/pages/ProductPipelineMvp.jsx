@@ -556,6 +556,7 @@ export default function ProductPipelineMvp() {
             target_branch: targetBranch,
             flow_canonical_name: flowRecord.canonical_name,
             feature_request: task.trim(),
+            ai_session_mode: 'isolated_attempt_sessions',
             publish_mode: 'branch',
             idempotency_key: generateIdempotencyKey(),
           }),

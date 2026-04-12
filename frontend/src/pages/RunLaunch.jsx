@@ -211,6 +211,7 @@ export default function RunLaunch() {
   const targetBranchValue = Form.useWatch('target_branch', form);
   const featureRequestValue = Form.useWatch('feature_request', form);
   const publishModeValue = Form.useWatch('publish_mode', form);
+  const aiSessionModeValue = Form.useWatch('ai_session_mode', form);
 
   useEffect(() => {
     const loadData = async () => {
@@ -236,6 +237,7 @@ export default function RunLaunch() {
         form.setFieldsValue({
           project_id: initialProjectId || undefined,
           target_branch: initialProject?.default_branch || 'main',
+          ai_session_mode: 'isolated_attempt_sessions',
           publish_mode: 'branch',
           pr_commit_strategy: 'squash',
         });
@@ -332,6 +334,7 @@ export default function RunLaunch() {
           target_branch: values.target_branch,
           flow_canonical_name: selectedFlowCanonical,
           feature_request: values.feature_request,
+          ai_session_mode: values.ai_session_mode,
           publish_mode: values.publish_mode,
           work_branch: values.work_branch?.trim() || undefined,
           pr_commit_strategy: values.publish_mode === 'pr' ? (values.pr_commit_strategy || 'squash') : undefined,
@@ -356,6 +359,7 @@ export default function RunLaunch() {
     && selectedFlowId
     && targetBranchValue?.trim()
     && featureRequestValue?.trim()
+    && aiSessionModeValue
     && publishModeValue
   );
 
@@ -430,6 +434,19 @@ export default function RunLaunch() {
                 <Input.TextArea
                   rows={6}
                   placeholder="Describe the requested change"
+                />
+              </Form.Item>
+              <Form.Item
+                label="AI Session Mode"
+                name="ai_session_mode"
+                rules={[{ required: true, message: 'Select AI session mode' }]}
+                initialValue="isolated_attempt_sessions"
+              >
+                <Select
+                  options={[
+                    { value: 'shared_run_session', label: 'Shared Run Session' },
+                    { value: 'isolated_attempt_sessions', label: 'Isolated Attempt Sessions' },
+                  ]}
                 />
               </Form.Item>
               <Row gutter={12}>

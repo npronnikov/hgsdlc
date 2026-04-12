@@ -1,4 +1,5 @@
 [ {
+  "agent_session_id" : null,
   "attempt_no" : 1,
   "checkpoint_commit_sha" : null,
   "checkpoint_created_at" : null,
@@ -14,6 +15,7 @@
   "started_at" : "<instant>",
   "status" : "succeeded"
 }, {
+  "agent_session_id" : null,
   "attempt_no" : 1,
   "checkpoint_commit_sha" : null,
   "checkpoint_created_at" : null,

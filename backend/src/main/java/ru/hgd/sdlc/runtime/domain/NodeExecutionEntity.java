@@ -64,6 +64,9 @@ public class NodeExecutionEntity {
     @Column(name = "checkpoint_created_at")
     private Instant checkpointCreatedAt;
 
+    @Column(name = "agent_session_id", length = 255)
+    private String agentSessionId;
+
     @Column(name = "step_summary_json", columnDefinition = "TEXT")
     private String stepSummaryJson;
 

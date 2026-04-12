@@ -93,6 +93,7 @@ public class RuntimeController {
                                     request.targetBranch(),
                                     request.flowCanonicalName(),
                                     request.featureRequest(),
+                                    request.aiSessionMode(),
                                     request.publishMode(),
                                     request.workBranch(),
                                     request.prCommitStrategy()
@@ -103,6 +104,8 @@ public class RuntimeController {
                             run.getId(),
                             run.getStatus().name().toLowerCase(),
                             run.getFlowCanonicalName(),
+                            run.getAiSessionMode() == null ? null : run.getAiSessionMode().apiValue(),
+                            run.getRunSessionId(),
                             run.getResourceVersion()
                     );
                     if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -255,6 +258,7 @@ public class RuntimeController {
                         request.comment(),
                         request.instruction(),
                         request.keepChanges(),
+                        request.sessionPolicy(),
                         request.reviewedArtifactVersionIds()
                 ),
                 user
@@ -418,6 +422,7 @@ public class RuntimeController {
             @JsonProperty("target_branch") String targetBranch,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
             @JsonProperty("feature_request") String featureRequest,
+            @JsonProperty("ai_session_mode") String aiSessionMode,
             @JsonProperty("publish_mode") String publishMode,
             @JsonProperty("work_branch") String workBranch,
             @JsonProperty("pr_commit_strategy") String prCommitStrategy,
@@ -428,6 +433,8 @@ public class RuntimeController {
             @JsonProperty("run_id") UUID runId,
             @JsonProperty("status") String status,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
+            @JsonProperty("ai_session_mode") String aiSessionMode,
+            @JsonProperty("run_session_id") String runSessionId,
             @JsonProperty("resource_version") long resourceVersion
     ) {}
 
@@ -446,6 +453,8 @@ public class RuntimeController {
             @JsonProperty("pr_url") String prUrl,
             @JsonProperty("pr_number") Integer prNumber,
             @JsonProperty("flow_canonical_name") String flowCanonicalName,
+            @JsonProperty("ai_session_mode") String aiSessionMode,
+            @JsonProperty("run_session_id") String runSessionId,
             @JsonProperty("status") String status,
             @JsonProperty("current_node_id") String currentNodeId,
             @JsonProperty("feature_request") String featureRequest,
@@ -475,6 +484,8 @@ public class RuntimeController {
                     run.getPrUrl(),
                     run.getPrNumber(),
                     run.getFlowCanonicalName(),
+                    run.getAiSessionMode() == null ? null : run.getAiSessionMode().apiValue(),
+                    run.getRunSessionId(),
                     run.getStatus().name().toLowerCase(),
                     run.getCurrentNodeId(),
                     run.getFeatureRequest(),
@@ -505,6 +516,7 @@ public class RuntimeController {
             @JsonProperty("checkpoint_enabled") boolean checkpointEnabled,
             @JsonProperty("checkpoint_commit_sha") String checkpointCommitSha,
             @JsonProperty("checkpoint_created_at") Instant checkpointCreatedAt,
+            @JsonProperty("agent_session_id") String agentSessionId,
             @JsonProperty("resource_version") long resourceVersion
     ) {
         static NodeExecutionResponse from(ru.hgd.sdlc.runtime.domain.NodeExecutionEntity execution) {
@@ -522,6 +534,7 @@ public class RuntimeController {
                     execution.isCheckpointEnabled(),
                     execution.getCheckpointCommitSha(),
                     execution.getCheckpointCreatedAt(),
+                    execution.getAgentSessionId(),
                     execution.getResourceVersion()
             );
         }
@@ -614,6 +627,7 @@ public class RuntimeController {
             @JsonProperty("comment") String comment,
             @JsonProperty("instruction") String instruction,
             @JsonProperty("keep_changes") Boolean keepChanges,
+            @JsonProperty("session_policy") String sessionPolicy,
             @JsonProperty("reviewed_artifact_version_ids") List<UUID> reviewedArtifactVersionIds
     ) {}
 

@@ -21,6 +21,7 @@ import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.ForbiddenException;
 import ru.hgd.sdlc.common.UnprocessableEntityException;
+import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.project.domain.Project;
 import ru.hgd.sdlc.runtime.application.RuntimeIntegrationTestConfig;
 import ru.hgd.sdlc.runtime.application.command.ApproveGateCommand;
@@ -146,6 +147,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 "Needs update",
                 "Adjust naming",
                 true,
+                "new_session",
                 List.of()
         );
 
@@ -218,6 +220,7 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 "Discard changes",
                 "Rework required",
                 false,
+                null,
                 List.of()
         );
         gateDecisionService.requestRework(gate.getId(), command, flowConfigurator);
@@ -249,12 +252,100 @@ class RuntimeGateDecisionServiceTest extends RuntimeIntegrationTestBase {
                 "Keep changes",
                 "Rework required",
                 true,
+                "new_session",
                 List.of()
         );
         gateDecisionService.requestRework(gate.getId(), command, flowConfigurator);
 
         String afterRework = Files.readString(readmePath, StandardCharsets.UTF_8);
         Assertions.assertTrue(afterRework.contains(marker), "Keep rework must preserve workspace changes");
+    }
+
+    @Test
+    void requestReworkDiscardIgnoresInvalidSessionPolicy() throws Exception {
+        var flow = createPublishedFlow(
+                "gate-rework-discard-ignore-policy",
+                humanApprovalFlowYaml("gate-rework-discard-ignore-policy", "MARKER"),
+                "implement-change"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Discard should ignore policy");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
+        GateInstanceEntity gate = waitForGateStatus(runId, Duration.ofSeconds(10), GateStatus.AWAITING_DECISION);
+
+        ReworkGateCommand command = new ReworkGateCommand(
+                gate.getResourceVersion(),
+                "Discard changes",
+                "Rework required",
+                false,
+                "invalid_policy_value",
+                List.of()
+        );
+
+        gateDecisionService.requestRework(gate.getId(), command, flowConfigurator);
+
+        GateInstanceEntity updatedGate = gateInstanceRepository.findById(gate.getId())
+                .orElseThrow(() -> new IllegalStateException("Gate not found after rework"));
+        JsonNode payload = objectMapper.readTree(updatedGate.getPayloadJson());
+        Assertions.assertEquals("invalid_policy_value", payload.path("session_policy_requested").asText());
+        Assertions.assertEquals("new_session", payload.path("session_policy_effective").asText());
+    }
+
+    @Test
+    void requestReworkSharedModeIgnoresInvalidSessionPolicy() throws Exception {
+        var flow = createPublishedFlow(
+                "gate-rework-shared-ignore-policy",
+                humanApprovalFlowYaml("gate-rework-shared-ignore-policy", "MARKER"),
+                "implement-change"
+        );
+
+        UUID runId = createRunViaApi(
+                token,
+                project.getId(),
+                flow.getCanonicalName(),
+                "Shared mode should ignore policy",
+                "shared_run_session"
+        );
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
+        GateInstanceEntity gate = waitForGateStatus(runId, Duration.ofSeconds(10), GateStatus.AWAITING_DECISION);
+
+        ReworkGateCommand command = new ReworkGateCommand(
+                gate.getResourceVersion(),
+                "Keep changes",
+                "Rework required",
+                true,
+                "invalid_policy_value",
+                List.of()
+        );
+
+        Assertions.assertDoesNotThrow(() -> gateDecisionService.requestRework(gate.getId(), command, flowConfigurator));
+    }
+
+    @Test
+    void requestReworkIsolatedKeepRequiresSessionPolicy() throws Exception {
+        var flow = createPublishedFlow(
+                "gate-rework-isolated-policy-required",
+                humanApprovalFlowYaml("gate-rework-isolated-policy-required", "MARKER"),
+                "implement-change"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Policy is required");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.WAITING_GATE);
+        GateInstanceEntity gate = waitForGateStatus(runId, Duration.ofSeconds(10), GateStatus.AWAITING_DECISION);
+
+        ReworkGateCommand command = new ReworkGateCommand(
+                gate.getResourceVersion(),
+                "Keep changes",
+                "Rework required",
+                true,
+                null,
+                List.of()
+        );
+
+        Assertions.assertThrows(
+                ValidationException.class,
+                () -> gateDecisionService.requestRework(gate.getId(), command, flowConfigurator)
+        );
     }
 
     @Test
