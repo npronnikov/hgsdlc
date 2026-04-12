@@ -436,18 +436,8 @@ export default function RunLaunch() {
                   placeholder="Describe the requested change"
                 />
               </Form.Item>
-              <Form.Item
-                label="AI Session Mode"
-                name="ai_session_mode"
-                rules={[{ required: true, message: 'Select AI session mode' }]}
-                initialValue="isolated_attempt_sessions"
-              >
-                <Select
-                  options={[
-                    { value: 'shared_run_session', label: 'Shared Run Session' },
-                    { value: 'isolated_attempt_sessions', label: 'Isolated Attempt Sessions' },
-                  ]}
-                />
+              <Form.Item name="ai_session_mode" hidden initialValue="isolated_attempt_sessions">
+                <Input />
               </Form.Item>
               <Row gutter={12}>
                 <Col xs={24} md={12}>
