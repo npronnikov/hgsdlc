@@ -35,10 +35,10 @@ import ru.hgd.sdlc.runtime.application.command.SubmittedArtifact;
 import ru.hgd.sdlc.runtime.application.dto.ArtifactContentResult;
 import ru.hgd.sdlc.runtime.application.dto.AuditQueryResult;
 import ru.hgd.sdlc.runtime.application.dto.GateActionResult;
+import ru.hgd.sdlc.runtime.application.dto.GateAskResult;
 import ru.hgd.sdlc.runtime.application.dto.GateChangesResult;
 import ru.hgd.sdlc.runtime.application.dto.GateDiffResult;
 import ru.hgd.sdlc.runtime.application.dto.NodeLogResult;
-import ru.hgd.sdlc.runtime.application.service.GateAskService;
 import ru.hgd.sdlc.runtime.application.service.RuntimeCommandService;
 import ru.hgd.sdlc.runtime.application.service.RuntimeQueryService;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
@@ -53,20 +53,17 @@ public class RuntimeController {
     private final RuntimeQueryService runtimeQueryService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
-    private final GateAskService gateAskService;
 
     public RuntimeController(
             RuntimeCommandService runtimeCommandService,
             RuntimeQueryService runtimeQueryService,
             IdempotencyService idempotencyService,
-            ObjectMapper objectMapper,
-            GateAskService gateAskService
+            ObjectMapper objectMapper
     ) {
         this.runtimeCommandService = runtimeCommandService;
         this.runtimeQueryService = runtimeQueryService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
-        this.gateAskService = gateAskService;
     }
 
     @PostMapping("/runs")
@@ -320,7 +317,7 @@ public class RuntimeController {
 
     @GetMapping("/gates/{gateId}/chat")
     public List<ChatMessageResponse> getGateChat(@PathVariable UUID gateId) {
-        return gateAskService.getChatHistory(gateId).stream()
+        return runtimeCommandService.getGateChatHistory(gateId).stream()
                 .map(msg -> new ChatMessageResponse(msg.getId(), msg.getRole(), msg.getContent(), msg.getCreatedAt()))
                 .toList();
     }
@@ -330,8 +327,7 @@ public class RuntimeController {
             @PathVariable UUID gateId,
             @RequestBody GateAskRequest request
     ) {
-        GateAskService.AskResult result =
-                gateAskService.ask(gateId, request.question(), request.selectedDiff());
+        GateAskResult result = runtimeCommandService.askGate(gateId, request.question(), request.selectedDiff());
         return new AskResponse(result.answer());
     }
 

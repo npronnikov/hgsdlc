@@ -42,7 +42,8 @@ public class RunEntity {
 
     @Convert(converter = AiSessionModeConverter.class)
     @Column(name = "ai_session_mode", nullable = false, length = 64)
-    private AiSessionMode aiSessionMode;
+    @Builder.Default
+    private AiSessionMode aiSessionMode = AiSessionMode.ISOLATED_ATTEMPT_SESSIONS;
 
     @Column(name = "run_session_id", length = 255)
     private String runSessionId;

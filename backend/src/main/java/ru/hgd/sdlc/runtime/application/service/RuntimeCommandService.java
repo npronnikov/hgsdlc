@@ -10,7 +10,10 @@ import ru.hgd.sdlc.runtime.application.command.ApproveGateCommand;
 import ru.hgd.sdlc.runtime.application.command.CreateRunCommand;
 import ru.hgd.sdlc.runtime.application.command.ReworkGateCommand;
 import ru.hgd.sdlc.runtime.application.command.SubmitInputCommand;
+import java.util.List;
 import ru.hgd.sdlc.runtime.application.dto.GateActionResult;
+import ru.hgd.sdlc.runtime.application.dto.GateAskResult;
+import ru.hgd.sdlc.runtime.domain.GateChatMessageEntity;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 
 @Service
@@ -21,6 +24,7 @@ public class RuntimeCommandService {
     private final RunStepService runStepService;
     private final GateDecisionService gateDecisionService;
     private final RunPublishService runPublishService;
+    private final GateAskService gateAskService;
     private final TaskExecutor taskExecutor;
 
     public RuntimeCommandService(
@@ -28,13 +32,23 @@ public class RuntimeCommandService {
             RunStepService runStepService,
             GateDecisionService gateDecisionService,
             RunPublishService runPublishService,
+            GateAskService gateAskService,
             TaskExecutor taskExecutor
     ) {
         this.runLifecycleService = runLifecycleService;
         this.runStepService = runStepService;
         this.gateDecisionService = gateDecisionService;
         this.runPublishService = runPublishService;
+        this.gateAskService = gateAskService;
         this.taskExecutor = taskExecutor;
+    }
+
+    public GateAskResult askGate(UUID gateId, String question, String selectedDiff) {
+        return gateAskService.ask(gateId, question, selectedDiff);
+    }
+
+    public List<GateChatMessageEntity> getGateChatHistory(UUID gateId) {
+        return gateAskService.getChatHistory(gateId);
     }
 
     public RunEntity createRun(CreateRunCommand command, User user) {

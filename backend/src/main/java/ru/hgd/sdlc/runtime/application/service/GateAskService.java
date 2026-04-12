@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -20,7 +19,9 @@ import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.UnprocessableEntityException;
 import ru.hgd.sdlc.flow.domain.FlowModel;
 import ru.hgd.sdlc.flow.domain.NodeModel;
+import ru.hgd.sdlc.runtime.application.dto.GateAskResult;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
+import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.GateChatMessageEntity;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
@@ -41,6 +42,7 @@ public class GateAskService {
     private final RunRepository runRepository;
     private final GateChatMessageRepository chatMessageRepository;
     private final ProcessExecutionPort processExecutionPort;
+    private final WorkspacePort workspacePort;
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final String enTemplate;
@@ -52,6 +54,7 @@ public class GateAskService {
             RunRepository runRepository,
             GateChatMessageRepository chatMessageRepository,
             ProcessExecutionPort processExecutionPort,
+            WorkspacePort workspacePort,
             @Lazy SettingsService settingsService,
             ObjectMapper objectMapper,
             @Value("classpath:runtime/ask-prompt-template.en.md") Resource enTemplateResource,
@@ -62,15 +65,14 @@ public class GateAskService {
         this.runRepository = runRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.processExecutionPort = processExecutionPort;
+        this.workspacePort = workspacePort;
         this.settingsService = settingsService;
         this.objectMapper = objectMapper;
         this.enTemplate = readResource(enTemplateResource);
         this.ruTemplate = readResource(ruTemplateResource);
     }
 
-    public record AskResult(String answer) {}
-
-    public AskResult ask(UUID gateId, String question, String selectedDiff) {
+    public GateAskResult ask(UUID gateId, String question, String selectedDiff) {
         GateInstanceEntity gate = gateInstanceRepository.findById(gateId)
                 .orElseThrow(() -> new NotFoundException("Gate not found: " + gateId));
 
@@ -94,8 +96,8 @@ public class GateAskService {
         Path stderrPath = askRoot.resolve(askId + ".stderr.log");
 
         try {
-            Files.createDirectories(askRoot);
-            Files.writeString(promptPath, prompt, StandardCharsets.UTF_8);
+            workspacePort.createDirectories(askRoot);
+            workspacePort.writeString(promptPath, prompt, StandardCharsets.UTF_8);
         } catch (IOException ex) {
             throw new UnprocessableEntityException("Failed to write ask prompt: " + ex.getMessage());
         }
@@ -123,7 +125,7 @@ public class GateAskService {
 
         String answer = result.stdout() == null ? "" : result.stdout().trim();
         saveMessages(gateId, question, answer);
-        return new AskResult(answer);
+        return new GateAskResult(answer);
     }
 
     @Transactional
