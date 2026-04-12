@@ -7,6 +7,7 @@ public record CreateRunCommand(
         String targetBranch,
         String flowCanonicalName,
         String featureRequest,
+        String aiSessionMode,
         String publishMode,
         String workBranch,
         String prCommitStrategy

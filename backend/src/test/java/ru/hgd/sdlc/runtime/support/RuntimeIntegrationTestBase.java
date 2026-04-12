@@ -224,11 +224,22 @@ public abstract class RuntimeIntegrationTestBase {
     }
 
     protected UUID createRunViaApi(String token, UUID projectId, String flowCanonicalName, String featureRequest) throws Exception {
+        return createRunViaApi(token, projectId, flowCanonicalName, featureRequest, "isolated_attempt_sessions");
+    }
+
+    protected UUID createRunViaApi(
+            String token,
+            UUID projectId,
+            String flowCanonicalName,
+            String featureRequest,
+            String aiSessionMode
+    ) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "project_id", projectId,
                 "target_branch", "main",
                 "flow_canonical_name", flowCanonicalName,
                 "feature_request", featureRequest,
+                "ai_session_mode", aiSessionMode,
                 "publish_mode", "local",
                 "idempotency_key", UUID.randomUUID().toString()
         ));

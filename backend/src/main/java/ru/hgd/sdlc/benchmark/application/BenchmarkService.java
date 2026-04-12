@@ -37,6 +37,7 @@ import ru.hgd.sdlc.runtime.application.command.ApproveGateCommand;
 import ru.hgd.sdlc.runtime.application.service.GateDecisionService;
 import ru.hgd.sdlc.runtime.application.service.RunLifecycleService;
 import ru.hgd.sdlc.runtime.application.service.RuntimeCommandService;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunPublishMode;
@@ -264,6 +265,8 @@ public class BenchmarkService {
                 targetBranch,
                 "benchmark:" + benchmarkRunId + ":a",
                 flowAJson,
+                AiSessionMode.ISOLATED_ATTEMPT_SESSIONS,
+                null,
                 RunPublishMode.LOCAL,
                 "benchmark-" + benchmarkRunId + "-a",
                 null,
@@ -285,6 +288,8 @@ public class BenchmarkService {
                 targetBranch,
                 "benchmark:" + benchmarkRunId + ":b",
                 flowBJson,
+                AiSessionMode.ISOLATED_ATTEMPT_SESSIONS,
+                null,
                 RunPublishMode.LOCAL,
                 "benchmark-" + benchmarkRunId + "-b",
                 null,

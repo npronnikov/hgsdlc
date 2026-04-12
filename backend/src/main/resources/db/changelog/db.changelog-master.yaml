@@ -79,3 +79,7 @@ databaseChangeLog:
       file: db/changelog/044-benchmark-run-comments.sql
   - include:
       file: db/changelog/045-benchmark-second-artifact.sql
+  - include:
+      file: db/changelog/046-runtime-ai-sessions.sql
+  - include:
+      file: db/changelog/047-gate-chat-messages.sql

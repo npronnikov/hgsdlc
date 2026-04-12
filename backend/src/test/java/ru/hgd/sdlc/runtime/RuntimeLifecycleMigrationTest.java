@@ -78,6 +78,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "main",
                         terminalFlowCanonicalName,
                         "Resume lifecycle run",
+                        "isolated_attempt_sessions",
                         "local",
                         null,
                         null
@@ -99,6 +100,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "main",
                         terminalFlowCanonicalName,
                         "Cancel lifecycle run",
+                        "isolated_attempt_sessions",
                         "local",
                         null,
                         null
@@ -119,6 +121,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "main",
                         terminalFlowCanonicalName,
                         "Recover running run",
+                        "isolated_attempt_sessions",
                         "local",
                         null,
                         null
@@ -134,6 +137,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "main",
                         humanInputFlowCanonicalName,
                         "Recover waiting gate run",
+                        "isolated_attempt_sessions",
                         "local",
                         null,
                         null
@@ -165,6 +169,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                 "target_branch", "main",
                 "flow_canonical_name", terminalFlowCanonicalName,
                 "feature_request", "Idempotent lifecycle run",
+                "ai_session_mode", "isolated_attempt_sessions",
                 "publish_mode", "local",
                 "idempotency_key", idempotencyKey
         ));
@@ -197,6 +202,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "main",
                         terminalFlowCanonicalName,
                         "First active run",
+                        "isolated_attempt_sessions",
                         "local",
                         null,
                         null
@@ -212,6 +218,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                                 "main",
                                 terminalFlowCanonicalName,
                                 "Second active run",
+                                "isolated_attempt_sessions",
                                 "local",
                                 null,
                                 null

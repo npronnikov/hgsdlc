@@ -7,10 +7,12 @@
   "gate_id" : null,
   "node_execution_id" : null,
   "payload" : {
+    "ai_session_mode" : "isolated_attempt_sessions",
     "flow_canonical_name" : "baseline-flow@1.0",
     "pr_commit_strategy" : null,
     "project_id" : "<uuid>",
     "publish_mode" : "local",
+    "run_session_id" : null,
     "target_branch" : "main",
     "work_branch" : "run/<uuid>"
   },

@@ -147,6 +147,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                 "comment", "Need refinements",
                 "instruction", "Please improve naming",
                 "keep_changes", true,
+                "session_policy", "new_session",
                 "reviewed_artifact_version_ids", List.of()
         ));
         mockMvc.perform(post("/api/gates/{gateId}/request-rework", firstGate.getId())
@@ -460,6 +461,7 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                 "target_branch", "main",
                 "flow_canonical_name", flowCanonicalName,
                 "feature_request", featureRequest,
+                "ai_session_mode", "isolated_attempt_sessions",
                 "publish_mode", "pr",
                 "pr_commit_strategy", "squash",
                 "idempotency_key", UUID.randomUUID().toString()

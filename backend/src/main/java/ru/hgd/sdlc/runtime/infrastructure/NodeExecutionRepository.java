@@ -10,6 +10,12 @@ import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
 public interface NodeExecutionRepository extends JpaRepository<NodeExecutionEntity, UUID> {
     Optional<NodeExecutionEntity> findFirstByRunIdAndNodeIdOrderByAttemptNoDesc(UUID runId, String nodeId);
 
+    Optional<NodeExecutionEntity> findFirstByRunIdAndNodeIdAndAgentSessionIdIsNotNullOrderByAttemptNoDesc(
+            UUID runId, String nodeId
+    );
+
+    boolean existsByRunIdAndAgentSessionId(UUID runId, String agentSessionId);
+
     Optional<NodeExecutionEntity> findFirstByRunIdAndNodeIdAndStatusOrderByAttemptNoDesc(
             UUID runId, String nodeId, NodeExecutionStatus status
     );

@@ -37,6 +37,7 @@ import ru.hgd.sdlc.runtime.application.port.ClockPort;
 import ru.hgd.sdlc.runtime.application.port.IdentityPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
@@ -136,6 +137,8 @@ public class RunLifecycleService {
         }
 
         UUID runId = UUID.randomUUID();
+        AiSessionMode aiSessionMode = resolveAiSessionMode(command.aiSessionMode());
+        String runSessionId = aiSessionMode == AiSessionMode.SHARED_RUN_SESSION ? UUID.randomUUID().toString() : null;
         RunPublishMode publishMode = resolvePublishMode(command.publishMode());
         PrCommitStrategy prCommitStrategy = resolvePrCommitStrategy(publishMode, command.prCommitStrategy());
         String workBranch = resolveWorkBranch(runId, command.workBranch(), command.targetBranch());
@@ -158,6 +161,8 @@ public class RunLifecycleService {
                 normalizeBranch(command.targetBranch()),
                 flowVersion.getCanonicalName(),
                 toJson(flowModel),
+                aiSessionMode,
+                runSessionId,
                 publishMode,
                 workBranch,
                 prCommitStrategy,
@@ -659,6 +664,17 @@ public class RunLifecycleService {
         }
         if (command.publishMode() == null || command.publishMode().isBlank()) {
             throw new ValidationException("publish_mode is required");
+        }
+        if (command.aiSessionMode() == null || command.aiSessionMode().isBlank()) {
+            throw new ValidationException("ai_session_mode is required");
+        }
+    }
+
+    private AiSessionMode resolveAiSessionMode(String aiSessionModeRaw) {
+        try {
+            return AiSessionMode.fromApiValue(aiSessionModeRaw == null ? null : aiSessionModeRaw.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(ex.getMessage());
         }
     }
 
