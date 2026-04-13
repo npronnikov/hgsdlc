@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-code-generation-execute
+version: "1.0"
+canonical_name: aidlc-code-generation-execute@1.0
+display_name: "AIDLC: Code Generation Execution"
+description: >
+  Execute the approved code-generation-plan.md step by step: create/modify files,
+  write tests, apply migrations, verify each step, and mark checkboxes as complete.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - construction
+  - code-generation
+  - implementation
+skill_kind: implementation
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-code-generation-execute/1.0"

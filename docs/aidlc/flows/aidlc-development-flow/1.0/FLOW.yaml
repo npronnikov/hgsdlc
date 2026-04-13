@@ -1,0 +1,414 @@
+id: aidlc-development-flow
+version: "1.0"
+canonical_name: aidlc-development-flow@1.0
+title: AIDLC Development (requirements → design → code → test)
+description: >
+  Standard development flow: clarifies requirements with structured questions,
+  produces requirements.md, plans the workflow, designs the unit (functional
+  design + NFR), plans and executes code generation, then produces build and
+  test instructions. Does not include workspace detection or reverse engineering
+  (run aidlc-reverse-engineering-flow first for brownfield projects).
+  All human gates allow rework with explicit feedback.
+start_node_id: ai-requirements-clarification
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+
+nodes:
+
+  # ── Step 1: Generate clarifying questions ─────────────────────────────────
+  - id: ai-requirements-clarification
+    title: Analyse request and generate clarifying questions
+    type: ai
+    checkpoint_before_run: true
+    execution_context: []
+    instruction: |
+      Analyse the user's request and the existing codebase.
+      Load reverse-engineering context from aidlc-docs/inception/reverse-engineering/
+      if it exists (brownfield project).
+
+      Follow the attached skill to classify the request (type, scope, complexity)
+      and generate a comprehensive set of clarifying questions with [Answer]: tags
+      covering functional requirements, NFR, user scenarios, and business context.
+
+      Save as aidlc-docs/inception/requirements/requirement-questions.md.
+    skill_refs:
+      - aidlc-requirements-clarification@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: human-answer-requirement-questions
+    on_failure: terminal-complete
+
+  # ── Step 2: Human fills in answers ────────────────────────────────────────
+  - id: human-answer-requirement-questions
+    title: Answer requirement clarification questions
+    type: human_input
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-requirements-clarification
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        scope: run
+        required: true
+        modifiable: true
+        transfer_mode: by_ref
+    instruction: |
+      Open aidlc-docs/inception/requirements/requirement-questions.md.
+      For each question, fill in the [Answer]: tag with your response.
+      Use the A/B/C options where provided, or write a free-form answer after
+      the [Answer]: tag for option X) Other questions.
+      Answer ALL questions before clicking Submit.
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        required: true
+    expected_mutations: []
+    on_submit: ai-generate-requirements
+
+  # ── Step 3: Generate requirements document ────────────────────────────────
+  - id: ai-generate-requirements
+    title: Generate requirements document
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: human-answer-requirement-questions
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Read the answered requirement-questions.md and produce a structured
+      requirements.md following the attached skill.
+
+      The document must cover: request classification, affected files, FR-*, API-*,
+      DM-*, AUTH-*, TEST-* sections, constraints, risks, and acceptance criteria.
+      Every requirement must reference a specific file, class, or endpoint.
+
+      Save as aidlc-docs/inception/requirements/requirements.md.
+    skill_refs:
+      - aidlc-requirements-document@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/requirements/requirements.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-requirements
+    on_failure: terminal-complete
+
+  # ── Gate: Approve requirements ────────────────────────────────────────────
+  - id: approve-requirements
+    title: Review and approve requirements
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/inception/requirements/requirements.md.
+      Verify that all functional, API, data model, and testing requirements are
+      complete, specific, and match your expectations.
+      Approve to proceed to workflow planning, or request rework with corrections.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-workflow-planning
+    on_rework:
+      next_node: ai-generate-requirements
+
+  # ── Step 4: Workflow planning ──────────────────────────────────────────────
+  - id: ai-workflow-planning
+    title: Create workflow execution plan
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: aidlc-docs/inception/requirements/requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Load all prior context (requirements.md, reverse-engineering artifacts if
+      present) and produce a workflow execution plan following the attached skill.
+
+      Assess impact (user-facing, structural, data model, API, NFR), determine
+      risk level, decide which Construction stages to EXECUTE vs SKIP, and create
+      a Mermaid workflow visualisation.
+
+      Save as aidlc-docs/inception/plans/execution-plan.md.
+    skill_refs:
+      - aidlc-workflow-planning@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/plans/execution-plan.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-workflow-plan
+    on_failure: terminal-complete
+
+  # ── Gate: Approve workflow plan ───────────────────────────────────────────
+  - id: approve-workflow-plan
+    title: Review and approve workflow execution plan
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/inception/plans/execution-plan.md.
+      Check that the selected stages and their rationale are correct.
+      Approve to proceed to functional design, or request rework if stages need
+      to be added or removed.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-functional-design
+    on_rework:
+      next_node: ai-workflow-planning
+
+  # ── Step 5: Functional design ─────────────────────────────────────────────
+  - id: ai-functional-design
+    title: Design business logic and domain model
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: aidlc-docs/inception/requirements/requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Produce a detailed, technology-agnostic functional design for the primary
+      unit of work, following the attached skill.
+
+      Create the following in aidlc-docs/construction/main-unit/functional-design/:
+        - domain-entities.md (entity attributes, types, relationships, invariants)
+        - business-rules.md (BR-* entries with pre/post conditions and error cases)
+        - data-flow.md (per-operation input → transform → output)
+
+      Use "main-unit" as the unit name folder unless the execution plan specifies
+      a different unit name.
+    skill_refs:
+      - aidlc-functional-design@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/construction/main-unit/functional-design/domain-entities.md
+        required: true
+        modifiable: false
+      - scope: run
+        path: aidlc-docs/construction/main-unit/functional-design/business-rules.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-functional-design
+    on_failure: terminal-complete
+
+  # ── Gate: Approve functional design ──────────────────────────────────────
+  - id: approve-functional-design
+    title: Review and approve functional design
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/construction/main-unit/functional-design/.
+      Verify that domain entities are accurate, business rules are complete,
+      and data flows correctly model the required behaviour.
+      Approve to proceed to NFR requirements, or request rework.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-nfr-requirements
+    on_rework:
+      next_node: ai-functional-design
+
+  # ── Step 6: NFR requirements ──────────────────────────────────────────────
+  - id: ai-nfr-requirements
+    title: Assess non-functional requirements and technology stack
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: aidlc-docs/inception/requirements/requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Assess non-functional requirements for the main-unit following the attached
+      skill: scalability, performance, availability, security, reliability,
+      and maintainability.
+
+      Make explicit technology stack decisions with rationale.
+
+      Save:
+        - aidlc-docs/construction/main-unit/nfr-requirements/nfr-requirements.md
+        - aidlc-docs/construction/main-unit/nfr-requirements/tech-stack-decisions.md
+    skill_refs:
+      - aidlc-nfr-requirements@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/construction/main-unit/nfr-requirements/nfr-requirements.md
+        required: true
+        modifiable: false
+      - scope: run
+        path: aidlc-docs/construction/main-unit/nfr-requirements/tech-stack-decisions.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-nfr
+    on_failure: terminal-complete
+
+  # ── Gate: Approve NFR requirements ────────────────────────────────────────
+  - id: approve-nfr
+    title: Review and approve NFR requirements
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/construction/main-unit/nfr-requirements/.
+      Confirm that scalability, performance, security targets and technology
+      choices are correct for your environment.
+      Approve to proceed to code generation planning, or request rework.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-code-generation-plan
+    on_rework:
+      next_node: ai-nfr-requirements
+
+  # ── Step 7: Code generation plan ──────────────────────────────────────────
+  - id: ai-code-generation-plan
+    title: Create code generation plan
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-generate-requirements
+        path: aidlc-docs/inception/requirements/requirements.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Load all design artifacts for main-unit and produce a numbered, checkbox-driven
+      code generation plan following the attached skill.
+
+      The plan must specify: exact file paths, Create vs Modify (brownfield), layer
+      execution order (migrations → entities → repositories → services → controllers
+      → tests → configuration), and story traceability.
+
+      Save as aidlc-docs/construction/plans/main-unit-code-generation-plan.md.
+    skill_refs:
+      - aidlc-code-generation-plan@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-code-plan
+    on_failure: terminal-complete
+
+  # ── Gate: Approve code generation plan ────────────────────────────────────
+  - id: approve-code-plan
+    title: Review and approve code generation plan
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/construction/plans/main-unit-code-generation-plan.md.
+      Verify that every file to be created or modified is listed, the layer order
+      is correct, and the plan covers all requirements.
+      Approve to start code generation, or request rework.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-code-generation-execute
+    on_rework:
+      next_node: ai-code-generation-plan
+
+  # ── Step 8: Execute code generation ───────────────────────────────────────
+  - id: ai-code-generation-execute
+    title: Generate code per approved plan
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-code-generation-plan
+        path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Execute the approved code generation plan step by step, following the
+      attached skill precisely:
+        - Find the first unchecked [ ] step and execute it.
+        - Brownfield: modify files in-place; never create _modified copies.
+        - Verify each step compiles/passes tests before marking [x].
+        - Update aidlc-docs/construction/plans/main-unit-code-generation-plan.md
+          with [x] marks immediately after each step.
+        - Continue until all steps are [x].
+        - Run the full build and all tests when complete.
+    skill_refs:
+      - aidlc-code-generation-execute@1.0
+    produced_artifacts: []
+    expected_mutations: []
+    on_success: approve-code
+    on_failure: terminal-complete
+
+  # ── Gate: Approve implemented code ────────────────────────────────────────
+  - id: approve-code
+    title: Review and approve implementation
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review the changes made to the workspace.
+      Verify that the implementation matches the requirements and plan, all tests
+      pass, and code quality meets standards.
+      Approve to proceed to build and test instructions, or request rework.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: ai-build-and-test
+    on_rework:
+      next_node: ai-code-generation-execute
+
+  # ── Step 9: Build and test instructions ───────────────────────────────────
+  - id: ai-build-and-test
+    title: Generate build and test instructions
+    type: ai
+    checkpoint_before_run: false
+    execution_context: []
+    instruction: |
+      Analyse all generated units and produce comprehensive build and test
+      instruction files following the attached skill:
+        - aidlc-docs/construction/build-and-test/build-instructions.md
+        - aidlc-docs/construction/build-and-test/unit-test-instructions.md
+        - aidlc-docs/construction/build-and-test/integration-test-instructions.md
+        - aidlc-docs/construction/build-and-test/build-and-test-summary.md
+
+      Include performance test instructions only if NFR targets were specified.
+    skill_refs:
+      - aidlc-build-and-test@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/construction/build-and-test/build-and-test-summary.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-build-and-test
+    on_failure: terminal-complete
+
+  # ── Gate: Approve build and test ──────────────────────────────────────────
+  - id: approve-build-and-test
+    title: Review and approve build and test instructions
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review aidlc-docs/construction/build-and-test/build-and-test-summary.md
+      and the accompanying instruction files.
+      Confirm that build steps are correct and test coverage is adequate.
+      Approve to complete the development flow.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: terminal-complete
+    on_rework:
+      next_node: ai-build-and-test
+
+  # ── Terminal ──────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Development flow complete
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

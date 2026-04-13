@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-workflow-planning
+version: "1.0"
+canonical_name: aidlc-workflow-planning@1.0
+display_name: "AIDLC: Workflow Planning"
+description: >
+  Analyse all prior context, assess impact and risk, determine which construction
+  stages to execute or skip, and produce execution-plan.md with Mermaid visualisation.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - workflow-planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-workflow-planning/1.0"

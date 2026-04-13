@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-requirements-clarification
+version: "1.0"
+canonical_name: aidlc-requirements-clarification@1.0
+display_name: "AIDLC: Requirements Clarification Questions"
+description: >
+  Analyze the user request, classify it, identify all ambiguities, and generate
+  a structured question file with [Answer]: tags before requirements are written.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - requirements
+  - clarification
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-requirements-clarification/1.0"

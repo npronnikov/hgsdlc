@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-user-stories-questions
+version: "1.0"
+canonical_name: aidlc-user-stories-questions@1.0
+display_name: "AIDLC: User Stories Planning Questions"
+description: >
+  Review approved requirements and generate story-planning questions covering
+  personas, granularity, format, and acceptance criteria approach.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - user-stories
+  - planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-user-stories-questions/1.0"

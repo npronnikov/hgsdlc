@@ -1,0 +1,24 @@
+entity_type: flow
+id: aidlc-reverse-engineering-flow
+version: "1.0"
+canonical_name: aidlc-reverse-engineering-flow@1.0
+display_name: "AIDLC: Reverse Engineering"
+description: >
+  Workspace detection + full reverse engineering of an existing codebase.
+  Produces business overview, architecture, code structure, API docs, component
+  inventory, tech stack, dependency map, and code quality assessment.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - reverse-engineering
+  - brownfield
+flow_kind: analysis
+risk_level: low
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/flows/aidlc-reverse-engineering-flow/1.0"

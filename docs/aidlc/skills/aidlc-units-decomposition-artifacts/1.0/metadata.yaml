@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-units-decomposition-artifacts
+version: "1.0"
+canonical_name: aidlc-units-decomposition-artifacts@1.0
+display_name: "AIDLC: Units Decomposition Artifacts"
+description: >
+  Generate unit-of-work.md, unit-of-work-dependency.md, and
+  unit-of-work-story-map.md from answered decomposition questions.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - units-decomposition
+skill_kind: implementation
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-units-decomposition-artifacts/1.0"

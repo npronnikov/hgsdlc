@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-application-design-questions
+version: "1.0"
+canonical_name: aidlc-application-design-questions@1.0
+display_name: "AIDLC: Application Design Questions"
+description: >
+  Generate design-clarification questions covering component boundaries, service
+  layer, method interfaces, and dependency patterns before design generation.
+coding_agent: claude
+team_code: AIDLC
+platform_code: ANY
+tags:
+  - aidlc
+  - inception
+  - application-design
+  - planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-application-design-questions/1.0"
