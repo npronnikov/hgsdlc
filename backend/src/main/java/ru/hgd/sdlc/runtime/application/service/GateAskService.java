@@ -102,7 +102,8 @@ public class GateAskService {
             throw new UnprocessableEntityException("Failed to write ask prompt: " + ex.getMessage());
         }
 
-        String command = buildCommand(promptPath, sessionId);
+        String codingAgent = resolveCodingAgent(run);
+        String command = buildCommand(codingAgent, promptPath, sessionId);
         ProcessExecutionPort.ProcessExecutionResult result;
         try {
             result = processExecutionPort.execute(new ProcessExecutionPort.ProcessExecutionRequest(
@@ -197,9 +198,27 @@ public class GateAskService {
         return header + "```\n" + selectedDiff + "\n```\n\n";
     }
 
-    private String buildCommand(Path promptPath, String sessionId) {
-        String cmd = "claude --dangerously-skip-permissions --output-format text -p "
-                + shellQuote(promptPath.toString());
+    private String resolveCodingAgent(RunEntity run) {
+        try {
+            FlowModel flowModel = objectMapper.readValue(run.getFlowSnapshotJson(), FlowModel.class);
+            String agent = flowModel.getCodingAgent();
+            if (agent != null && !agent.isBlank()) {
+                return agent.trim().toLowerCase(java.util.Locale.ROOT);
+            }
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to parse flow snapshot for coding agent resolution, run {}", run.getId());
+        }
+        return settingsService.getRuntimeCodingAgent();
+    }
+
+    private String buildCommand(String codingAgent, Path promptPath, String sessionId) {
+        String cmd;
+        if ("gigacode".equals(codingAgent)) {
+            cmd = "gigacode --output-format text -p " + shellQuote(promptPath.toString());
+        } else {
+            cmd = "claude --dangerously-skip-permissions --output-format text -p "
+                    + shellQuote(promptPath.toString());
+        }
         if (sessionId != null && !sessionId.isBlank()) {
             cmd += " --resume " + shellQuote(sessionId);
         }

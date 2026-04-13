@@ -10,6 +10,7 @@ import { useLocation, useParams } from 'react-router-dom';
 import { formatStatusLabel } from '../components/StatusTag.jsx';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const { Title, Text } = Typography;
 
@@ -36,6 +37,7 @@ const splitFrontmatter = (markdown = '') => {
 
 const codingAgentOptions = [
   { value: 'qwen', label: 'qwen' },
+  { value: 'gigacode', label: 'gigacode' },
   { value: 'claude', label: 'claude' },
 ];
 const platformOptions = [
@@ -378,7 +380,7 @@ export default function RuleEditor() {
       const response = await apiRequest(`/rules/${normalizedRuleId}/save`, {
         method: 'POST',
         headers: {
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': uuidv4(),
         },
         body: JSON.stringify({
           title: title.trim(),

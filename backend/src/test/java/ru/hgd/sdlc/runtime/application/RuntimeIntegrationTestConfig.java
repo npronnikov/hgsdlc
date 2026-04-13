@@ -13,7 +13,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.core.task.TaskExecutor;
 import ru.hgd.sdlc.common.ChecksumUtil;
 import ru.hgd.sdlc.flow.domain.PathRequirement;
+import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
+import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
+import ru.hgd.sdlc.settings.application.SettingsService;
+import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
+import ru.hgd.sdlc.skill.infrastructure.SkillVersionRepository;
 
 @TestConfiguration
 public class RuntimeIntegrationTestConfig {
@@ -23,12 +28,17 @@ public class RuntimeIntegrationTestConfig {
     }
 
     @Bean
-    public CodingAgentStrategy stubCodingAgentStrategy() {
-        return new StubCodingAgentStrategy();
+    public CodingAgentStrategy stubCodingAgentStrategy(RuleVersionRepository ruleVersionRepository, SkillVersionRepository skillVersionRepository, SkillFileRepository skillFileRepository, RuntimeStepTxService runtimeStepTxService, AgentPromptBuilder agentPromptBuilder, CatalogContentResolver catalogContentResolver, WorkspacePort workspacePort, SettingsService settingsService) {
+        return new StubCodingAgentStrategy(ruleVersionRepository, skillVersionRepository, skillFileRepository, runtimeStepTxService, agentPromptBuilder, catalogContentResolver, workspacePort, settingsService);
+
     }
 
-    private static final class StubCodingAgentStrategy implements CodingAgentStrategy {
+    private static final class StubCodingAgentStrategy extends CodingAgentStrategy {
         private static final String FAIL_MARKER = "[[FAIL]]";
+
+        public StubCodingAgentStrategy(RuleVersionRepository ruleVersionRepository, SkillVersionRepository skillVersionRepository, SkillFileRepository skillFileRepository, RuntimeStepTxService runtimeStepTxService, AgentPromptBuilder agentPromptBuilder, CatalogContentResolver catalogContentResolver, WorkspacePort workspacePort, SettingsService settingsService) {
+            super(ruleVersionRepository, skillVersionRepository, skillFileRepository, runtimeStepTxService, agentPromptBuilder, catalogContentResolver, workspacePort, settingsService);
+        }
 
         @Override
         public String codingAgent() {

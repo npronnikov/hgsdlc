@@ -24,6 +24,7 @@ import {
   normalizeNodeKind,
 } from '../utils/humanInputArtifacts.js';
 import { NODE_KIND_META } from '../components/flow/FlowNode.jsx';
+import { v4 as uuidv4 } from 'uuid';
 
 const LOCKED_PUBLICATION_STATUSES = new Set(['pending_approval', 'approved', 'publishing', 'published']);
 
@@ -793,7 +794,7 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       const response = await apiRequest(`/flows/${normalizedFlowId}/save`, {
         method: 'POST',
         headers: {
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': uuidv4(),
         },
         body: JSON.stringify({
           flow_id: normalizedFlowId,

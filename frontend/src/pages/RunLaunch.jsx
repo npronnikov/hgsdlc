@@ -14,6 +14,7 @@ import {
 import 'reactflow/dist/style.css';
 import { parse as parseYaml } from 'yaml';
 import dagre from 'dagre';
+import { v4 as uuidv4 } from 'uuid';
 
 const { Title } = Typography;
 
@@ -60,13 +61,6 @@ function FlowNode({ data, selected }) {
 }
 
 const RUN_LAUNCH_NODE_TYPES = { flowNode: FlowNode };
-
-function generateIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function normalizeNodeKind(node) {
   const raw = node?.node_kind || node?.nodeKind || node?.type || node?.kind || '';
@@ -342,7 +336,7 @@ export default function RunLaunch() {
           publish_mode: values.publish_mode,
           work_branch: values.work_branch?.trim() || undefined,
           pr_commit_strategy: values.publish_mode === 'pr' ? (values.pr_commit_strategy || 'squash') : undefined,
-          idempotency_key: generateIdempotencyKey(),
+          idempotency_key: uuidv4(),
         }),
       });
       localStorage.setItem('lastRunId', response.run_id);

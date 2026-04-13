@@ -327,7 +327,7 @@ public class RunLifecycleService {
 
     private void materializeAgentSettingsJson(RunEntity run, Path projectRoot) {
         String codingAgent = resolveRunCodingAgent(run);
-        if (!"qwen".equals(codingAgent) && !"claude".equals(codingAgent)) {
+        if (!"qwen".equals(codingAgent) && !"claude".equals(codingAgent) && !"gigacode".equals(codingAgent)) {
             return;
         }
         if (!settingsService.isRuntimeAgentSettingsJsonEnabled(codingAgent)) {
@@ -770,6 +770,7 @@ public class RunLifecycleService {
                     ".hgsdlc/nodes/**/prompt.md",
                     ".hgsdlc/nodes/**/step-summary.json",
                     ".qwen/",
+                    ".gigacode/",
                     ".claude/",
                     ".cursor/"
             ));

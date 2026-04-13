@@ -66,6 +66,7 @@ export function FlowMetaPanel({ editor }) {
               onChange={(value) => updateFlowMeta({ codingAgent: value })}
               options={[
                 { value: 'qwen', label: 'qwen' },
+                { value: 'gigacode', label: 'gigacode' },
                 { value: 'claude', label: 'claude' },
               ]}
               placeholder="Select coding agent"

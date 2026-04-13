@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { parse as parseYaml } from 'yaml';
 import { apiRequest } from '../api/request.js';
 import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/HumanFormViewer.jsx';
+import { v4 as uuidv4 } from 'uuid';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -52,13 +53,6 @@ function formatDateTime(value) {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(date);
-}
-
-function generateIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `pp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function buildFlowNodeMeta(flowYaml) {
@@ -558,7 +552,7 @@ export default function ProductPipelineMvp() {
             feature_request: task.trim(),
             ai_session_mode: 'isolated_attempt_sessions',
             publish_mode: 'branch',
-            idempotency_key: generateIdempotencyKey(),
+            idempotency_key: uuidv4(),
           }),
         }),
       ]);

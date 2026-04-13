@@ -3,6 +3,7 @@ import { Button, Form, Input, Modal, Select, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/request.js';
+import { v4 as uuidv4 } from 'uuid';
 
 export function TestRunModal({ open, onClose, canonicalName }) {
   const [form] = Form.useForm();
@@ -41,7 +42,7 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           feature_request: values.feature_request,
           ai_session_mode: 'isolated_attempt_sessions',
           publish_mode: 'local',
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: uuidv4(),
         }),
       });
       message.success(`Test run started: ${response.run_id}`);

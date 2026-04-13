@@ -26,6 +26,10 @@ class SettingsServiceTest {
                 "claude -p \"/init\" --permission-mode acceptEdits",
                 service.getRuntimeAgentInitCommand("claude")
         );
+        Assertions.assertEquals(
+                "gigacode -p \"/init\" --approval-mode auto-edit",
+                service.getRuntimeAgentInitCommand("gigacode")
+        );
     }
 
     @Test

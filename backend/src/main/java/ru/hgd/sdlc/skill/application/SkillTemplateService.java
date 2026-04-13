@@ -45,6 +45,10 @@ public class SkillTemplateService {
                 new FrontmatterField("name", "Skill name"),
                 new FrontmatterField("description", "What the skill does and when to use it")
         ));
+        summary.put(SkillProvider.GIGACODE, List.of(
+                new FrontmatterField("name", "Skill name"),
+                new FrontmatterField("description", "What the skill does and when to use it")
+        ));
         summary.put(SkillProvider.CLAUDE, List.of(
                 new FrontmatterField("name", "Skill name"),
                 new FrontmatterField("description", "What the skill does and when to use it"),
@@ -63,6 +67,7 @@ public class SkillTemplateService {
     private Map<SkillProvider, List<String>> buildRequiredFrontmatter() {
         Map<SkillProvider, List<String>> required = new EnumMap<>(SkillProvider.class);
         required.put(SkillProvider.QWEN, List.of("name", "description"));
+        required.put(SkillProvider.GIGACODE, List.of("name", "description"));
         required.put(SkillProvider.CLAUDE, List.of());
         return required;
     }

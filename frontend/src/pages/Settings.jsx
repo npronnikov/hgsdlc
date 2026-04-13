@@ -28,6 +28,9 @@ function defaultAgentLaunchCommand(agent) {
   if (normalized === 'claude') {
     return 'claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}';
   }
+  if (normalized === 'gigacode') {
+    return 'gigacode -p {{PROMPT}} --approval-mode auto-edit --output-format stream-json --include-partial-messages';
+  }
   return 'qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}';
 }
 
@@ -36,6 +39,9 @@ function defaultAgentInitCommand(agent) {
   if (normalized === 'claude') {
     return 'claude -p "/init" --permission-mode acceptEdits';
   }
+  if (normalized === 'gigacode') {
+    return 'gigacode -p "/init" --approval-mode auto-edit';
+  }
   return 'qwen -p "/init" --approval-mode yolo';
 }
 
@@ -43,6 +49,9 @@ function defaultAgentSettingsJsonTemplate(agent) {
   const normalized = String(agent || '').trim().toLowerCase();
   if (normalized === 'claude') {
     return '{\n  "agent": "claude",\n  "dangerously_skip_permissions": true,\n  "output_format": "stream-json"\n}\n';
+  }
+  if (normalized === 'gigacode') {
+    return '{\n  "agent": "gigacode",\n  "approval_mode": "auto-edit",\n  "output_format": "stream-json",\n  "include_partial_messages": true\n}\n';
   }
   return '{\n  "agent": "qwen",\n  "approval_mode": "yolo",\n  "channel": "CI",\n  "output_format": "stream-json",\n  "include_partial_messages": true\n}\n';
 }
@@ -304,6 +313,7 @@ export default function Settings() {
               <Select
                 options={[
                   { value: 'qwen', label: 'qwen' },
+                  { value: 'gigacode', label: 'gigacode' },
                   { value: 'claude', label: 'claude' },
                 ]}
               />
