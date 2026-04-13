@@ -29,6 +29,7 @@ import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
+import ru.hgd.sdlc.project.domain.ProjectStatus;
 import ru.hgd.sdlc.project.infrastructure.ProjectRepository;
 import ru.hgd.sdlc.runtime.application.CatalogContentResolver;
 import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
@@ -110,6 +111,9 @@ public class RunLifecycleService {
         validateCreateRunCommand(command);
         Project project = projectRepository.findById(command.projectId())
                 .orElseThrow(() -> new NotFoundException("Project not found: " + command.projectId()));
+        if (project.getStatus() != ProjectStatus.ACTIVE) {
+            throw new ValidationException("Project is archived and cannot be launched: " + command.projectId());
+        }
         FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
                 .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
         if (flowVersion.getStatus() != FlowStatus.PUBLISHED) {

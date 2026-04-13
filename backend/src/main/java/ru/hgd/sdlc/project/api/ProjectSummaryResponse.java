@@ -12,7 +12,8 @@ public record ProjectSummaryResponse(
         @JsonProperty("default_branch") String defaultBranch,
         @JsonProperty("status") String status,
         @JsonProperty("last_run_id") UUID lastRunId,
-        @JsonProperty("updated_at") Instant updatedAt
+        @JsonProperty("updated_at") Instant updatedAt,
+        @JsonProperty("resource_version") long resourceVersion
 ) {
     public static ProjectSummaryResponse from(Project project) {
         return new ProjectSummaryResponse(
@@ -22,7 +23,8 @@ public record ProjectSummaryResponse(
                 project.getDefaultBranch(),
                 project.getStatus().name().toLowerCase(),
                 project.getLastRunId(),
-                project.getUpdatedAt()
+                project.getUpdatedAt(),
+                project.getResourceVersion()
         );
     }
 }
