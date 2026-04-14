@@ -12,6 +12,7 @@ import {
   Progress,
   Row,
   Segmented,
+  Select,
   Space,
   Switch,
   Tag,
@@ -20,7 +21,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, FullscreenExitOutlined, FullscreenOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { CommentOutlined, DeleteOutlined, EditOutlined, FullscreenExitOutlined, FullscreenOutlined, LeftOutlined, RightOutlined, SendOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import StatusTag from '../components/StatusTag.jsx';
@@ -237,6 +238,11 @@ export default function HumanGate() {
   const [editedByPath, setEditedByPath] = useState({});
 
   const [activeActionPanel, setActiveActionPanel] = useState(null); // approve | rework | null
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef(null);
   const [reworkRequests, setReworkRequests] = useState([]);
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [requestDraft, setRequestDraft] = useState(EMPTY_REQUEST_DRAFT);
@@ -244,6 +250,7 @@ export default function HumanGate() {
   const [markdownViewTab, setMarkdownViewTab] = useState('source');
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [keepChanges, setKeepChanges] = useState(true);
+  const [reworkSessionPolicy, setReworkSessionPolicy] = useState('new_session');
   const screens = Grid.useBreakpoint();
 
   const diffEditorRef = useRef(null);
@@ -254,6 +261,9 @@ export default function HumanGate() {
   const isInput = gate?.gate_kind === 'human_input';
   const isApproval = gate?.gate_kind === 'human_approval';
   const keepChangesSelectable = gate?.payload?.rework_keep_changes_selectable === true;
+  const runAiSessionMode = run?.ai_session_mode || null;
+  const isIsolatedAttemptSessionMode = runAiSessionMode === 'isolated_attempt_sessions';
+  const isSharedRunSessionMode = runAiSessionMode === 'shared_run_session';
   const reworkMode = keepChanges ? 'keep' : 'discard';
   const reworkDiscardAvailable = gate?.payload?.rework_discard_available === true;
   const reworkDiscardUnavailableReason = gate?.payload?.rework_discard_unavailable_reason || '';
@@ -263,6 +273,10 @@ export default function HumanGate() {
   const effectiveDiscardAvailable = reworkDiscardAvailable && !discardBlockedByRequests;
   const reworkDiscardBlockedReason = resolveReworkDiscardBlockedReason(reworkDiscardUnavailableReason, discardBlockedByRequests);
   const reworkDiscardBlocked = isDiscardPolicy && !effectiveDiscardAvailable;
+  const showSessionPolicySelector = keepChanges && isIsolatedAttemptSessionMode;
+  const effectiveSessionPolicy = !keepChanges
+    ? 'new_session'
+    : (isIsolatedAttemptSessionMode ? reworkSessionPolicy : 'resume_previous_session');
   const hasManualReworkInstruction = !!(reworkInstruction || '').trim();
   const canSubmitRework = hasAnyReworkRequests || hasManualReworkInstruction;
   const userInstructions = gate?.payload?.user_instructions || '';
@@ -335,6 +349,10 @@ export default function HumanGate() {
   const selectedIsEditable = !!selectedEditable;
   const selectedLanguage = useMemo(() => detectLanguage(selectedPath), [selectedPath]);
   const useRenderedMarkdownPreview = isApproval && selectedLanguage === 'markdown';
+  const showFloatingDiffModeControl = isApproval
+    && !selectedIsEditable
+    && !selectedIsBinary
+    && (!useRenderedMarkdownPreview || markdownViewTab === 'diff');
   const diffLayoutMode = screens?.lg ? 'desktop' : 'mobile';
   const diffEditorKey = `${gateId || 'gate'}:${selectedGitChange?.path || selectedPath || 'empty'}:${selectedLanguage}:${diffLayoutMode}`;
   const currentEditableContent = selectedEditable
@@ -457,6 +475,10 @@ export default function HumanGate() {
   }, [gate?.gate_id, gate?.resource_version, gate?.payload?.rework_keep_changes]);
 
   useEffect(() => {
+    setReworkSessionPolicy('new_session');
+  }, [gate?.gate_id, gate?.resource_version]);
+
+  useEffect(() => {
     if (discardBlockedByRequests && !keepChanges) {
       setKeepChanges(true);
       message.info('Discard to checkpoint was disabled because Rework requests are present.');
@@ -547,6 +569,44 @@ export default function HumanGate() {
   }, []);
 
   const goBack = () => navigate(`/run-console?runId=${runId}`);
+
+  const openChat = async () => {
+    setChatOpen(true);
+    if (chatHistory.length === 0 && gateId) {
+      try {
+        const data = await apiRequest(`/gates/${gateId}/chat`);
+        setChatHistory(data || []);
+      } catch {
+        // ignore, start with empty history
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatHistory]);
+
+  const sendChatMessage = async () => {
+    const question = chatInput.trim();
+    if (!question || !gateId) return;
+    setChatInput('');
+    setChatLoading(true);
+    setChatHistory((prev) => [...prev, { id: `tmp-${Date.now()}`, role: 'user', content: question }]);
+    try {
+      const data = await apiRequest(`/gates/${gateId}/ask`, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      });
+      setChatHistory((prev) => [...prev, { id: `tmp-agent-${Date.now()}`, role: 'agent', content: data.answer }]);
+    } catch (err) {
+      message.error(err.message || 'Failed to get answer');
+      setChatHistory((prev) => prev.filter((m) => m.id !== `tmp-${Date.now()}`));
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   const openAddRequestModalFromSelection = () => {
     if (!selectedPath) {
@@ -654,6 +714,7 @@ export default function HumanGate() {
           comment: reworkComment,
           instruction: mergedInstruction,
           keep_changes: keepChanges,
+          session_policy: effectiveSessionPolicy,
           reviewed_artifact_version_ids: [],
         }),
       });
@@ -770,6 +831,7 @@ export default function HumanGate() {
             )}
           </Space>
           <Space>
+            <Button icon={<CommentOutlined />} onClick={openChat}>Ask agent</Button>
             {isApproval && (
               <>
                 <Button onClick={() => setActiveActionPanel('approve')}>Approve</Button>
@@ -867,18 +929,6 @@ export default function HumanGate() {
                       ]}
                     />
                   )}
-                  {isApproval && !selectedIsEditable && (
-                    <Segmented
-                      size="small"
-                      value={diffMode}
-                      onChange={setDiffMode}
-                      options={[
-                        { label: 'Split', value: 'side-by-side' },
-                        { label: 'Unified', value: 'unified' },
-                        { label: 'Patch', value: 'patch' },
-                      ]}
-                    />
-                  )}
                   <Checkbox
                     checked={viewedFiles.has(selectedPath)}
                     onChange={() => toggleViewed(selectedPath)}
@@ -891,6 +941,20 @@ export default function HumanGate() {
             loading={loadingDiff}
           >
             <div className="human-gate-view-body">
+              {showFloatingDiffModeControl && (
+                <div className="human-gate-diff-mode-floating">
+                  <Segmented
+                    size="small"
+                    value={diffMode}
+                    onChange={setDiffMode}
+                    options={[
+                      { label: 'Split', value: 'side-by-side' },
+                      { label: 'Unified', value: 'unified' },
+                      { label: 'Patch', value: 'patch' },
+                    ]}
+                  />
+                </div>
+              )}
               {selectedIsBinary ? (
                 <div className="hg-binary-placeholder">
                   <Text type="secondary">Binary file changed. Cannot display diff.</Text>
@@ -998,8 +1062,8 @@ export default function HumanGate() {
                         className="human-gate-markdown-fullscreen-toggle"
                         role="button"
                         tabIndex={0}
-                        title={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
-                        aria-label={isPreviewFullscreen ? 'Выйти из полноэкранного' : 'На весь экран'}
+                        title={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                        aria-label={isPreviewFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         onClick={togglePreviewFullscreen}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
@@ -1229,6 +1293,28 @@ export default function HumanGate() {
                   )}
                 </div>
 
+                <Text className="muted">Session policy</Text>
+                {showSessionPolicySelector ? (
+                  <Select
+                    value={reworkSessionPolicy}
+                    onChange={setReworkSessionPolicy}
+                    disabled={submitting !== null}
+                    options={[
+                      { value: 'resume_previous_session', label: 'Resume Previous Session' },
+                      { value: 'new_session', label: 'Start New Session' },
+                    ]}
+                  />
+                ) : (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <Tag style={{ width: 'fit-content' }}>
+                      {effectiveSessionPolicy === 'new_session' ? 'Start New Session' : 'Resume Previous Session'}
+                    </Tag>
+                    {keepChanges && isSharedRunSessionMode && (
+                      <Text type="secondary">Session mode is fixed at run level.</Text>
+                    )}
+                  </div>
+                )}
+
                 <Text className="muted">Comment</Text>
                 <Input.TextArea
                   rows={2}
@@ -1268,6 +1354,79 @@ export default function HumanGate() {
               </Button>
             )}
           </div>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="Ask agent"
+        placement="right"
+        width={480}
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        styles={{ body: { display: 'flex', flexDirection: 'column', padding: 0, height: '100%' } }}
+      >
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 0' }}>
+          {chatHistory.length === 0 && !chatLoading && (
+            <Text type="secondary">Ask any question about the changes made by the agent.</Text>
+          )}
+          {chatHistory.map((msg) => (
+            <div
+              key={msg.id}
+              style={{
+                marginBottom: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: '85%',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: msg.role === 'user' ? 'var(--primary, #1677ff)' : 'var(--surface-secondary, #f5f5f5)',
+                  color: msg.role === 'user' ? '#fff' : 'inherit',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  fontSize: 13,
+                }}
+              >
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {chatLoading && (
+            <div style={{ marginBottom: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>Agent is thinking…</Text>
+            </div>
+          )}
+          <div ref={chatBottomRef} />
+        </div>
+        <div style={{ padding: 12, borderTop: '1px solid var(--border)' }}>
+          <Input.TextArea
+            rows={3}
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Ask about the changes…"
+            disabled={chatLoading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendChatMessage();
+              }
+            }}
+            style={{ marginBottom: 8 }}
+          />
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={sendChatMessage}
+            loading={chatLoading}
+            disabled={!chatInput.trim()}
+            block
+          >
+            Send
+          </Button>
         </div>
       </Drawer>
     </div>

@@ -36,6 +36,13 @@ function FlowNode({ data, selected }) {
 
 const RUN_LAUNCH_NODE_TYPES = { flowNode: FlowNode };
 
+function generateIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function RunLaunch() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -52,6 +59,7 @@ export default function RunLaunch() {
   const targetBranchValue = Form.useWatch('target_branch', form);
   const featureRequestValue = Form.useWatch('feature_request', form);
   const publishModeValue = Form.useWatch('publish_mode', form);
+  const aiSessionModeValue = Form.useWatch('ai_session_mode', form);
 
   useEffect(() => {
     const loadData = async () => {
@@ -61,7 +69,9 @@ export default function RunLaunch() {
           apiRequest('/flows'),
         ]);
         setProjects(projectData || []);
-        const publishedFlows = (flowData || []).filter((flow) => flow.status === 'published');
+        const publishedFlows = (flowData || []).filter(
+          (flow) => flow.status === 'published' && (!flow.lifecycle_status || flow.lifecycle_status === 'active')
+        );
         setFlows(publishedFlows);
 
         const paramProjectId = searchParams.get('projectId');
@@ -75,6 +85,7 @@ export default function RunLaunch() {
         form.setFieldsValue({
           project_id: initialProjectId || undefined,
           target_branch: initialProject?.default_branch || 'main',
+          ai_session_mode: 'isolated_attempt_sessions',
           publish_mode: 'branch',
           pr_commit_strategy: 'squash',
         });
@@ -171,11 +182,12 @@ export default function RunLaunch() {
           target_branch: values.target_branch,
           flow_canonical_name: selectedFlowCanonical,
           feature_request: values.feature_request,
+          ai_session_mode: values.ai_session_mode,
           publish_mode: values.publish_mode,
           work_branch: values.work_branch?.trim() || undefined,
           pr_commit_strategy: values.publish_mode === 'pr' ? (values.pr_commit_strategy || 'squash') : undefined,
           debug_mode: values.debug_mode || false,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: generateIdempotencyKey(),
         }),
       });
       localStorage.setItem('lastRunId', response.run_id);
@@ -200,6 +212,7 @@ export default function RunLaunch() {
     && selectedFlowId
     && targetBranchValue?.trim()
     && featureRequestValue?.trim()
+    && aiSessionModeValue
     && publishModeValue
   );
 
@@ -275,6 +288,9 @@ export default function RunLaunch() {
                   rows={6}
                   placeholder="Describe the requested change"
                 />
+              </Form.Item>
+              <Form.Item name="ai_session_mode" hidden initialValue="isolated_attempt_sessions">
+                <Input />
               </Form.Item>
               <Row gutter={12}>
                 <Col xs={24} md={12}>

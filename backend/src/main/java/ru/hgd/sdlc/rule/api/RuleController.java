@@ -130,6 +130,15 @@ public class RuleController {
         );
     }
 
+    @PostMapping("/{ruleId}/deprecate")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
+    public RuleResponse deprecate(
+            @PathVariable String ruleId,
+            @AuthenticationPrincipal User user
+    ) {
+        return RuleResponse.from(ruleService.requestDeprecation(ruleId, user));
+    }
+
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<String> handleValidation(ValidationException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());

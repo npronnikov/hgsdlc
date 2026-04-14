@@ -16,6 +16,7 @@ import ru.hgd.sdlc.rule.infrastructure.RuleVersionRepository;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.settings.application.SettingsService;
 import ru.hgd.sdlc.skill.domain.SkillFileEntity;
 import ru.hgd.sdlc.skill.domain.SkillVersion;
 import ru.hgd.sdlc.skill.infrastructure.SkillFileRepository;
@@ -30,6 +31,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
     private final AgentPromptBuilder agentPromptBuilder;
     private final CatalogContentResolver catalogContentResolver;
     private final WorkspacePort workspacePort;
+    private final SettingsService settingsService;
 
     QwenCodingAgentStrategy(
             RuleVersionRepository ruleVersionRepository,
@@ -38,7 +40,8 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
             RuntimeStepTxService runtimeStepTxService,
             AgentPromptBuilder agentPromptBuilder,
             CatalogContentResolver catalogContentResolver,
-            WorkspacePort workspacePort
+            WorkspacePort workspacePort,
+            SettingsService settingsService
     ) {
         this.ruleVersionRepository = ruleVersionRepository;
         this.skillVersionRepository = skillVersionRepository;
@@ -47,6 +50,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         this.agentPromptBuilder = agentPromptBuilder;
         this.catalogContentResolver = catalogContentResolver;
         this.workspacePort = workspacePort;
+        this.settingsService = settingsService;
     }
 
     @Override
@@ -63,7 +67,7 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         Path nodeExecutionRoot = request.nodeExecutionRoot();
 
         Path qwenRoot = projectRoot.resolve(".qwen");
-        Path rulesPath = qwenRoot.resolve("QWEN.md");
+        Path rulesPath = projectRoot.resolve("QWEN.md");
         Path skillsRoot = qwenRoot.resolve("skills");
         Path promptPath = nodeExecutionRoot.resolve("prompt.md");
         Path stdoutPath = nodeExecutionRoot.resolve("agent.stdout.log");
@@ -71,12 +75,16 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
 
         createDirectories(qwenRoot);
         createDirectories(skillsRoot);
+        ensureGitIgnoreContains(projectRoot, "QWEN.md");
         deleteDirectoryContents(skillsRoot);
 
         List<RuleVersion> rules = resolveFlowRules(flowModel);
         List<SkillVersion> skills = resolveNodeSkills(flowModel, node);
+        boolean autoInitWithoutRules = shouldAutoInitWhenNoRule(flowModel, rules);
 
-        writeFile(rulesPath, renderQwenRules(flowModel, rules).getBytes(StandardCharsets.UTF_8));
+        if (!autoInitWithoutRules) {
+            writeFile(rulesPath, renderQwenRules(flowModel, rules).getBytes(StandardCharsets.UTF_8));
+        }
         runtimeStepTxService.appendAudit(
                 run.getId(),
                 request.execution().getId(),
@@ -86,7 +94,8 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
                 "runtime",
                 mapOf(
                         "path", rulesPath.toString(),
-                        "rule_refs", flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs()
+                        "rule_refs", flowModel.getRuleRefs() == null ? List.of() : flowModel.getRuleRefs(),
+                        "materialization_mode", autoInitWithoutRules ? "agent_init" : "flow_rules"
                 )
         );
 
@@ -134,17 +143,19 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         );
         writeFile(promptPath, promptPackage.prompt().getBytes(StandardCharsets.UTF_8));
 
-        List<String> command = List.of(
-                "qwen",
-                "--approval-mode",
-                "yolo",
-                "--channel",
-                "CI",
-                "--output-format",
-                "stream-json",
-                "--include-partial-messages",
-                promptPackage.prompt()
+        String launchCommand = resolveLaunchCommand(
+                promptPackage.prompt(),
+                promptPath,
+                projectRoot,
+                request.sessionCommandMode(),
+                request.sessionId()
         );
+        String commandScript = launchCommand;
+        if (autoInitWithoutRules) {
+            String initCommand = resolveInitCommand(promptPackage.prompt(), promptPath, projectRoot);
+            commandScript = initCommand + " && " + launchCommand;
+        }
+        List<String> command = List.of("bash", "-lc", commandScript);
 
         return new AgentInvocationContext(
                 projectRoot,
@@ -222,6 +233,20 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         return sb.toString();
     }
 
+    private boolean shouldAutoInitWhenNoRule(FlowModel flowModel, List<RuleVersion> resolvedRules) {
+        if (!settingsService.isRuntimeAgentAutoInitWhenNoRule(codingAgent())) {
+            return false;
+        }
+        if (resolvedRules != null && !resolvedRules.isEmpty()) {
+            return false;
+        }
+        List<String> refs = flowModel.getRuleRefs();
+        if (refs == null || refs.isEmpty()) {
+            return true;
+        }
+        return refs.stream().noneMatch((ref) -> ref != null && !ref.isBlank());
+    }
+
     private String normalize(String value) {
         if (value == null) {
             return "";
@@ -262,6 +287,43 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         }
     }
 
+    private void ensureGitIgnoreContains(Path projectRoot, String entry) throws CodingAgentException {
+        if (projectRoot == null || entry == null || entry.isBlank()) {
+            return;
+        }
+        Path gitIgnorePath = projectRoot.resolve(".gitignore");
+        try {
+            String content = workspacePort.exists(gitIgnorePath)
+                    ? workspacePort.readString(gitIgnorePath, StandardCharsets.UTF_8)
+                    : "";
+            if (hasGitIgnoreEntry(content, entry)) {
+                return;
+            }
+            StringBuilder updated = new StringBuilder(content == null ? "" : content);
+            if (!updated.isEmpty() && updated.charAt(updated.length() - 1) != '\n') {
+                updated.append('\n');
+            }
+            updated.append(entry).append('\n');
+            workspacePort.writeString(gitIgnorePath, updated.toString(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to update .gitignore: " + gitIgnorePath);
+        }
+    }
+
+    private boolean hasGitIgnoreEntry(String content, String entry) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        String[] lines = content.split("\\R");
+        for (String line : lines) {
+            String normalized = line == null ? "" : line.trim();
+            if (normalized.equals(entry) || normalized.equals("/" + entry)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void setExecutable(Path path) throws CodingAgentException {
         if (path == null) {
             return;
@@ -284,5 +346,46 @@ class QwenCodingAgentStrategy implements CodingAgentStrategy {
         } catch (IOException ex) {
             throw new CodingAgentException("AGENT_WORKSPACE_FAILED", "Failed to clean directory: " + directory);
         }
+    }
+
+    private String resolveLaunchCommand(
+            String prompt,
+            Path promptPath,
+            Path projectRoot,
+            AgentSessionCommandMode sessionCommandMode,
+            String sessionId
+    ) {
+        String template = settingsService.getRuntimeAgentLaunchCommand(codingAgent());
+        String baseCommand = applyCommandTemplate(template, prompt, promptPath, projectRoot);
+        return appendSessionCommand(baseCommand, sessionCommandMode, sessionId);
+    }
+
+    private String resolveInitCommand(String prompt, Path promptPath, Path projectRoot) {
+        String template = settingsService.getRuntimeAgentInitCommand(codingAgent());
+        return applyCommandTemplate(template, prompt, promptPath, projectRoot);
+    }
+
+    private String applyCommandTemplate(String template, String prompt, Path promptPath, Path projectRoot) {
+        return template
+                .replace("{{PROMPT_FILE}}", shellQuote(promptPath == null ? "" : promptPath.toString()))
+                .replace("{{PROMPT}}", shellQuote(prompt))
+                .replace("{{PROJECT_ROOT}}", shellQuote(projectRoot == null ? "" : projectRoot.toString()));
+    }
+
+    private String appendSessionCommand(String baseCommand, AgentSessionCommandMode mode, String sessionId) {
+        if (mode == null || sessionId == null || sessionId.isBlank()) {
+            return baseCommand;
+        }
+        if (mode == AgentSessionCommandMode.RESUME_PREVIOUS_SESSION) {
+            return baseCommand + " --resume " + shellQuote(sessionId);
+        }
+        return baseCommand + " --session-id " + shellQuote(sessionId);
+    }
+
+    private String shellQuote(String value) {
+        if (value == null) {
+            return "''";
+        }
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 }

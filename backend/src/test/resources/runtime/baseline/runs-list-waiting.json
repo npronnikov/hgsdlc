@@ -1,4 +1,5 @@
 [ {
+  "ai_session_mode" : "isolated_attempt_sessions",
   "created_at" : "<instant>",
   "created_by" : "test",
   "current_gate" : {
@@ -41,11 +42,13 @@
     "status" : "awaiting_decision"
   },
   "current_node_id" : "review-change",
+  "debug_mode" : false,
   "error_code" : null,
   "error_message" : null,
   "feature_request" : "Snapshot baseline request",
   "finished_at" : null,
   "flow_canonical_name" : "baseline-flow@1.0",
+  "flow_snapshot" : null,
   "pr_commit_strategy" : null,
   "pr_number" : null,
   "pr_status" : "skipped",
@@ -58,6 +61,7 @@
   "push_status" : "skipped",
   "resource_version" : 3,
   "run_id" : "<uuid>",
+  "run_session_id" : null,
   "started_at" : "<instant>",
   "status" : "waiting_gate",
   "target_branch" : "main",

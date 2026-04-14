@@ -15,6 +15,7 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+    drop-first: ${DB_RESET:false}
   h2:
     console:
       enabled: true
@@ -39,6 +40,11 @@ auth:
       display-name: Tech Approver
       password: admin
       roles: [TECH_APPROVER]
+
+logging:
+  level:
+    ru.hgd.sdlc.benchmark: DEBUG
+    ru.hgd.sdlc.runtime.application.ClaudeCodingAgentStrategy: DEBUG
 
 catalog:
   seed:

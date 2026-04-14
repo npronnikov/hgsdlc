@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Card, Dropdown, Form, Input, Modal, Typography, message } from 'antd';
-import { EditOutlined, InboxOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Card, Dropdown, Form, Input, Modal, Space, Switch, Typography, message } from 'antd';
+import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import StatusTag from '../components/StatusTag.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { apiRequest } from '../api/request.js';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const canCreateProject = (role) => role === 'ADMIN' || role === 'FLOW_CONFIGURATOR' || role === 'PRODUCT_OWNER';
 
 export default function Projects() {
@@ -16,6 +16,7 @@ export default function Projects() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [viewingProject, setViewingProject] = useState(null);
+  const [showInactive, setShowInactive] = useState(false);
   const [form] = Form.useForm();
 
   const loadProjects = async () => {
@@ -102,24 +103,29 @@ export default function Projects() {
     }
   };
 
-  const archiveProject = async (project) => {
+  const deleteProject = async (project) => {
     try {
-      const response = await apiRequest(`/projects/${project.id}/archive`, {
-        method: 'POST',
+      await apiRequest(`/projects/${project.id}`, {
+        method: 'DELETE',
       });
-      setProjects((prev) => prev.map((item) => (item.id === response.id ? response : item)));
-      message.success('Project archived');
+      setProjects((prev) => prev.map((item) => (
+        item.id === project.id
+          ? { ...item, status: 'archived' }
+          : item
+      )));
+      message.success('Project marked inactive');
     } catch (err) {
-      message.error(err.message || 'Failed to archive project');
+      message.error(err.message || 'Failed to mark project inactive');
     }
   };
 
   const projectMenuItems = (project) => ([
     { key: 'edit', label: 'Edit', icon: <EditOutlined /> },
     {
-      key: 'archive',
-      label: 'Archive',
-      icon: <InboxOutlined />,
+      key: 'delete',
+      label: 'Delete',
+      icon: <DeleteOutlined />,
+      danger: true,
       disabled: project.status === 'archived',
     },
   ]);
@@ -129,31 +135,49 @@ export default function Projects() {
       openEdit(project);
       return;
     }
-    if (key === 'archive') {
+    if (key === 'delete') {
       Modal.confirm({
-        title: 'Archive project?',
-        okText: 'Archive',
+        title: `Mark project "${project.name}" inactive?`,
+        content: 'Project will be hidden from active list but preserved in history.',
+        okText: 'Mark inactive',
+        okButtonProps: { danger: true },
         cancelText: 'Cancel',
-        onOk: () => archiveProject(project),
+        onOk: () => deleteProject(project),
       });
     }
   };
+
+  const visibleProjects = useMemo(
+    () => (showInactive ? projects : projects.filter((project) => project.status === 'active')),
+    [projects, showInactive]
+  );
 
 
   return (
     <div className="cards-page">
       <div className="page-header">
         <Title level={3} style={{ margin: 0 }}>Projects</Title>
-        {canCreateProject(user?.role) ? (
-          <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>
-        ) : null}
+        <Space size={12}>
+          <Space size={8}>
+            <Text type="secondary">Show inactive</Text>
+            <Switch
+              checked={showInactive}
+              onChange={setShowInactive}
+              checkedChildren="On"
+              unCheckedChildren="Off"
+            />
+          </Space>
+          {canCreateProject(user?.role) ? (
+            <Button type="default" icon={<PlusOutlined />} onClick={openCreate}>New project</Button>
+          ) : null}
+        </Space>
       </div>
       <div className="cards-fullscreen">
         {loading ? (
           <div className="card-muted">Loading...</div>
         ) : (
           <div className="cards-grid">
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <Card
                 key={project.id}
                 className={`resource-card project-card status-${(project.status || 'unknown').toLowerCase()}`}
@@ -190,7 +214,7 @@ export default function Projects() {
                 </div>
               </Card>
             ))}
-            {projects.length === 0 && (
+            {visibleProjects.length === 0 && (
               <div className="card-muted">No projects found.</div>
             )}
           </div>

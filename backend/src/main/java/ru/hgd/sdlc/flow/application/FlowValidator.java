@@ -141,8 +141,8 @@ public class FlowValidator {
             assertTarget(node.getId(), "on_success", node.getOnSuccess(), nodesById, errors);
         }
         if (node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
-            if (!"ai".equals(nodeKind)) {
-                errors.add("on_failure only supported for AI nodes: " + node.getId());
+            if (!"ai".equals(nodeKind) && !"command".equals(nodeKind)) {
+                errors.add("on_failure only supported for AI and command nodes: " + node.getId());
             } else {
                 assertTarget(node.getId(), "on_failure", node.getOnFailure(), nodesById, errors);
             }

@@ -52,6 +52,7 @@ public class SkillController {
             @RequestParam(required = false) String scope,
             @RequestParam(required = false) String platformCode,
             @RequestParam(required = false) String skillKind,
+            @RequestParam(required = false) String lifecycleStatus,
             @RequestParam(required = false) String version,
             @RequestParam(required = false) String tag,
             @RequestParam(required = false) Boolean hasDescription
@@ -67,6 +68,7 @@ public class SkillController {
                         scope,
                         platformCode,
                         skillKind,
+                        lifecycleStatus,
                         version,
                         tag,
                         hasDescription
@@ -174,6 +176,15 @@ public class SkillController {
                 SkillResponse.class,
                 () -> SkillResponse.from(skillService.save(skillId, request, user))
         );
+    }
+
+    @PostMapping("/{skillId}/deprecate")
+    @PreAuthorize("hasAnyRole('ADMIN','FLOW_CONFIGURATOR')")
+    public SkillResponse deprecate(
+            @PathVariable String skillId,
+            @AuthenticationPrincipal User user
+    ) {
+        return SkillResponse.from(skillService.requestDeprecation(skillId, user));
     }
 
     @ExceptionHandler(ValidationException.class)

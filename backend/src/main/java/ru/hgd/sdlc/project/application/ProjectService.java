@@ -120,6 +120,11 @@ public class ProjectService {
         return repository.save(project);
     }
 
+    @Transactional
+    public void delete(UUID projectId) {
+        archive(projectId);
+    }
+
     private String normalize(String value) {
         if (value == null) {
             return null;

@@ -38,6 +38,7 @@ export function DebugRunDrawer({ open, onClose, canonicalName }) {
           target_branch: values.target_branch,
           flow_canonical_name: canonicalName,
           feature_request: values.feature_request,
+          ai_session_mode: 'isolated_attempt_sessions',
           publish_mode: values.publish_mode,
           debug_mode: true,
           idempotency_key: crypto.randomUUID(),

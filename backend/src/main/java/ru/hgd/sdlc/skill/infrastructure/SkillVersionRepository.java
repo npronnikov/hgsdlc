@@ -48,6 +48,7 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
               AND (:scope IS NULL OR l.scope = :scope)
               AND (:platformCode IS NULL OR l.platform_code = :platformCode)
               AND (:skillKind IS NULL OR l.skill_kind = :skillKind)
+              AND (:lifecycleStatus IS NULL OR l.lifecycle_status = :lifecycleStatus)
               AND (:version IS NULL OR l.version = :version)
               AND (:tag IS NULL OR LOWER(COALESCE(l.tags_json, '')) LIKE CONCAT('%', LOWER(:tag), '%'))
               AND (
@@ -70,6 +71,7 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             @Param("scope") String scope,
             @Param("platformCode") String platformCode,
             @Param("skillKind") String skillKind,
+            @Param("lifecycleStatus") String lifecycleStatus,
             @Param("version") String version,
             @Param("tag") String tag,
             @Param("hasDescription") Boolean hasDescription,

@@ -144,6 +144,48 @@ public class RuleService {
     }
 
     @Transactional
+    public RuleVersion requestDeprecation(String ruleId, User user) {
+        resolveSavedBy(user);
+        RuleVersion published = repository.findFirstByRuleIdAndStatusOrderBySavedAtDesc(ruleId, RuleStatus.PUBLISHED)
+                .orElseThrow(() -> new NotFoundException("Published rule not found: " + ruleId));
+        if (!isActiveLifecycle(published.getLifecycleStatus())) {
+            throw new ValidationException("Only active published rule can be deprecated");
+        }
+        int[] parsedVersion = parseVersionSafe(published.getVersion());
+        if (parsedVersion == null) {
+            throw new ValidationException("Invalid version: " + published.getVersion());
+        }
+        List<RuleVersion> allVersions = repository.findByRuleIdOrderBySavedAtDesc(ruleId);
+        List<RuleVersion> draftVersions = allVersions.stream()
+                .filter((version) -> version.getStatus() == RuleStatus.DRAFT)
+                .toList();
+        RuleVersion existingDraft = findDraftForMajor(draftVersions, parsedVersion[0]);
+        long resourceVersion = existingDraft == null ? 0L : existingDraft.getResourceVersion();
+        RuleSaveRequest request = new RuleSaveRequest(
+                published.getTitle(),
+                published.getDescription(),
+                published.getRuleId(),
+                toApiCodingAgent(published.getCodingAgent()),
+                published.getTeamCode(),
+                published.getPlatformCode(),
+                published.getTags(),
+                published.getRuleKind(),
+                published.getScope() == null ? ORGANIZATION_SCOPE : published.getScope(),
+                "deprecated",
+                published.getForkedFrom(),
+                published.getForkedBy(),
+                published.getSourceRef(),
+                published.getSourcePath(),
+                published.getRuleMarkdown(),
+                true,
+                false,
+                published.getVersion(),
+                resourceVersion
+        );
+        return save(ruleId, request, user);
+    }
+
+    @Transactional
     public RuleVersion save(String ruleId, RuleSaveRequest request, User user) {
         if (request == null) {
             throw new ValidationException("Request body is required");
@@ -478,6 +520,17 @@ public class RuleService {
         } catch (IllegalArgumentException ex) {
             throw new ValidationException("Unsupported lifecycle_status: " + lifecycleStatus);
         }
+    }
+
+    private boolean isActiveLifecycle(RuleLifecycleStatus lifecycleStatus) {
+        return lifecycleStatus == null || lifecycleStatus == RuleLifecycleStatus.ACTIVE;
+    }
+
+    private String toApiCodingAgent(RuleProvider codingAgent) {
+        if (codingAgent == null) {
+            return null;
+        }
+        return codingAgent.name().toLowerCase().replace('_', '-');
     }
 
     private String parseScope(String scope) {

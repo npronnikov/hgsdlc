@@ -41,12 +41,14 @@ import ru.hgd.sdlc.runtime.application.RuntimeStepTxService;
 import ru.hgd.sdlc.runtime.domain.ArtifactKind;
 import ru.hgd.sdlc.runtime.domain.ArtifactScope;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.GateKind;
 import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
+import ru.hgd.sdlc.runtime.domain.ReworkSessionPolicy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
 import ru.hgd.sdlc.runtime.infrastructure.ArtifactVersionRepository;
@@ -259,6 +261,39 @@ public class GateDecisionService {
         boolean requestedKeepChanges = command.keepChanges() == null ? checkpointConfigured : Boolean.TRUE.equals(command.keepChanges());
         boolean keepChanges = checkpointConfigured ? requestedKeepChanges : false;
         String effectiveMode = keepChanges ? "keep" : "discard";
+        AiSessionMode aiSessionMode = run.getAiSessionMode() == null
+                ? AiSessionMode.ISOLATED_ATTEMPT_SESSIONS
+                : run.getAiSessionMode();
+
+        String sessionPolicyRaw = trimToNull(command.sessionPolicy());
+        ReworkSessionPolicy sessionPolicyRequested = null;
+        ReworkSessionPolicy sessionPolicyEffective;
+        boolean stageForRuntime = false;
+
+        if (!keepChanges) {
+            sessionPolicyEffective = ReworkSessionPolicy.NEW_SESSION;
+        } else if (aiSessionMode == AiSessionMode.ISOLATED_ATTEMPT_SESSIONS) {
+            if (sessionPolicyRaw == null) {
+                throw new ValidationException(
+                        "session_policy is required when keep_changes=true and ai_session_mode=isolated_attempt_sessions"
+                );
+            }
+            sessionPolicyRequested = parseSessionPolicy(sessionPolicyRaw);
+            sessionPolicyEffective = sessionPolicyRequested;
+            stageForRuntime = true;
+        } else {
+            String runSessionId = trimToNull(run.getRunSessionId());
+            boolean hasSessionHistory = runSessionId != null
+                    && nodeExecutionRepository.existsByRunIdAndAgentSessionId(run.getId(), runSessionId);
+            sessionPolicyEffective = hasSessionHistory
+                    ? ReworkSessionPolicy.RESUME_PREVIOUS_SESSION
+                    : ReworkSessionPolicy.NEW_SESSION;
+        }
+
+        if (stageForRuntime && sessionPolicyEffective == ReworkSessionPolicy.RESUME_PREVIOUS_SESSION) {
+            ensureResumeSessionExists(run, flowModel, transitionTarget);
+        }
+
         if (!keepChanges) {
             rollbackWorkspaceToCheckpoint(run, transitionTarget, gate.getId());
         }
@@ -271,7 +306,17 @@ public class GateDecisionService {
                 effectiveMode,
                 trimToNull(command.comment()),
                 reworkInstruction,
+                sessionPolicyRaw,
+                sessionPolicyEffective.apiValue(),
                 command.reviewedArtifactVersionIds()
+        );
+        runtimeStepTxService.stagePendingReworkSessionPolicy(
+                run.getId(),
+                gate.getId(),
+                keepChanges,
+                sessionPolicyRaw,
+                sessionPolicyEffective,
+                stageForRuntime
         );
         if (transitionTarget.equals(flowModel.getStartNodeId())) {
             runtimeStepTxService.appendFeatureRequestClarification(run.getId(), gate.getId(), reworkInstruction);
@@ -580,6 +625,32 @@ public class GateDecisionService {
         NodeModel targetNode = requireNode(flowModel, targetNodeId);
         String targetKind = normalizeNodeKind(targetNode);
         return Set.of("ai", "command").contains(targetKind) && Boolean.TRUE.equals(targetNode.getCheckpointBeforeRun());
+    }
+
+    private ReworkSessionPolicy parseSessionPolicy(String value) {
+        try {
+            return ReworkSessionPolicy.fromApiValue(value);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(ex.getMessage());
+        }
+    }
+
+    private void ensureResumeSessionExists(RunEntity run, FlowModel flowModel, String transitionTargetNodeId) {
+        NodeModel transitionTarget = requireNode(flowModel, transitionTargetNodeId);
+        if (!"ai".equals(normalizeNodeKind(transitionTarget))) {
+            throw new ValidationException(
+                    "session_policy=resume_previous_session is only available for AI rework targets"
+            );
+        }
+        boolean sessionExists = nodeExecutionRepository
+                .findFirstByRunIdAndNodeIdAndAgentSessionIdIsNotNullOrderByAttemptNoDesc(run.getId(), transitionTargetNodeId)
+                .map((nodeExecution) -> trimToNull(nodeExecution.getAgentSessionId()))
+                .isPresent();
+        if (!sessionExists) {
+            throw new ValidationException(
+                    "session_policy=resume_previous_session requested, but no previous AI session exists"
+            );
+        }
     }
 
     private void enforceGateRole(NodeModel node, User user) {

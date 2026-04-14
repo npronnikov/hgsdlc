@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu, Input, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
+import { Layout, Menu, Space, Tag, Avatar, Typography, Button, Dropdown } from 'antd';
 import {
   ApartmentOutlined,
   AuditOutlined,
   DeploymentUnitOutlined,
+  ExperimentOutlined,
   GithubOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -31,6 +32,7 @@ function buildNavItems(userRoles) {
     { key: '/flows', icon: <ApartmentOutlined />, label: 'Flows' },
     { key: '/rules', icon: <AuditOutlined />, label: 'Rules' },
     { key: '/skills', icon: <RobotOutlined />, label: 'Skills' },
+    { key: '/benchmark', icon: <ExperimentOutlined />, label: 'Benchmark' },
     { key: '/requests', icon: <GithubOutlined />, label: 'Requests' },
     { key: isProductOwnerOnly ? '/product-pipeline' : '/run-launch', icon: <PlayCircleOutlined />, label: 'Run Launch' },
     { key: '/run-console', icon: <DeploymentUnitOutlined />, label: 'Runs' },
@@ -54,6 +56,7 @@ const routeMeta = {
   '/rule-editor': { title: 'Rule Editor', menuKey: '/rules' },
   '/skills': { title: 'Skills', menuKey: '/skills' },
   '/skill-editor': { title: 'Skill Editor', menuKey: '/skills' },
+  '/benchmark': { title: 'Benchmark', menuKey: '/benchmark' },
   '/requests': { title: 'Requests', menuKey: '/requests' },
   '/product-pipeline': { title: 'Idea to Dev', menuKey: '/product-pipeline' },
   '/run-launch': { title: 'Run Launch', menuKey: '/run-launch' },
@@ -145,9 +148,11 @@ export default function AppShell() {
   const ruleIdFromPath = location.pathname.startsWith('/rules/') ? location.pathname.split('/')[2] : null;
   const skillIdFromPath = location.pathname.startsWith('/skills/') ? location.pathname.split('/')[2] : null;
   const flowIdFromPath = location.pathname.startsWith('/flows/') ? location.pathname.split('/')[2] : null;
+  const benchmarkRunIdFromPath = location.pathname.startsWith('/benchmark/') ? location.pathname.split('/')[2] : null;
   const isRuleEditorRoute = location.pathname.startsWith('/rules/');
   const isSkillEditorRoute = location.pathname.startsWith('/skills/');
   const isFlowEditorRoute = location.pathname.startsWith('/flows/');
+  const isBenchmarkRunRoute = location.pathname.startsWith('/benchmark/');
   const isHumanGateRoute = ['/human-gate', '/gate-approval', '/gate-input'].includes(location.pathname);
   const searchParams = new URLSearchParams(location.search || '');
   const runIdFromQuery = searchParams.get('runId');
@@ -165,6 +170,7 @@ export default function AppShell() {
     || (isRuleEditorRoute ? { title: 'Rules', menuKey: '/rules' } : null)
     || (isSkillEditorRoute ? { title: 'Skills', menuKey: '/skills' } : null)
     || (isFlowEditorRoute ? { title: 'Flows', menuKey: '/flows' } : null)
+    || (isBenchmarkRunRoute ? { title: 'Benchmark', menuKey: '/benchmark' } : null)
     || { title: 'Overview', menuKey: '/overview' };
   const selectedKey = meta.menuKey;
   const title = meta.title;
@@ -172,6 +178,7 @@ export default function AppShell() {
   const showRuleIdCrumb = isRuleEditorRoute && ruleIdFromPath && ruleIdFromPath !== 'create';
   const showSkillIdCrumb = isSkillEditorRoute && skillIdFromPath && skillIdFromPath !== 'create';
   const showFlowIdCrumb = isFlowEditorRoute && flowIdFromPath && flowIdFromPath !== 'create';
+  const showBenchmarkRunCrumb = isBenchmarkRunRoute && benchmarkRunIdFromPath;
   const displayName = user?.username || 'User';
   const selectedPipelineRunId = searchParams.get('runId') || searchParams.get('ppRunId') || pipelineRuns[0]?.run_id || null;
   const projectNameById = useMemo(() => {
@@ -364,12 +371,17 @@ export default function AppShell() {
                       <button type="button" onClick={() => navigate(location.pathname)}>{flowIdFromPath}</button>
                     </>
                   )}
+                  {showBenchmarkRunCrumb && (
+                    <>
+                      <span>/</span>
+                      <button type="button" onClick={() => navigate(location.pathname)}>{benchmarkRunIdFromPath}</button>
+                    </>
+                  )}
                 </>
               )}
             </div>
           </Space>
           <Space size="middle" className="hg-header-actions">
-            <Input placeholder="Search" allowClear />
             <span className="theme-toggle-wrap">
               <Button
                 type="text"

@@ -26,6 +26,8 @@ import DeltaSummary from './pages/DeltaSummary.jsx';
 import Users from './pages/Users.jsx';
 import ProductPipelineMvp from './pages/ProductPipelineMvp.jsx';
 import RunWorkspace from './pages/RunWorkspace.jsx';
+import Benchmark from './pages/Benchmark.jsx';
+import BenchmarkRun from './pages/BenchmarkRun.jsx';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 
 function RequireAuth({ children }) {
@@ -126,6 +128,8 @@ export default function App() {
             <Route path="artifacts" element={<Artifacts />} />
             <Route path="delta-summary" element={<DeltaSummary />} />
             <Route path="product-pipeline" element={<ProductPipelineMvp />} />
+            <Route path="benchmark" element={<Benchmark />} />
+            <Route path="benchmark/:runId" element={<BenchmarkRun />} />
             <Route
               path="users"
               element={

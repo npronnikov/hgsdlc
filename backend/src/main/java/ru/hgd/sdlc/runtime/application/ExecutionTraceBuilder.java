@@ -44,13 +44,17 @@ public class ExecutionTraceBuilder {
             NodeModel node,
             String promptChecksum,
             String workingDirectory,
-            List<String> command
+            List<String> command,
+            String sessionMode,
+            String sessionId
     ) {
         return Map.of(
                 "node_id", node.getId(),
                 "prompt_checksum", promptChecksum,
                 "working_directory", workingDirectory,
-                "command", command
+                "command", command,
+                "session_mode", sessionMode,
+                "session_id", sessionId
         );
     }
 

@@ -185,7 +185,7 @@ export function FlowMetaPanel({ editor }) {
         {!isCreateMode && (
           <div>
             <Text className="muted">Publication status</Text>
-            <div className="mono">{flowMeta.publicationStatus || 'draft'}</div>
+            <div className="mono">{flowMeta.publicationStatus || (flowMeta.status === 'published' ? 'published' : 'draft')}</div>
           </div>
         )}
         <div>
@@ -259,18 +259,6 @@ export function FlowMetaPanel({ editor }) {
             disabled={isReadOnly}
             onChange={(checked) => updateFlowMeta({ failOnMissingExpectedMutation: checked })}
           />
-        </div>
-        <div>
-          <Text className="muted">Response schema (optional)</Text>
-          <div className="field-control">
-            <Input.TextArea
-              rows={6}
-              value={flowMeta.responseSchema}
-              placeholder="YAML/JSON schema"
-              disabled={isReadOnly}
-              onChange={(event) => updateFlowMeta({ responseSchema: event.target.value })}
-            />
-          </div>
         </div>
       </div>
     </Card>

@@ -75,6 +75,9 @@ public class NodeModel {
     @JsonProperty("success_exit_codes")
     private List<Integer> successExitCodes;
 
+    @JsonProperty("max_failure_transitions")
+    private Integer maxFailureTransitions;
+
     @JsonProperty("retry_policy")
     private JsonNode retryPolicy;
 

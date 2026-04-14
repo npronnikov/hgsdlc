@@ -5,6 +5,14 @@ import remarkGfm from 'remark-gfm';
 let mermaidModulePromise = null;
 let mermaidConfigured = false;
 
+function formatMermaidError(error) {
+  const raw = error instanceof Error ? error.message : String(error ?? 'Unknown Mermaid error');
+  if (/syntax error in text/i.test(raw)) {
+    return 'Mermaid syntax error. Check diagram definition.';
+  }
+  return raw;
+}
+
 async function getMermaid() {
   if (!mermaidModulePromise) {
     mermaidModulePromise = import('mermaid').then((module) => module.default);
@@ -15,7 +23,10 @@ async function getMermaid() {
       startOnLoad: false,
       theme: 'default',
       securityLevel: 'loose',
+      suppressErrorRendering: true,
     });
+    // Keep parser errors local to the component; do not render global Mermaid error output.
+    mermaid.setParseErrorHandler(() => {});
     mermaidConfigured = true;
   }
   return mermaid;
@@ -49,7 +60,7 @@ function MermaidBlock({ chart }) {
         if (cancelled) {
           return;
         }
-        setError(err instanceof Error ? err.message : String(err));
+        setError(formatMermaidError(err));
       }
     };
 
@@ -63,7 +74,7 @@ function MermaidBlock({ chart }) {
     return (
       <div className="human-gate-mermaid-error">
         <pre className="frontmatter-block" style={{ marginBottom: 8 }}>{chart}</pre>
-        <p className="human-gate-mermaid-error-text">{`Mermaid render error: ${error}`}</p>
+        <p className="human-gate-mermaid-error-text">{error}</p>
       </div>
     );
   }

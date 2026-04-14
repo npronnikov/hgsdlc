@@ -23,7 +23,9 @@ import ru.hgd.sdlc.common.ConflictException;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.application.FlowYamlParser;
+import ru.hgd.sdlc.flow.domain.FlowLifecycleStatus;
 import ru.hgd.sdlc.flow.domain.FlowModel;
+import ru.hgd.sdlc.flow.domain.FlowStatus;
 import ru.hgd.sdlc.flow.domain.FlowVersion;
 import ru.hgd.sdlc.flow.infrastructure.FlowVersionRepository;
 import ru.hgd.sdlc.project.domain.Project;
@@ -35,6 +37,7 @@ import ru.hgd.sdlc.runtime.application.port.ClockPort;
 import ru.hgd.sdlc.runtime.application.port.IdentityPort;
 import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
@@ -109,6 +112,16 @@ public class RunLifecycleService {
                 .orElseThrow(() -> new NotFoundException("Project not found: " + command.projectId()));
         FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
                 .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
+        boolean debugMode = command.debugMode() != null && command.debugMode();
+        if (flowVersion.getStatus() != FlowStatus.PUBLISHED) {
+            boolean draftDebugOk = debugMode && flowVersion.getStatus() == FlowStatus.DRAFT;
+            if (!draftDebugOk) {
+                throw new ValidationException("Flow is not published: " + command.flowCanonicalName());
+            }
+        }
+        if (flowVersion.getLifecycleStatus() != null && flowVersion.getLifecycleStatus() != FlowLifecycleStatus.ACTIVE) {
+            throw new ValidationException("Flow is deprecated and cannot be launched: " + command.flowCanonicalName());
+        }
         FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
         if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
             throw new ValidationException("Flow has no nodes");
@@ -128,6 +141,8 @@ public class RunLifecycleService {
         }
 
         UUID runId = UUID.randomUUID();
+        AiSessionMode aiSessionMode = resolveAiSessionMode(command.aiSessionMode());
+        String runSessionId = aiSessionMode == AiSessionMode.SHARED_RUN_SESSION ? UUID.randomUUID().toString() : null;
         RunPublishMode publishMode = resolvePublishMode(command.publishMode());
         PrCommitStrategy prCommitStrategy = resolvePrCommitStrategy(publishMode, command.prCommitStrategy());
         String workBranch = resolveWorkBranch(runId, command.workBranch(), command.targetBranch());
@@ -150,6 +165,8 @@ public class RunLifecycleService {
                 normalizeBranch(command.targetBranch()),
                 flowVersion.getCanonicalName(),
                 toJson(flowModel),
+                aiSessionMode,
+                runSessionId,
                 publishMode,
                 workBranch,
                 prCommitStrategy,
@@ -162,8 +179,8 @@ public class RunLifecycleService {
                 runWorkspaceRoot.toString(),
                 identityPort.resolveActorId(user),
                 clockPort.now(),
-                resolveSkipGates(user, command.debugMode() != null && command.debugMode()),
-                command.debugMode() != null && command.debugMode()
+                resolveSkipGates(user, debugMode),
+                debugMode
         );
     }
 
@@ -187,6 +204,30 @@ public class RunLifecycleService {
         } else if (run.getStatus() == RunStatus.WAITING_PUBLISH) {
             runPublishService.dispatchPublish(runId);
         }
+        return getRunEntity(runId);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity refreshFlowAndResume(UUID runId) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() != RunStatus.FAILED) {
+            throw new ValidationException("Only failed runs can be refreshed and resumed");
+        }
+        FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(run.getFlowCanonicalName())
+                .orElseThrow(() -> new NotFoundException("Flow not found: " + run.getFlowCanonicalName()));
+        FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
+        if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
+            throw new ValidationException("Flow has no nodes");
+        }
+        flowModel.setCodingAgent(flowVersion.getCodingAgent());
+        String newSnapshotJson = toJson(flowModel);
+
+        runtimeStepTxService.refreshFlowSnapshotAndResume(
+                runId,
+                newSnapshotJson,
+                flowVersion.getCanonicalName(),
+                clockPort.now());
+        startRun(runId);
         return getRunEntity(runId);
     }
 
@@ -292,6 +333,7 @@ public class RunLifecycleService {
                 run.getFeatureRequest(),
                 parseContextManifestEntries(run.getContextFileManifestJson())
         );
+        materializeAgentSettingsJson(run, projectRoot);
 
         runtimeStepTxService.appendAudit(
                 run.getId(),
@@ -304,6 +346,33 @@ public class RunLifecycleService {
                         "workspace_root", runWorkspaceRoot.toString(),
                         "project_root", projectRoot.toString(),
                         "run_scope_root", runScopeRoot.toString()
+                )
+        );
+    }
+
+    private void materializeAgentSettingsJson(RunEntity run, Path projectRoot) {
+        String codingAgent = resolveRunCodingAgent(run);
+        if (!"qwen".equals(codingAgent) && !"claude".equals(codingAgent)) {
+            return;
+        }
+        if (!settingsService.isRuntimeAgentSettingsJsonEnabled(codingAgent)) {
+            return;
+        }
+        String settingsJson = settingsService.getRuntimeAgentSettingsJson(codingAgent);
+        Path agentConfigRoot = projectRoot.resolve("." + codingAgent);
+        Path settingsJsonPath = agentConfigRoot.resolve("settings.json");
+        createDirectories(agentConfigRoot);
+        writeFile(settingsJsonPath, settingsJson.getBytes(StandardCharsets.UTF_8));
+        runtimeStepTxService.appendAudit(
+                run.getId(),
+                null,
+                null,
+                "agent_settings_json_materialized",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "coding_agent", codingAgent,
+                        "path", settingsJsonPath.toString()
                 )
         );
     }
@@ -625,6 +694,17 @@ public class RunLifecycleService {
         if (command.publishMode() == null || command.publishMode().isBlank()) {
             throw new ValidationException("publish_mode is required");
         }
+        if (command.aiSessionMode() == null || command.aiSessionMode().isBlank()) {
+            throw new ValidationException("ai_session_mode is required");
+        }
+    }
+
+    private AiSessionMode resolveAiSessionMode(String aiSessionModeRaw) {
+        try {
+            return AiSessionMode.fromApiValue(aiSessionModeRaw == null ? null : aiSessionModeRaw.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(ex.getMessage());
+        }
     }
 
     private RunEntity getRunEntity(UUID runId) {
@@ -764,7 +844,11 @@ public class RunLifecycleService {
         if (debugMode) {
             return false;
         }
-        return user != null && user.hasRole(Role.PRODUCT_OWNER);
+        if (user == null) {
+            return false;
+        }
+        var effectiveRoles = user.getEffectiveRoles();
+        return effectiveRoles.size() == 1 && effectiveRoles.contains(Role.PRODUCT_OWNER);
     }
 
     private String normalizeBranch(String branch) {
@@ -810,6 +894,29 @@ public class RunLifecycleService {
             throw new ValidationException("work_branch must differ from target_branch");
         }
         return resolved;
+    }
+
+    private String resolveRunCodingAgent(RunEntity run) {
+        String flowJson = trimToNull(run.getFlowSnapshotJson());
+        if (flowJson != null) {
+            try {
+                Map<?, ?> flow = objectMapper.readValue(flowJson, Map.class);
+                Object value = flow.get("coding_agent");
+                if (value instanceof String codingAgentValue) {
+                    String normalized = normalize(codingAgentValue);
+                    if (!normalized.isBlank()) {
+                        return normalized;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fallback to current runtime setting.
+            }
+        }
+        String runtimeCodingAgent = normalize(settingsService.getRuntimeCodingAgent());
+        if (!runtimeCodingAgent.isBlank()) {
+            return runtimeCodingAgent;
+        }
+        return "qwen";
     }
 
     private String toJson(Object value) {

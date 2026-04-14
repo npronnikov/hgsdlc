@@ -1,6 +1,8 @@
 {
+  "ai_session_mode" : "isolated_attempt_sessions",
   "flow_canonical_name" : "baseline-flow@1.0",
   "resource_version" : 0,
   "run_id" : "<uuid>",
+  "run_session_id" : null,
   "status" : "created"
 }

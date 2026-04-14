@@ -21,6 +21,8 @@ public interface CodingAgentStrategy {
             List<Map<String, Object>> resolvedContext,
             Path projectRoot,
             Path nodeExecutionRoot,
-            List<AgentPromptBuilder.WorkflowProgressEntry> workflowProgress
+            List<AgentPromptBuilder.WorkflowProgressEntry> workflowProgress,
+            AgentSessionCommandMode sessionCommandMode,
+            String sessionId
     ) {}
 }

@@ -43,6 +43,7 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           target_branch: values.target_branch,
           flow_canonical_name: canonicalName,
           feature_request: values.feature_request,
+          ai_session_mode: 'isolated_attempt_sessions',
           publish_mode: 'local',
           idempotency_key: crypto.randomUUID(),
         }),

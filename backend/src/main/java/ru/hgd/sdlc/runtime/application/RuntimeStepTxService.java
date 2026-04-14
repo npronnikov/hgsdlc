@@ -20,6 +20,7 @@ import ru.hgd.sdlc.runtime.domain.ActorType;
 import ru.hgd.sdlc.runtime.domain.ArtifactKind;
 import ru.hgd.sdlc.runtime.domain.ArtifactScope;
 import ru.hgd.sdlc.runtime.domain.ArtifactVersionEntity;
+import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.AuditEventEntity;
 import ru.hgd.sdlc.runtime.domain.GateInstanceEntity;
 import ru.hgd.sdlc.runtime.domain.GateKind;
@@ -27,6 +28,7 @@ import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
 import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
 import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
+import ru.hgd.sdlc.runtime.domain.ReworkSessionPolicy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunPublishMode;
 import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
@@ -76,6 +78,8 @@ public class RuntimeStepTxService {
             String targetBranch,
             String flowCanonicalName,
             String flowSnapshotJson,
+            AiSessionMode aiSessionMode,
+            String runSessionId,
             RunPublishMode publishMode,
             String workBranch,
             PrCommitStrategy prCommitStrategy,
@@ -97,6 +101,8 @@ public class RuntimeStepTxService {
                 .targetBranch(targetBranch)
                 .flowCanonicalName(flowCanonicalName)
                 .flowSnapshotJson(flowSnapshotJson)
+                .aiSessionMode(aiSessionMode)
+                .runSessionId(runSessionId)
                 .publishMode(publishMode)
                 .workBranch(workBranch)
                 .prCommitStrategy(prCommitStrategy)
@@ -125,6 +131,8 @@ public class RuntimeStepTxService {
                         "project_id", projectId,
                         "target_branch", targetBranch,
                         "flow_canonical_name", flowCanonicalName,
+                        "ai_session_mode", aiSessionMode == null ? null : aiSessionMode.apiValue(),
+                        "run_session_id", runSessionId,
                         "publish_mode", publishMode == null ? null : publishMode.name().toLowerCase(Locale.ROOT),
                         "work_branch", workBranch,
                         "pr_commit_strategy", prCommitStrategy == null ? null : prCommitStrategy.name().toLowerCase(Locale.ROOT)
@@ -454,6 +462,8 @@ public class RuntimeStepTxService {
             String mode,
             String comment,
             String instruction,
+            String sessionPolicyRequested,
+            String sessionPolicyEffective,
             List<UUID> reviewedArtifactVersionIds
     ) {
         GateInstanceEntity gate = getGate(gateId);
@@ -463,6 +473,8 @@ public class RuntimeStepTxService {
                 "mode", mode,
                 "comment", comment,
                 "instruction", instruction,
+                "session_policy_requested", sessionPolicyRequested,
+                "session_policy_effective", sessionPolicyEffective,
                 "reviewed_artifact_version_ids", reviewedArtifactVersionIds == null ? List.of() : reviewedArtifactVersionIds
         )));
         gateInstanceRepository.save(gate);
@@ -477,10 +489,80 @@ public class RuntimeStepTxService {
                         "mode", mode,
                         "comment", comment,
                         "instruction", instruction,
+                        "session_policy_requested", sessionPolicyRequested,
+                        "session_policy_effective", sessionPolicyEffective,
                         "reviewed_artifact_version_ids", reviewedArtifactVersionIds == null ? List.of() : reviewedArtifactVersionIds
                 )
         );
         return gate;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity stagePendingReworkSessionPolicy(
+            UUID runId,
+            UUID gateId,
+            boolean keepChanges,
+            String sessionPolicyRequested,
+            ReworkSessionPolicy sessionPolicyEffective,
+            boolean shouldPersistForRuntime
+    ) {
+        RunEntity run = getRun(runId);
+        run.setPendingReworkSessionPolicy(shouldPersistForRuntime ? sessionPolicyEffective : null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                gateId,
+                "rework_session_policy_staged",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "gate_id", gateId,
+                        "keep_changes", keepChanges,
+                        "session_policy_requested", sessionPolicyRequested,
+                        "session_policy_effective",
+                        sessionPolicyEffective == null ? null : sessionPolicyEffective.apiValue()
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ReworkSessionPolicy consumePendingReworkSessionPolicy(UUID runId) {
+        RunEntity run = getRun(runId);
+        ReworkSessionPolicy policy = run.getPendingReworkSessionPolicy();
+        if (policy == null) {
+            return null;
+        }
+        run.setPendingReworkSessionPolicy(null);
+        runRepository.save(run);
+        return policy;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public NodeExecutionEntity assignAgentSession(
+            UUID runId,
+            UUID nodeExecutionId,
+            AiSessionMode sessionMode,
+            String sessionId
+    ) {
+        NodeExecutionEntity execution = getNodeExecution(runId, nodeExecutionId);
+        execution.setAgentSessionId(sessionId);
+        nodeExecutionRepository.save(execution);
+        appendAuditInternal(
+                runId,
+                nodeExecutionId,
+                null,
+                "agent_session_selected",
+                ActorType.SYSTEM,
+                "runtime",
+                mapOf(
+                        "node_execution_id", nodeExecutionId,
+                        "session_mode", sessionMode == null ? null : sessionMode.apiValue(),
+                        "session_id", sessionId
+                )
+        );
+        return execution;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -871,6 +953,23 @@ public class RuntimeStepTxService {
                 mapOf("failed_step", failedStep)
         );
         return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void refreshFlowSnapshotAndResume(UUID runId, String newSnapshotJson, String flowCanonicalName, Instant now) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() != RunStatus.FAILED) {
+            throw new ValidationException("Only failed runs can be refreshed");
+        }
+        run.setFlowSnapshotJson(newSnapshotJson);
+        run.setFlowCanonicalName(flowCanonicalName);
+        run.setStatus(RunStatus.RUNNING);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(runId, null, null, "flow_snapshot_refreshed", ActorType.SYSTEM, "runtime",
+                Map.of("flow_canonical_name", flowCanonicalName));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

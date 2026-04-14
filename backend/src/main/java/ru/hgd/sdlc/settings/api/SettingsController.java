@@ -9,6 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.hgd.sdlc.auth.domain.User;
@@ -34,6 +35,31 @@ public class SettingsController {
         return toResponse(settings);
     }
 
+    @GetMapping("/runtime/agent-command")
+    public AgentCommandResponse getRuntimeAgentCommand(
+            @RequestParam("coding_agent") String codingAgent
+    ) {
+        if (codingAgent == null || codingAgent.isBlank()) {
+            throw new ValidationException("coding_agent is required");
+        }
+        String normalizedAgent = codingAgent.trim().toLowerCase();
+        String launchCommand = settingsService.getRuntimeAgentLaunchCommand(normalizedAgent);
+        String initCommand = settingsService.getRuntimeAgentInitCommand(normalizedAgent);
+        boolean autoInitWhenNoRule = settingsService.isRuntimeAgentAutoInitWhenNoRule(normalizedAgent);
+        String settingsJson = settingsService.getRuntimeAgentSettingsJson(normalizedAgent);
+        String settingsJsonTemplate = settingsService.getRuntimeAgentSettingsJsonTemplate(normalizedAgent);
+        boolean settingsJsonEnabled = settingsService.isRuntimeAgentSettingsJsonEnabled(normalizedAgent);
+        return new AgentCommandResponse(
+                normalizedAgent,
+                launchCommand,
+                initCommand,
+                autoInitWhenNoRule,
+                settingsJson,
+                settingsJsonTemplate,
+                settingsJsonEnabled
+        );
+    }
+
     @PutMapping("/runtime")
     public ResponseEntity<RuntimeSettingsResponse> updateRuntimeSettings(
             @RequestBody RuntimeSettingsRequest request,
@@ -48,11 +74,22 @@ public class SettingsController {
         if (request.aiTimeoutSeconds() == null) {
             throw new ValidationException("ai_timeout_seconds is required");
         }
+        String resolvedAgentLaunchCommand = (request.agentLaunchCommand() == null || request.agentLaunchCommand().isBlank())
+                ? settingsService.getRuntimeAgentLaunchCommand(request.codingAgent())
+                : request.agentLaunchCommand();
+        String resolvedAgentInitCommand = (request.agentInitCommand() == null || request.agentInitCommand().isBlank())
+                ? settingsService.getRuntimeAgentInitCommand(request.codingAgent())
+                : request.agentInitCommand();
         SettingsService.RuntimeSettings updated = settingsService.updateRuntimeSettings(
                 request.workspaceRoot(),
                 request.codingAgent(),
                 request.aiTimeoutSeconds(),
                 request.promptLanguage(),
+                resolvedAgentLaunchCommand,
+                resolvedAgentInitCommand,
+                request.autoInitWhenNoRule(),
+                request.agentSettingsJson(),
+                request.agentSettingsJsonEnabled(),
                 user == null ? "system" : user.getUsername()
         );
         return ResponseEntity.status(HttpStatus.OK).body(toResponse(updated));
@@ -111,7 +148,9 @@ public class SettingsController {
 
     private RuntimeSettingsResponse toResponse(SettingsService.RuntimeSettings s) {
         return new RuntimeSettingsResponse(
-                s.workspaceRoot(), s.codingAgent(), s.aiTimeoutSeconds(), s.promptLanguage(),
+                s.workspaceRoot(), s.codingAgent(), s.aiTimeoutSeconds(), s.promptLanguage(), s.agentLaunchCommand(),
+                s.agentInitCommand(), s.autoInitWhenNoRule(),
+                s.agentSettingsJson(), s.agentSettingsJsonTemplate(), s.agentSettingsJsonEnabled(),
                 s.catalogRepoUrl(), s.catalogDefaultBranch(), s.publishMode(),
                 s.gitSshPrivateKey(), s.gitSshPublicKey(), s.gitSshPassphrase(),
                 s.gitCertificate(), s.gitCertificateKey(), s.gitUsername(), s.gitPasswordOrPat(),
@@ -125,7 +164,12 @@ public class SettingsController {
             @JsonProperty("workspace_root") String workspaceRoot,
             @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("ai_timeout_seconds") Integer aiTimeoutSeconds,
-            @JsonProperty("prompt_language") String promptLanguage
+            @JsonProperty("prompt_language") String promptLanguage,
+            @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") Boolean autoInitWhenNoRule,
+            @JsonProperty("agent_settings_json") String agentSettingsJson,
+            @JsonProperty("agent_settings_json_enabled") Boolean agentSettingsJsonEnabled
     ) {}
 
     public record RuntimeSettingsResponse(
@@ -133,6 +177,12 @@ public class SettingsController {
             @JsonProperty("coding_agent") String codingAgent,
             @JsonProperty("ai_timeout_seconds") int aiTimeoutSeconds,
             @JsonProperty("prompt_language") String promptLanguage,
+            @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") boolean autoInitWhenNoRule,
+            @JsonProperty("agent_settings_json") String agentSettingsJson,
+            @JsonProperty("agent_settings_json_template") String agentSettingsJsonTemplate,
+            @JsonProperty("agent_settings_json_enabled") boolean agentSettingsJsonEnabled,
             @JsonProperty("catalog_repo_url") String catalogRepoUrl,
             @JsonProperty("catalog_default_branch") String catalogDefaultBranch,
             @JsonProperty("publish_mode") String publishMode,
@@ -147,6 +197,16 @@ public class SettingsController {
             @JsonProperty("local_git_email") String localGitEmail,
             @JsonProperty("updated_at") Instant updatedAt,
             @JsonProperty("updated_by") String updatedBy
+    ) {}
+
+    public record AgentCommandResponse(
+            @JsonProperty("coding_agent") String codingAgent,
+            @JsonProperty("agent_launch_command") String agentLaunchCommand,
+            @JsonProperty("agent_init_command") String agentInitCommand,
+            @JsonProperty("auto_init_when_no_rule") boolean autoInitWhenNoRule,
+            @JsonProperty("agent_settings_json") String agentSettingsJson,
+            @JsonProperty("agent_settings_json_template") String agentSettingsJsonTemplate,
+            @JsonProperty("agent_settings_json_enabled") boolean agentSettingsJsonEnabled
     ) {}
 
     public record CatalogSettingsRequest(

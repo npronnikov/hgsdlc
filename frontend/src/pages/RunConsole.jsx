@@ -28,6 +28,7 @@ import {
   LinkOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
+  PlayCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
   SyncOutlined,
@@ -1055,6 +1056,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
   };
 
+  const refreshFlowAndResume = async () => {
+    try {
+      await apiRequest(`/runs/${runId}/refresh-flow`, { method: 'POST' });
+      message.success('Flow refreshed, run resumed');
+      await load();
+    } catch (err) {
+      message.error(err.message || 'Failed to refresh flow and resume');
+    }
+  };
+
   if (!run) {
     return <Card loading={loading} />;
   }
@@ -1099,6 +1110,11 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
               onClick={() => navigate(`/run-workspace?runId=${runId}`)}
             >
               Debug View
+            </Button>
+          )}
+          {run.status === 'failed' && (
+            <Button type="primary" icon={<PlayCircleOutlined />} onClick={refreshFlowAndResume}>
+              Refresh flow &amp; Resume
             </Button>
           )}
           {run.status === 'publish_failed' && (
