@@ -7,9 +7,9 @@ description: >
   Workspace detection + full reverse engineering of an existing codebase.
   Produces business overview, architecture, code structure, API docs, component
   inventory, tech stack, dependency map, and code quality assessment.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

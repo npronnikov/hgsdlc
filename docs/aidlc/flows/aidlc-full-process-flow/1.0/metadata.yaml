@@ -8,9 +8,9 @@ description: >
   reverse engineering, requirements analysis, user stories, workflow planning,
   application design, units decomposition, functional design, NFR requirements,
   code generation, and build/test instructions. Every stage has a human gate.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - full-cycle

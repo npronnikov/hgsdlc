@@ -6,9 +6,9 @@ display_name: "AIDLC: Application Design Questions"
 description: >
   Generate design-clarification questions covering component boundaries, service
   layer, method interfaces, and dependency patterns before design generation.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

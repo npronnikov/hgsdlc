@@ -6,9 +6,9 @@ display_name: "AIDLC: Workspace Detection"
 description: >
   Scan project workspace to determine brownfield vs greenfield, resume existing
   AIDLC session if present, and create aidlc-state.md as the tracking file.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

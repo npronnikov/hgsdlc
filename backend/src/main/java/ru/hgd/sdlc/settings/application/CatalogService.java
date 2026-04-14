@@ -98,12 +98,13 @@ public class CatalogService {
         int inserted = 0;
         int updated = 0;
         int skipped = 0;
+        boolean verifyChecksum = settingsService.isCatalogVerifyChecksum();
 
         List<Path> metadataPaths = scanMetadataFiles(mirrorRoot);
         metadataPaths.sort(Comparator.naturalOrder());
         for (Path metadataPath : metadataPaths) {
             try {
-                ParsedMetadata metadata = parseMetadata(mirrorRoot, metadataPath);
+                ParsedMetadata metadata = parseMetadata(mirrorRoot, metadataPath, verifyChecksum);
                 switch (metadata.entityType()) {
                     case "rule" -> {
                         scannedRules++;
@@ -163,7 +164,7 @@ public class CatalogService {
         return result;
     }
 
-    private ParsedMetadata parseMetadata(Path mirrorRoot, Path metadataPath) {
+    private ParsedMetadata parseMetadata(Path mirrorRoot, Path metadataPath, boolean verifyChecksum) {
         Map<String, Object> metadata = parseYamlMap(readText(metadataPath), "metadata.yaml is not valid: " + metadataPath);
         Path versionDir = metadataPath.getParent();
         if (versionDir == null || versionDir.getParent() == null || versionDir.getParent().getParent() == null) {
@@ -190,10 +191,6 @@ public class CatalogService {
         List<ParsedSkillPackageFile> packageFiles = List.of();
         if ("skill".equals(normalizedEntityType)) {
             packageFiles = parseSkillPackageFiles(versionDir);
-            String metadataChecksumRaw = normalizeChecksum(stringValue(metadata.get("checksum")));
-            if (metadataChecksumRaw == null) {
-                throw new ValidationException("metadata checksum is required");
-            }
             List<SkillPackageService.PreparedSkillFile> preparedFiles = packageFiles.stream()
                     .map(file -> new SkillPackageService.PreparedSkillFile(
                             file.path(), file.role(), file.mediaType(),
@@ -201,15 +198,21 @@ public class CatalogService {
                     ))
                     .toList();
             String actualChecksum = skillPackageService.computePackageChecksum(preparedFiles);
-            String legacySkillMdChecksum = packageFiles.stream()
-                    .filter(file -> "SKILL.md".equals(file.path()))
-                    .findFirst()
-                    .map(file -> ChecksumUtil.sha256(skillPackageService.normalizeText(file.content())))
-                    .orElse(null);
-            boolean packageChecksumMatches = metadataChecksumRaw.equals(actualChecksum);
-            boolean legacyChecksumMatches = legacySkillMdChecksum != null && metadataChecksumRaw.equals(legacySkillMdChecksum);
-            if (!packageChecksumMatches && !legacyChecksumMatches) {
-                throw new ValidationException("checksum mismatch for package " + canonicalName);
+            if (verifyChecksum) {
+                String metadataChecksumRaw = normalizeChecksum(stringValue(metadata.get("checksum")));
+                if (metadataChecksumRaw == null) {
+                    throw new ValidationException("metadata checksum is required");
+                }
+                String legacySkillMdChecksum = packageFiles.stream()
+                        .filter(file -> "SKILL.md".equals(file.path()))
+                        .findFirst()
+                        .map(file -> ChecksumUtil.sha256(skillPackageService.normalizeText(file.content())))
+                        .orElse(null);
+                boolean packageChecksumMatches = metadataChecksumRaw.equals(actualChecksum);
+                boolean legacyChecksumMatches = legacySkillMdChecksum != null && metadataChecksumRaw.equals(legacySkillMdChecksum);
+                if (!packageChecksumMatches && !legacyChecksumMatches) {
+                    throw new ValidationException("checksum mismatch for package " + canonicalName);
+                }
             }
             metadataChecksum = actualChecksum;
             content = packageFiles.stream()
@@ -228,13 +231,17 @@ public class CatalogService {
                 throw new ValidationException("Missing content file: " + contentFileName);
             }
             content = readText(contentPath);
-            metadataChecksum = normalizeChecksum(stringValue(metadata.get("checksum")));
-            if (metadataChecksum == null) {
-                throw new ValidationException("metadata checksum is required");
-            }
             String actualChecksum = ChecksumUtil.sha256(content);
-            if (!metadataChecksum.equals(actualChecksum)) {
-                throw new ValidationException("checksum mismatch for " + contentFileName);
+            if (verifyChecksum) {
+                metadataChecksum = normalizeChecksum(stringValue(metadata.get("checksum")));
+                if (metadataChecksum == null) {
+                    throw new ValidationException("metadata checksum is required");
+                }
+                if (!metadataChecksum.equals(actualChecksum)) {
+                    throw new ValidationException("checksum mismatch for " + contentFileName);
+                }
+            } else {
+                metadataChecksum = actualChecksum;
             }
         }
 

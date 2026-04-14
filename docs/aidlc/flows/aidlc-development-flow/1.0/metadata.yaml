@@ -7,9 +7,9 @@ description: >
   Standard development cycle: requirements clarification + document, workflow planning,
   functional design, NFR requirements, code generation plan + execution, and build/test
   instructions. Does not include workspace detection or reverse engineering.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - development

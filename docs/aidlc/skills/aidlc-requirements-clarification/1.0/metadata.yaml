@@ -6,9 +6,9 @@ display_name: "AIDLC: Requirements Clarification Questions"
 description: >
   Analyze the user request, classify it, identify all ambiguities, and generate
   a structured question file with [Answer]: tags before requirements are written.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

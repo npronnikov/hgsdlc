@@ -6,9 +6,9 @@ display_name: "AIDLC: Requirements Document Generation"
 description: >
   Read answered clarification questions and produce a structured requirements.md
   covering FR, API, DM, AUTH, TEST sections with file/class references.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

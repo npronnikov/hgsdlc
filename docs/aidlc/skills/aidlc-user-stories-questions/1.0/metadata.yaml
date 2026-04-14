@@ -6,9 +6,9 @@ display_name: "AIDLC: User Stories Planning Questions"
 description: >
   Review approved requirements and generate story-planning questions covering
   personas, granularity, format, and acceptance criteria approach.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

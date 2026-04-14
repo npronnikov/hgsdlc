@@ -6,9 +6,9 @@ display_name: "AIDLC: Units Decomposition Questions"
 description: >
   Generate decomposition-planning questions covering unit boundaries, deployment
   model, inter-unit dependencies, and team ownership before unit generation.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - inception

@@ -6,9 +6,9 @@ display_name: "AIDLC: NFR Requirements"
 description: >
   Assess scalability, performance, availability, security, reliability, and
   maintainability for a unit; produce nfr-requirements.md and tech-stack-decisions.md.
-coding_agent: claude
+coding_agent: qwen
 team_code: AIDLC
-platform_code: ANY
+platform_code: BACK
 tags:
   - aidlc
   - construction

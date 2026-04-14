@@ -84,6 +84,7 @@ export default function Settings() {
         agent_settings_json_enabled: Boolean(data?.agent_settings_json_enabled),
         catalog_repo_url: data?.catalog_repo_url || DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: data?.catalog_default_branch || 'main',
+        catalog_verify_checksum: data?.catalog_verify_checksum ?? true,
         git_username: data?.git_username || '',
         git_password_or_pat: data?.git_password_or_pat || '',
         local_git_username: data?.local_git_username || '',
@@ -107,6 +108,7 @@ export default function Settings() {
         agent_settings_json_enabled: false,
         catalog_repo_url: DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: 'main',
+        catalog_verify_checksum: true,
         git_username: '',
         git_password_or_pat: '',
         local_git_username: '',
@@ -214,6 +216,7 @@ export default function Settings() {
         body: JSON.stringify({
           catalog_repo_url: values.catalog_repo_url,
           catalog_default_branch: values.catalog_default_branch,
+          catalog_verify_checksum: values.catalog_verify_checksum ?? true,
           git_username: values.git_username,
           git_password_or_pat: values.git_password_or_pat,
           local_git_username: values.local_git_username,
@@ -501,6 +504,17 @@ export default function Settings() {
                 extra="Branch used for catalog synchronization and publication."
               >
                 <Input placeholder="main" />
+              </Form.Item>
+              <Form.Item
+                label="Checksum validation"
+                extra="If Off, checksum mismatches are ignored during catalog repair; only schema-required fields are validated."
+              >
+                <Space size={8}>
+                  <Text type="secondary">Verify Checksum</Text>
+                  <Form.Item name="catalog_verify_checksum" valuePropName="checked" noStyle>
+                    <Switch checkedChildren="On" unCheckedChildren="Off" />
+                  </Form.Item>
+                </Space>
               </Form.Item>
             </div>
             <Title level={5} style={{ marginTop: 8 }}>Remote Authentication Settings</Title>
