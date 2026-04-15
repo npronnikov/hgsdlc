@@ -95,6 +95,7 @@ public abstract class RuntimeIntegrationTestBase {
         settingsService.updateCatalogSettings(
                 catalogRepoUrl == null ? "" : catalogRepoUrl,
                 "main",
+                true,
                 "pr",
                 "",
                 "",
