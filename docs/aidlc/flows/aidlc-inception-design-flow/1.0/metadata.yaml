@@ -1,0 +1,27 @@
+entity_type: flow
+id: aidlc-inception-design-flow
+version: "1.0"
+canonical_name: aidlc-inception-design-flow@1.0
+display_name: "AIDLC: Inception Design (User Stories → App Design → Units → Workflow Plan)"
+description: >
+  Picks up after Requirements Analysis. Produces user stories, personas,
+  application design, units-of-work decomposition, and workflow execution plan.
+  Each stage has human Q&A and an approval gate. Reads requirements.md from
+  project scope. No state or audit tracking.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - user-stories
+  - application-design
+  - units-decomposition
+  - workflow-planning
+flow_kind: analysis
+risk_level: low
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/flows/aidlc-inception-design-flow/1.0"

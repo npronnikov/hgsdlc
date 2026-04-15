@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Card, Col, Empty, Form, Input, Modal, Popconfirm,
+  Alert, Button, Card, Col, Empty, Form, Input, Modal, Popconfirm,
   Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd';
 import { DeleteOutlined, ExperimentOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
@@ -9,6 +9,17 @@ import StatusTag from '../components/StatusTag.jsx';
 import { apiRequest } from '../api/request.js';
 
 const { Title, Text, Paragraph } = Typography;
+const CODING_AGENT_OPTIONS = [
+  { value: 'qwen', label: 'qwen' },
+  { value: 'gigacode', label: 'gigacode' },
+  { value: 'claude', label: 'claude' },
+];
+
+function normalizeCodingAgent(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/_/g, '-');
+  return normalized || null;
+}
 
 function formatDate(value) {
   if (!value) return '—';
@@ -37,6 +48,7 @@ export default function Benchmark() {
   const [projects, setProjects] = useState([]);
   const [skills, setSkills] = useState([]);
   const [rules, setRules] = useState([]);
+  const [runtimeCodingAgent, setRuntimeCodingAgent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState(null);
@@ -52,18 +64,46 @@ export default function Benchmark() {
   const [runModalCase, setRunModalCase] = useState(null);
   const [startingRun, setStartingRun] = useState(false);
   const [runForm] = Form.useForm();
+  const caseFormCodingAgent = Form.useWatch('coding_agent', caseForm);
+  const runFormCodingAgent = Form.useWatch('coding_agent', runForm);
+
+  const resolveArtifactCodingAgent = (type, artifactId) => {
+    if (!type || !artifactId) return null;
+    if (type === 'SKILL') {
+      const skill = skills.find((item) => item.skill_id === artifactId || item.canonical_name === artifactId);
+      return normalizeCodingAgent(skill?.coding_agent);
+    }
+    if (type === 'RULE') {
+      const rule = rules.find((item) => item.rule_id === artifactId || item.canonical_name === artifactId);
+      return normalizeCodingAgent(rule?.coding_agent);
+    }
+    return null;
+  };
+
+  const inferCaseCodingAgent = (benchCase) => {
+    if (!benchCase?.artifact_type) return null;
+    const artifactAgentA = resolveArtifactCodingAgent(benchCase.artifact_type, benchCase.artifact_id);
+    const artifactAgentB = resolveArtifactCodingAgent(benchCase.artifact_type, benchCase.artifact_id_b);
+    return artifactAgentA || artifactAgentB || null;
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const [casesData, runsData, projectsData] = await Promise.all([
+      const [casesData, runsData, projectsData, settingsData, skillsData, rulesData] = await Promise.all([
         apiRequest('/benchmark/cases'),
         apiRequest('/benchmark/runs'),
         apiRequest('/projects'),
+        apiRequest('/settings/runtime'),
+        apiRequest('/skills'),
+        apiRequest('/rules'),
       ]);
       setCases(Array.isArray(casesData) ? casesData : []);
       setRuns(Array.isArray(runsData) ? runsData : []);
       setProjects(Array.isArray(projectsData) ? projectsData : []);
+      setRuntimeCodingAgent(normalizeCodingAgent(settingsData?.coding_agent));
+      setSkills(Array.isArray(skillsData) ? skillsData : []);
+      setRules(Array.isArray(rulesData) ? rulesData : []);
     } catch (err) {
       message.error(err.message || 'Failed to load benchmark data');
     } finally {
@@ -73,23 +113,28 @@ export default function Benchmark() {
 
   useEffect(() => { load(); }, []);
 
-  // Load artifacts when artifact type changes in New Case form
-  const loadArtifacts = async (type) => {
-    if (!type) { setSkills([]); setRules([]); return; }
-    try {
-      const data = await apiRequest(type === 'SKILL' ? '/skills' : '/rules');
-      if (type === 'SKILL') setSkills(Array.isArray(data) ? data : []);
-      else setRules(Array.isArray(data) ? data : []);
-    } catch (_) {}
-  };
-
-  const artifactOptions = artifactType === 'SKILL'
-    ? skills.map((s) => ({ value: s.skill_id, label: `${s.skill_id}${s.name ? ` — ${s.name}` : ''}` }))
-    : rules.map((r) => ({ value: r.rule_id, label: `${r.rule_id}${r.title ? ` — ${r.title}` : ''}` }));
+  const artifactOptions = useMemo(() => {
+    const selectedAgent = normalizeCodingAgent(caseFormCodingAgent);
+    if (artifactType === 'SKILL') {
+      return skills
+        .filter((s) => !selectedAgent || normalizeCodingAgent(s.coding_agent) === selectedAgent)
+        .map((s) => ({
+          value: s.skill_id,
+          label: `${s.skill_id}${s.name ? ` — ${s.name}` : ''}${s.coding_agent ? ` [${s.coding_agent}]` : ''}`,
+        }));
+    }
+    return rules
+      .filter((r) => !selectedAgent || normalizeCodingAgent(r.coding_agent) === selectedAgent)
+      .map((r) => ({
+        value: r.rule_id,
+        label: `${r.rule_id}${r.title ? ` — ${r.title}` : ''}${r.coding_agent ? ` [${r.coding_agent}]` : ''}`,
+      }));
+  }, [artifactType, skills, rules, caseFormCodingAgent]);
 
   const handleCreateCase = async (values) => {
     setCreating(true);
     try {
+      const selectedAgent = normalizeCodingAgent(values.coding_agent);
       await apiRequest('/benchmark/cases', {
         method: 'POST',
         body: JSON.stringify({
@@ -103,6 +148,12 @@ export default function Benchmark() {
         }),
       });
       message.success('Benchmark case created');
+      if (values.artifact_type && selectedAgent && runtimeCodingAgent && selectedAgent !== runtimeCodingAgent) {
+        message.warning(
+          `Runtime coding_agent is "${runtimeCodingAgent}". Benchmark run with "${selectedAgent}" will fail (CODING_AGENT_MISMATCH).`,
+          6,
+        );
+      }
       setCaseModalOpen(false);
       caseForm.resetFields();
       setArtifactType(null);
@@ -127,10 +178,12 @@ export default function Benchmark() {
   const openRunModal = (bc) => {
     setRunModalCase(bc);
     const proj = projects.find((p) => p.id === bc.project_id);
+    const inferredCodingAgent = inferCaseCodingAgent(bc);
     runForm.setFieldsValue({
       instruction: bc.instruction,
       project_id: bc.project_id,
       repo_url: proj?.repo_url || '',
+      coding_agent: inferredCodingAgent || runtimeCodingAgent || undefined,
     });
     setRunModalOpen(true);
   };
@@ -138,15 +191,22 @@ export default function Benchmark() {
   const handleStartRun = async (values) => {
     setStartingRun(true);
     try {
+      const selectedAgent = normalizeCodingAgent(values.coding_agent);
       const run = await apiRequest('/benchmark/runs', {
         method: 'POST',
         body: JSON.stringify({
           case_id: runModalCase.id,
           instruction_override: values.instruction !== runModalCase.instruction ? values.instruction : null,
           project_id_override: values.project_id !== runModalCase.project_id ? values.project_id : null,
-          coding_agent: null,
+          coding_agent: selectedAgent,
         }),
       });
+      if (selectedAgent && runtimeCodingAgent && selectedAgent !== runtimeCodingAgent) {
+        message.warning(
+          `Runtime coding_agent is "${runtimeCodingAgent}". Run with "${selectedAgent}" may fail (CODING_AGENT_MISMATCH).`,
+          6,
+        );
+      }
       message.success('Benchmark run started');
       setRunModalOpen(false);
       navigate(`/benchmark/${run.id}`);
@@ -391,7 +451,10 @@ export default function Benchmark() {
               setArtifactType(changed.artifact_type || null);
               caseForm.setFieldValue('artifact_id', undefined);
               caseForm.setFieldValue('artifact_id_b', undefined);
-              loadArtifacts(changed.artifact_type);
+            }
+            if (changed.coding_agent !== undefined) {
+              caseForm.setFieldValue('artifact_id', undefined);
+              caseForm.setFieldValue('artifact_id_b', undefined);
             }
           }}
         >
@@ -408,6 +471,32 @@ export default function Benchmark() {
               ]}
             />
           </Form.Item>
+          <Form.Item
+            label="Coding agent"
+            name="coding_agent"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (getFieldValue('artifact_type') && !value) {
+                    return Promise.reject(new Error('Coding agent is required when artifact type is selected'));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <Select allowClear placeholder="Select coding agent" options={CODING_AGENT_OPTIONS} />
+          </Form.Item>
+          {normalizeCodingAgent(caseFormCodingAgent)
+            && runtimeCodingAgent
+            && normalizeCodingAgent(caseFormCodingAgent) !== runtimeCodingAgent && (
+              <Alert
+                showIcon
+                type="warning"
+                style={{ marginBottom: 16 }}
+                message={`Runtime coding_agent is "${runtimeCodingAgent}". Benchmark run with "${normalizeCodingAgent(caseFormCodingAgent)}" will fail (CODING_AGENT_MISMATCH).`}
+              />
+          )}
           {artifactType && (
             <Form.Item label={artifactType === 'SKILL' ? 'Skill A' : 'Rule A'} name="artifact_id">
               <Select
@@ -466,6 +555,23 @@ export default function Benchmark() {
         destroyOnClose
       >
         <Form form={runForm} layout="vertical" onFinish={handleStartRun} style={{ marginTop: 16 }}>
+          <Form.Item
+            label="Coding agent"
+            name="coding_agent"
+            rules={[{ required: true, message: 'Coding agent is required' }]}
+          >
+            <Select options={CODING_AGENT_OPTIONS} />
+          </Form.Item>
+          {normalizeCodingAgent(runFormCodingAgent)
+            && runtimeCodingAgent
+            && normalizeCodingAgent(runFormCodingAgent) !== runtimeCodingAgent && (
+              <Alert
+                showIcon
+                type="warning"
+                style={{ marginBottom: 16 }}
+                message={`Runtime coding_agent is "${runtimeCodingAgent}". Run with "${normalizeCodingAgent(runFormCodingAgent)}" will fail (CODING_AGENT_MISMATCH).`}
+              />
+          )}
           <Form.Item label="Project" name="project_id">
             <Select
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
