@@ -42,7 +42,6 @@ function generateIdempotencyKey() {
   }
   return `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
-}
 
 export default function RunLaunch() {
   const navigate = useNavigate();
