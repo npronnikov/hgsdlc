@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-workspace-detection
+version: "1.0"
+canonical_name: aidlc-workspace-detection@1.0
+display_name: "AIDLC: Workspace Detection"
+description: >
+  Scan project workspace to determine brownfield vs greenfield, resume existing
+  AIDLC session if present, and create aidlc-state.md as the tracking file.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - workspace-detection
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-workspace-detection/1.0"

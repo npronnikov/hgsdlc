@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-user-stories-generate
+version: "1.0"
+canonical_name: aidlc-user-stories-generate@1.0
+display_name: "AIDLC: User Stories Generation"
+description: >
+  Generate INVEST-compliant user stories (stories.md) and user personas
+  (personas.md) from answered story-planning questions and approved requirements.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - user-stories
+skill_kind: code
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-user-stories-generate/1.0"

@@ -1,0 +1,23 @@
+entity_type: skill
+id: aidlc-reverse-engineering
+version: "1.0"
+canonical_name: aidlc-reverse-engineering@1.0
+display_name: "AIDLC: Reverse Engineering"
+description: >
+  Analyze an existing codebase and produce the full set of AIDLC RE artifacts:
+  business overview, architecture, code structure, API docs, component inventory,
+  tech stack, dependencies, and code quality assessment.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - reverse-engineering
+  - brownfield
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-reverse-engineering/1.0"

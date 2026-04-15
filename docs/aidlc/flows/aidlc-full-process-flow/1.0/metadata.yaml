@@ -1,0 +1,25 @@
+entity_type: flow
+id: aidlc-full-process-flow
+version: "1.0"
+canonical_name: aidlc-full-process-flow@1.0
+display_name: "AIDLC: Full Process (inception → construction)"
+description: >
+  Complete AIDLC pipeline without the operations phase. Covers workspace detection,
+  reverse engineering, requirements analysis, user stories, workflow planning,
+  application design, units decomposition, functional design, NFR requirements,
+  code generation, and build/test instructions. Every stage has a human gate.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - full-cycle
+  - inception
+  - construction
+flow_kind: delivery
+risk_level: high
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/flows/aidlc-full-process-flow/1.0"

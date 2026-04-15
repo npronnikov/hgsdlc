@@ -103,6 +103,7 @@ public class SettingsController {
         SettingsService.RuntimeSettings updated = settingsService.updateCatalogSettings(
                 request.catalogRepoUrl(),
                 request.catalogDefaultBranch(),
+                request.catalogVerifyChecksum(),
                 request.publishMode(),
                 request.gitSshPrivateKey(),
                 request.gitSshPublicKey(),
@@ -151,7 +152,7 @@ public class SettingsController {
                 s.workspaceRoot(), s.codingAgent(), s.aiTimeoutSeconds(), s.promptLanguage(), s.agentLaunchCommand(),
                 s.agentInitCommand(), s.autoInitWhenNoRule(),
                 s.agentSettingsJson(), s.agentSettingsJsonTemplate(), s.agentSettingsJsonEnabled(),
-                s.catalogRepoUrl(), s.catalogDefaultBranch(), s.publishMode(),
+                s.catalogRepoUrl(), s.catalogDefaultBranch(), s.catalogVerifyChecksum(), s.publishMode(),
                 s.gitSshPrivateKey(), s.gitSshPublicKey(), s.gitSshPassphrase(),
                 s.gitCertificate(), s.gitCertificateKey(), s.gitUsername(), s.gitPasswordOrPat(),
                 s.localGitUsername(), s.localGitEmail(), s.updatedAt(), s.updatedBy()
@@ -185,6 +186,7 @@ public class SettingsController {
             @JsonProperty("agent_settings_json_enabled") boolean agentSettingsJsonEnabled,
             @JsonProperty("catalog_repo_url") String catalogRepoUrl,
             @JsonProperty("catalog_default_branch") String catalogDefaultBranch,
+            @JsonProperty("catalog_verify_checksum") boolean catalogVerifyChecksum,
             @JsonProperty("publish_mode") String publishMode,
             @JsonProperty("git_ssh_private_key") String gitSshPrivateKey,
             @JsonProperty("git_ssh_public_key") String gitSshPublicKey,
@@ -212,6 +214,7 @@ public class SettingsController {
     public record CatalogSettingsRequest(
             @JsonProperty("catalog_repo_url") String catalogRepoUrl,
             @JsonProperty("catalog_default_branch") String catalogDefaultBranch,
+            @JsonProperty("catalog_verify_checksum") Boolean catalogVerifyChecksum,
             @JsonProperty("publish_mode") String publishMode,
             @JsonProperty("git_ssh_private_key") String gitSshPrivateKey,
             @JsonProperty("git_ssh_public_key") String gitSshPublicKey,

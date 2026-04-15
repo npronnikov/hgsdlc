@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-application-design-artifacts
+version: "1.0"
+canonical_name: aidlc-application-design-artifacts@1.0
+display_name: "AIDLC: Application Design Artifacts"
+description: >
+  Generate consolidated application-design.md from answered design questions:
+  component definitions, method signatures, service layer, and dependency map.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - application-design
+skill_kind: code
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-application-design-artifacts/1.0"

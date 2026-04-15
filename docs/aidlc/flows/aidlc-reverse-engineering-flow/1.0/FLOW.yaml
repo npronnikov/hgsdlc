@@ -1,0 +1,125 @@
+id: aidlc-reverse-engineering-flow
+version: "1.0"
+canonical_name: aidlc-reverse-engineering-flow@1.0
+title: AIDLC Reverse Engineering (brownfield codebase analysis)
+description: >
+  Detects workspace type (brownfield / greenfield) and — if an existing codebase is
+  found — produces the full suite of AIDLC reverse-engineering artifacts: business
+  overview, architecture, code structure, API documentation, component inventory,
+  technology stack, dependency map, and code quality assessment.
+  The human gate ensures the artifacts are accurate before any subsequent
+  development flow starts.
+start_node_id: ai-workspace-detection
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+
+nodes:
+
+  # ── Step 1: Detect workspace type ─────────────────────────────────────────
+  - id: ai-workspace-detection
+    title: Detect workspace type and bootstrap state tracking
+    type: ai
+    checkpoint_before_run: false
+    execution_context: []
+    instruction: |
+      Scan the project workspace to determine whether it is a brownfield (existing
+      code) or greenfield (empty) project.
+
+      Follow the attached skill precisely:
+      - Check for an existing aidlc-docs/aidlc-state.md (resume if found).
+      - Scan source files and build descriptors in the workspace root.
+      - Classify as Greenfield or Brownfield.
+      - Create aidlc-docs/aidlc-state.md with workspace findings and stage progress.
+
+      Save the result to aidlc-docs/aidlc-state.md.
+    skill_refs:
+      - aidlc-workspace-detection@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/aidlc-state.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: ai-reverse-engineering
+    on_failure: terminal-complete
+
+  # ── Step 2: Analyse codebase and produce RE artifacts ─────────────────────
+  - id: ai-reverse-engineering
+    title: Reverse-engineer existing codebase
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-workspace-detection
+        path: aidlc-docs/aidlc-state.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Perform a comprehensive reverse-engineering analysis of the existing codebase.
+
+      Follow the attached skill precisely to produce ALL of the following artifacts
+      in aidlc-docs/inception/reverse-engineering/:
+        - business-overview.md
+        - architecture.md
+        - code-structure.md
+        - api-documentation.md
+        - component-inventory.md
+        - technology-stack.md
+        - dependencies.md
+        - code-quality-assessment.md
+
+      Update aidlc-docs/aidlc-state.md to mark Reverse Engineering as complete.
+
+      If the workspace is greenfield (no existing code), create a brief
+      aidlc-docs/inception/reverse-engineering/business-overview.md noting
+      "Greenfield project — no existing codebase to analyse."
+    skill_refs:
+      - aidlc-reverse-engineering@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/reverse-engineering/business-overview.md
+        required: true
+        modifiable: false
+      - scope: run
+        path: aidlc-docs/inception/reverse-engineering/architecture.md
+        required: false
+        modifiable: false
+      - scope: run
+        path: aidlc-docs/inception/reverse-engineering/technology-stack.md
+        required: false
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-reverse-engineering
+    on_failure: terminal-complete
+
+  # ── Gate: Review reverse engineering artifacts ────────────────────────────
+  - id: approve-reverse-engineering
+    title: Review and approve reverse-engineering artifacts
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review the reverse-engineering artifacts at:
+        aidlc-docs/inception/reverse-engineering/
+
+      Verify that:
+      - business-overview.md accurately describes the business domain
+      - architecture.md correctly maps all packages and their relationships
+      - api-documentation.md lists all relevant endpoints and contracts
+      - technology-stack.md reflects the actual stack in use
+      - code-quality-assessment.md identifies real technical debt
+
+      Approve to complete this flow, or request rework with specific corrections.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: terminal-complete
+    on_rework:
+      next_node: ai-reverse-engineering
+
+  # ── Terminal ──────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Reverse engineering complete
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

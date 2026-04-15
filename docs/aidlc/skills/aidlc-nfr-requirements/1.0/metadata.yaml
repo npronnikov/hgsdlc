@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-nfr-requirements
+version: "1.0"
+canonical_name: aidlc-nfr-requirements@1.0
+display_name: "AIDLC: NFR Requirements"
+description: >
+  Assess scalability, performance, availability, security, reliability, and
+  maintainability for a unit; produce nfr-requirements.md and tech-stack-decisions.md.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - construction
+  - nfr
+  - tech-stack
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-nfr-requirements/1.0"

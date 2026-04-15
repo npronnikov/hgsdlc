@@ -2,6 +2,7 @@ package ru.hgd.sdlc.rule.domain;
 
 public enum RuleProvider {
     QWEN,
+    GIGACODE,
     CLAUDE;
 
     public static RuleProvider from(String value) {

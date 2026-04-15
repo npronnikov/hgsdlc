@@ -1,0 +1,23 @@
+entity_type: flow
+id: form-questions-md-flow
+version: "0.1"
+canonical_name: form-questions-md-flow@0.1
+display_name: "Dопросы и ответы MD"
+description: "Минимальный тестовый флоу для проверки функционала human-form: AI генерирует questions.form.json, пользователь заполняет форму в gate UI, заполненный файл сохраняется с выбранными ответами.
+"
+coding_agent: "qwen"
+team_code: "Zonder Team"
+platform_code: "FRONT"
+tags: []
+flow_kind: ''
+risk_level: ''
+scope: "organization"
+approved_by: ''
+approved_at: ''
+published_at: ''
+source_ref: "main"
+source_path: "flows/form-questions-md-flow/0.1"
+lifecycle_status: active
+forked_from: ''
+forked_by: ''
+checksum: "224d8e569f587350ea6a68710c4a206301512d787e8437af0c948ed7c36b285b"

@@ -26,6 +26,7 @@ public class SettingsService {
     public static final String PROMPT_LANGUAGE_KEY = "runtime.prompt_language";
     public static final String CATALOG_REPO_URL_KEY = "catalog.repo_url";
     public static final String CATALOG_DEFAULT_BRANCH_KEY = "catalog.default_branch";
+    public static final String CATALOG_VERIFY_CHECKSUM_KEY = "catalog.verify_checksum";
     public static final String CATALOG_PUBLISH_MODE_KEY = "catalog.publish_mode";
     public static final String CATALOG_GIT_SSH_PRIVATE_KEY = "catalog.git.ssh_private_key";
     public static final String CATALOG_GIT_SSH_PUBLIC_KEY = "catalog.git.ssh_public_key";
@@ -44,6 +45,7 @@ public class SettingsService {
     private static final String DEFAULT_PROMPT_LANGUAGE = "en";
     private static final String DEFAULT_CATALOG_REPO_URL = "";
     private static final String DEFAULT_CATALOG_DEFAULT_BRANCH = "";
+    private static final boolean DEFAULT_CATALOG_VERIFY_CHECKSUM = true;
     private static final String DEFAULT_CATALOG_PUBLISH_MODE = "pr";
 
     private final SystemSettingRepository repository;
@@ -182,6 +184,15 @@ public class SettingsService {
                 .orElse(DEFAULT_CATALOG_DEFAULT_BRANCH);
     }
 
+    public boolean isCatalogVerifyChecksum() {
+        return repository.findById(CATALOG_VERIFY_CHECKSUM_KEY)
+                .map(SystemSetting::getSettingValue)
+                .map(String::trim)
+                .filter((value) -> !value.isBlank())
+                .map(Boolean::parseBoolean)
+                .orElse(DEFAULT_CATALOG_VERIFY_CHECKSUM);
+    }
+
     // ---- Runtime settings — updates ----
 
     public SystemSetting updateWorkspaceRoot(String workspaceRoot, String actorId) {
@@ -290,6 +301,7 @@ public class SettingsService {
         Optional<SystemSetting> aiTimeoutSetting    = getAiTimeoutSecondsSetting();
         Optional<SystemSetting> catalogRepoUrl      = repository.findById(CATALOG_REPO_URL_KEY);
         Optional<SystemSetting> catalogBranch       = repository.findById(CATALOG_DEFAULT_BRANCH_KEY);
+        Optional<SystemSetting> catalogVerifyChecksum = repository.findById(CATALOG_VERIFY_CHECKSUM_KEY);
         Optional<SystemSetting> publishMode         = repository.findById(CATALOG_PUBLISH_MODE_KEY);
         Optional<SystemSetting> sshPrivate          = repository.findById(CATALOG_GIT_SSH_PRIVATE_KEY);
         Optional<SystemSetting> sshPublic           = repository.findById(CATALOG_GIT_SSH_PUBLIC_KEY);
@@ -312,7 +324,7 @@ public class SettingsService {
         Optional<SystemSetting> agentSettingsJsonEnabledSetting = getRuntimeAgentSettingsJsonEnabledSetting(effectiveCodingAgent);
         SystemSetting latestSetting = latestOf(
                 workspaceSetting.orElse(null), codingAgentSetting.orElse(null), aiTimeoutSetting.orElse(null),
-                catalogRepoUrl.orElse(null), catalogBranch.orElse(null), publishMode.orElse(null),
+                catalogRepoUrl.orElse(null), catalogBranch.orElse(null), catalogVerifyChecksum.orElse(null), publishMode.orElse(null),
                 sshPrivate.orElse(null), sshPublic.orElse(null), sshPass.orElse(null),
                 cert.orElse(null), certKey.orElse(null), gitUser.orElse(null), gitPassword.orElse(null),
                 localGitUser.orElse(null), localGitEmail.orElse(null), promptLanguageSetting.orElse(null),
@@ -333,6 +345,7 @@ public class SettingsService {
                 isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
                 catalogRepoUrl.map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 catalogBranch.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
+                catalogVerifyChecksum.map(SystemSetting::getSettingValue).map(Boolean::parseBoolean).orElse(DEFAULT_CATALOG_VERIFY_CHECKSUM),
                 publishMode.map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
                 sshPrivate.map(SystemSetting::getSettingValue).orElse(""),
                 sshPublic.map(SystemSetting::getSettingValue).orElse(""),
@@ -427,6 +440,7 @@ public class SettingsService {
                 normalizedSettingsJsonEnabled,
                 repository.findById(CATALOG_REPO_URL_KEY).map(SystemSetting::getSettingValue).filter((value) -> !value.isBlank()).orElse(DEFAULT_CATALOG_REPO_URL),
                 repository.findById(CATALOG_DEFAULT_BRANCH_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_DEFAULT_BRANCH),
+                repository.findById(CATALOG_VERIFY_CHECKSUM_KEY).map(SystemSetting::getSettingValue).map(Boolean::parseBoolean).orElse(DEFAULT_CATALOG_VERIFY_CHECKSUM),
                 repository.findById(CATALOG_PUBLISH_MODE_KEY).map(SystemSetting::getSettingValue).orElse(DEFAULT_CATALOG_PUBLISH_MODE),
                 repository.findById(CATALOG_GIT_SSH_PRIVATE_KEY).map(SystemSetting::getSettingValue).orElse(""),
                 repository.findById(CATALOG_GIT_SSH_PUBLIC_KEY).map(SystemSetting::getSettingValue).orElse(""),
@@ -446,6 +460,7 @@ public class SettingsService {
     public RuntimeSettings updateCatalogSettings(
             String catalogRepoUrl,
             String catalogDefaultBranch,
+            Boolean catalogVerifyChecksum,
             String publishMode,
             String gitSshPrivateKey,
             String gitSshPublicKey,
@@ -461,6 +476,11 @@ public class SettingsService {
         String effectiveCodingAgent = getRuntimeCodingAgent();
         SystemSetting repo      = upsert(CATALOG_REPO_URL_KEY, catalogRepoUrl == null ? "" : catalogRepoUrl.trim(), actorId);
         SystemSetting branch    = upsert(CATALOG_DEFAULT_BRANCH_KEY, normalizeBranch(catalogDefaultBranch), actorId);
+        SystemSetting verifyChecksum = upsert(
+                CATALOG_VERIFY_CHECKSUM_KEY,
+                Boolean.toString(catalogVerifyChecksum != null ? catalogVerifyChecksum : isCatalogVerifyChecksum()),
+                actorId
+        );
         SystemSetting mode      = upsert(CATALOG_PUBLISH_MODE_KEY, normalizePublishMode(publishMode), actorId);
         SystemSetting sshPr     = upsert(CATALOG_GIT_SSH_PRIVATE_KEY, gitSshPrivateKey == null ? "" : gitSshPrivateKey, actorId);
         SystemSetting sshPb     = upsert(CATALOG_GIT_SSH_PUBLIC_KEY, gitSshPublicKey == null ? "" : gitSshPublicKey, actorId);
@@ -471,7 +491,7 @@ public class SettingsService {
         SystemSetting pass      = upsert(CATALOG_GIT_PASSWORD_KEY, gitPasswordOrPat == null ? "" : gitPasswordOrPat, actorId);
         SystemSetting localUser = upsert(CATALOG_LOCAL_GIT_USERNAME_KEY, normalizeLocalGitUsername(localGitUsername), actorId);
         SystemSetting localEmail = upsert(CATALOG_LOCAL_GIT_EMAIL_KEY, normalizeLocalGitEmail(localGitEmail), actorId);
-        SystemSetting latest    = latestOf(repo, branch, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass, localUser, localEmail);
+        SystemSetting latest    = latestOf(repo, branch, verifyChecksum, mode, sshPr, sshPb, sshPs, cert, certKey, user, pass, localUser, localEmail);
         return new RuntimeSettings(
                 getWorkspaceRoot(),
                 effectiveCodingAgent,
@@ -485,6 +505,7 @@ public class SettingsService {
                 isRuntimeAgentSettingsJsonEnabled(effectiveCodingAgent),
                 repo.getSettingValue(),
                 branch.getSettingValue(),
+                Boolean.parseBoolean(verifyChecksum.getSettingValue()),
                 mode.getSettingValue(),
                 sshPr.getSettingValue(),
                 sshPb.getSettingValue(),
@@ -632,6 +653,9 @@ public class SettingsService {
         if ("claude".equals(codingAgent)) {
             return "runtime/agent-settings-json/claude.settings.json";
         }
+        if ("gigacode".equals(codingAgent)) {
+            return "runtime/agent-settings-json/gigacode.settings.json";
+        }
         return "runtime/agent-settings-json/qwen.settings.json";
     }
 
@@ -640,6 +664,9 @@ public class SettingsService {
         if ("claude".equals(normalized)) {
             return "claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}";
         }
+        if ("gigacode".equals(normalized)) {
+            return "gigacode -p {{PROMPT}} --approval-mode auto-edit --output-format stream-json --include-partial-messages";
+        }
         return "qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}";
     }
 
@@ -647,6 +674,9 @@ public class SettingsService {
         String normalized = normalizeCodingAgent(codingAgent);
         if ("claude".equals(normalized)) {
             return "claude -p \"/init\" --permission-mode acceptEdits";
+        }
+        if ("gigacode".equals(normalized)) {
+            return "gigacode -p \"/init\" --approval-mode auto-edit";
         }
         return "qwen -p \"/init\" --approval-mode yolo";
     }
@@ -694,6 +724,7 @@ public class SettingsService {
             boolean agentSettingsJsonEnabled,
             String catalogRepoUrl,
             String catalogDefaultBranch,
+            boolean catalogVerifyChecksum,
             String publishMode,
             String gitSshPrivateKey,
             String gitSshPublicKey,

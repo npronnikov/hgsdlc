@@ -42,6 +42,7 @@ function generateIdempotencyKey() {
   }
   return `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+}
 
 export default function RunLaunch() {
   const navigate = useNavigate();
@@ -68,20 +69,24 @@ export default function RunLaunch() {
           apiRequest('/projects'),
           apiRequest('/flows'),
         ]);
-        setProjects(projectData || []);
+        const activeProjects = (projectData || []).filter(
+          (project) => (project?.status || '').toLowerCase() === 'active'
+        );
+        setProjects(activeProjects);
         const publishedFlows = (flowData || []).filter(
           (flow) => flow.status === 'published' && (!flow.lifecycle_status || flow.lifecycle_status === 'active')
         );
         setFlows(publishedFlows);
 
         const paramProjectId = searchParams.get('projectId');
-        const initialProjectId = paramProjectId || projectData?.[0]?.id || null;
+        const paramProjectIsActive = activeProjects.some((project) => project.id === paramProjectId);
+        const initialProjectId = paramProjectIsActive ? paramProjectId : activeProjects?.[0]?.id || null;
         setSelectedProjectId(initialProjectId);
 
         setSelectedFlowId(null);
         setSelectedFlowCanonical(null);
 
-        const initialProject = (projectData || []).find((project) => project.id === initialProjectId);
+        const initialProject = activeProjects.find((project) => project.id === initialProjectId);
         form.setFieldsValue({
           project_id: initialProjectId || undefined,
           target_branch: initialProject?.default_branch || 'main',

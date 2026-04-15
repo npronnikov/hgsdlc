@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-units-decomposition-questions
+version: "1.0"
+canonical_name: aidlc-units-decomposition-questions@1.0
+display_name: "AIDLC: Units Decomposition Questions"
+description: >
+  Generate decomposition-planning questions covering unit boundaries, deployment
+  model, inter-unit dependencies, and team ownership before unit generation.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - units-decomposition
+  - planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-units-decomposition-questions/1.0"

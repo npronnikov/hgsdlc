@@ -1,0 +1,23 @@
+entity_type: skill
+id: aidlc-build-and-test
+version: "1.0"
+canonical_name: aidlc-build-and-test@1.0
+display_name: "AIDLC: Build and Test"
+description: >
+  Produce build-instructions.md, unit-test-instructions.md,
+  integration-test-instructions.md, and build-and-test-summary.md
+  covering all generated units.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - construction
+  - build
+  - testing
+skill_kind: code
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-build-and-test/1.0"

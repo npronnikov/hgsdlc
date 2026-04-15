@@ -28,6 +28,9 @@ function defaultAgentLaunchCommand(agent) {
   if (normalized === 'claude') {
     return 'claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}}';
   }
+  if (normalized === 'gigacode') {
+    return 'gigacode -p {{PROMPT}} --approval-mode auto-edit --output-format stream-json --include-partial-messages';
+  }
   return 'qwen --approval-mode yolo --channel CI --output-format stream-json --include-partial-messages {{PROMPT}}';
 }
 
@@ -36,6 +39,9 @@ function defaultAgentInitCommand(agent) {
   if (normalized === 'claude') {
     return 'claude -p "/init" --permission-mode acceptEdits';
   }
+  if (normalized === 'gigacode') {
+    return 'gigacode -p "/init" --approval-mode auto-edit';
+  }
   return 'qwen -p "/init" --approval-mode yolo';
 }
 
@@ -43,6 +49,9 @@ function defaultAgentSettingsJsonTemplate(agent) {
   const normalized = String(agent || '').trim().toLowerCase();
   if (normalized === 'claude') {
     return '{\n  "agent": "claude",\n  "dangerously_skip_permissions": true,\n  "output_format": "stream-json"\n}\n';
+  }
+  if (normalized === 'gigacode') {
+    return '{\n  "agent": "gigacode",\n  "approval_mode": "auto-edit",\n  "output_format": "stream-json",\n  "include_partial_messages": true\n}\n';
   }
   return '{\n  "agent": "qwen",\n  "approval_mode": "yolo",\n  "channel": "CI",\n  "output_format": "stream-json",\n  "include_partial_messages": true\n}\n';
 }
@@ -75,6 +84,7 @@ export default function Settings() {
         agent_settings_json_enabled: Boolean(data?.agent_settings_json_enabled),
         catalog_repo_url: data?.catalog_repo_url || DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: data?.catalog_default_branch || 'main',
+        catalog_verify_checksum: data?.catalog_verify_checksum ?? true,
         git_username: data?.git_username || '',
         git_password_or_pat: data?.git_password_or_pat || '',
         local_git_username: data?.local_git_username || '',
@@ -98,6 +108,7 @@ export default function Settings() {
         agent_settings_json_enabled: false,
         catalog_repo_url: DEFAULT_CATALOG_REPO_URL,
         catalog_default_branch: 'main',
+        catalog_verify_checksum: true,
         git_username: '',
         git_password_or_pat: '',
         local_git_username: '',
@@ -205,6 +216,7 @@ export default function Settings() {
         body: JSON.stringify({
           catalog_repo_url: values.catalog_repo_url,
           catalog_default_branch: values.catalog_default_branch,
+          catalog_verify_checksum: values.catalog_verify_checksum ?? true,
           git_username: values.git_username,
           git_password_or_pat: values.git_password_or_pat,
           local_git_username: values.local_git_username,
@@ -304,6 +316,7 @@ export default function Settings() {
               <Select
                 options={[
                   { value: 'qwen', label: 'qwen' },
+                  { value: 'gigacode', label: 'gigacode' },
                   { value: 'claude', label: 'claude' },
                 ]}
               />
@@ -491,6 +504,17 @@ export default function Settings() {
                 extra="Branch used for catalog synchronization and publication."
               >
                 <Input placeholder="main" />
+              </Form.Item>
+              <Form.Item
+                label="Checksum validation"
+                extra="If Off, checksum mismatches are ignored during catalog repair; only schema-required fields are validated."
+              >
+                <Space size={8}>
+                  <Text type="secondary">Verify Checksum</Text>
+                  <Form.Item name="catalog_verify_checksum" valuePropName="checked" noStyle>
+                    <Switch checkedChildren="On" unCheckedChildren="Off" />
+                  </Form.Item>
+                </Space>
               </Form.Item>
             </div>
             <Title level={5} style={{ marginTop: 8 }}>Remote Authentication Settings</Title>

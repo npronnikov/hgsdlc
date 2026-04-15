@@ -1,0 +1,22 @@
+entity_type: skill
+id: aidlc-code-generation-plan
+version: "1.0"
+canonical_name: aidlc-code-generation-plan@1.0
+display_name: "AIDLC: Code Generation Plan"
+description: >
+  Analyse all unit design artifacts and produce a numbered, checkbox-driven
+  code-generation-plan.md with exact file paths, layer order, and story traceability.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - construction
+  - code-generation
+  - planning
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-code-generation-plan/1.0"

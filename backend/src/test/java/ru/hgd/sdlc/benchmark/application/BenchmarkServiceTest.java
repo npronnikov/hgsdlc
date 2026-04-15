@@ -88,7 +88,7 @@ class BenchmarkServiceTest {
                 .id(UUID.randomUUID())
                 .ruleId("rule-a")
                 .canonicalName("rule-a@1.0")
-                .codingAgent(RuleProvider.CLAUDE)
+                .codingAgent(RuleProvider.GIGACODE)
                 .status(RuleStatus.PUBLISHED)
                 .build();
 
@@ -104,7 +104,7 @@ class BenchmarkServiceTest {
 
         BenchmarkRunEntity run = service.startRun(caseId, null, null, null, "tester");
 
-        Assertions.assertEquals("claude", run.getCodingAgent());
+        Assertions.assertEquals("gigacode", run.getCodingAgent());
     }
 
     @Test
@@ -164,14 +164,14 @@ class BenchmarkServiceTest {
                 .id(UUID.randomUUID())
                 .ruleId("rule-a")
                 .canonicalName("rule-a@1.0")
-                .codingAgent(RuleProvider.CLAUDE)
+                .codingAgent(RuleProvider.GIGACODE)
                 .status(RuleStatus.PUBLISHED)
                 .build();
         RuleVersion ruleB = RuleVersion.builder()
                 .id(UUID.randomUUID())
                 .ruleId("rule-b")
                 .canonicalName("rule-b@1.0")
-                .codingAgent(RuleProvider.QWEN)
+                .codingAgent(RuleProvider.CLAUDE)
                 .status(RuleStatus.PUBLISHED)
                 .build();
 

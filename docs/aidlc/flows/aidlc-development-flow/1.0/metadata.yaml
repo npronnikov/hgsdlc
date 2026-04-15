@@ -1,0 +1,24 @@
+entity_type: flow
+id: aidlc-development-flow
+version: "1.0"
+canonical_name: aidlc-development-flow@1.0
+display_name: "AIDLC: Development (requirements → design → code → test)"
+description: >
+  Standard development cycle: requirements clarification + document, workflow planning,
+  functional design, NFR requirements, code generation plan + execution, and build/test
+  instructions. Does not include workspace detection or reverse engineering.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - development
+  - requirements
+  - code-generation
+flow_kind: delivery
+risk_level: medium
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/flows/aidlc-development-flow/1.0"

@@ -1,0 +1,21 @@
+entity_type: skill
+id: aidlc-functional-design
+version: "1.0"
+canonical_name: aidlc-functional-design@1.0
+display_name: "AIDLC: Functional Design"
+description: >
+  Technology-agnostic business logic design per unit: domain entities, business
+  rules, data flow, and optionally frontend component structure.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - construction
+  - functional-design
+skill_kind: analysis
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/skills/aidlc-functional-design/1.0"

@@ -2,138 +2,141 @@
 
 ## Суть
 
-В human gate пользователь может задать агенту вопрос о сделанных изменениях: почему изменена именно эта строка, что означает этот паттерн, почему выбрано такое решение. Агент продолжает **ту же Claude-сессию** в которой выполнял задачу — он помнит контекст и может читать файлы проекта.
+В human gate пользователь может задать агенту вопрос о сделанных изменениях: почему изменена именно эта строка, что означает этот паттерн, почему выбрано такое решение. Агент отвечает в режиме **read-only консультанта** — не модифицирует файлы, не выполняет команды, только отвечает.
 
-Чат является сессией: каждый вопрос подключается к той же сессии через `--resume sessionId`.
+Чат является сессией: агент видит весь предыдущий диалог при каждом ответе.
 
 ---
 
 ## 1. Хранение диалога
 
-Новая таблица `gate_chat_message`:
+### Вариант A: новая таблица `gate_chat_message` (рекомендуется)
 
 ```sql
 gate_chat_message(
     id           UUID PRIMARY KEY,
-    gate_id      UUID NOT NULL REFERENCES gate_instances(id),
+    gate_id      UUID NOT NULL REFERENCES gate_instance(id),
     role         VARCHAR(8) NOT NULL,  -- 'user' | 'agent'
     content      TEXT NOT NULL,
     created_at   TIMESTAMP NOT NULL
 )
 ```
 
+**Плюсы:**
+- Диалог сохраняется при обновлении страницы и виден с любого устройства
+- История не раздувает `payloadJson` gate-а
+- Легко подгружать только последние N сообщений при росте диалога
+
 **API:**
 - `GET /api/gates/{gateId}/chat` — получить историю чата
 - `POST /api/gates/{gateId}/ask` → `{question, selectedDiff?}` → `{answer, messageId}`
+
+### Вариант B: встроить в `payloadJson` gate-а
+
+Добавить поле `chatMessages: [{role, content, createdAt}]` в существующий JSON.
+
+**Плюсы:** нет новой таблицы, проще миграция.
+**Минусы:** payload может вырасти до нескольких МБ при длинном диалоге; плохо работает с оптимистичной блокировкой при concurrent запросах.
+
+**Вывод:** Вариант A чище. Вариант B допустим для MVP если хочется минимума изменений.
 
 ---
 
 ## 2. Как агент понимает, что за изменения сделаны
 
-Агент подключается к той же Claude-сессии (`--resume sessionId`), в которой выполнял задачу — он уже имеет полный контекст выполненной работы и может читать файлы проекта.
+### Что передавать в промпт
 
-### Источник session ID
+Агент **не получает доступ к файловой системе** — это главная защита от непреднамеренных изменений. Весь контекст передаётся как текст в промпте.
 
-`GateInstance.nodeExecutionId` → `NodeExecutionEntity.agentSessionId`
-
-- Если `agentSessionId != null` — подключаемся через `--resume sessionId`
-- Если `agentSessionId == null` (нода не запускала агент) — запускаем новую сессию без `--resume`
-
-### Что передавать в промпте ask-режима
+В промпте ask-режима агент получает:
 
 | Блок | Источник |
 |------|----------|
-| Инструкция ноды (что должно быть сделано) | `nodeExecution` → `NodeModel.instruction` |
+| Инструкция ноды (что должно быть сделано) | `nodeExecution.nodeInstruction` |
+| Git-diff всех изменений в рамках рана | `GET /gates/{gateId}/changes` + `GET /gates/{gateId}/diff?path=...` |
+| Workflow progress (что делали предыдущие шаги) | существующий механизм `WorkflowProgressEntry` |
 | Выделенный фрагмент diff-а (опционально) | выбор пользователя в UI |
 | История диалога | `gate_chat_message` для этого gate |
 | Текущий вопрос | ввод пользователя |
+
+Git-diff для ask получаем теми же эндпоинтами, что и для отображения в UI — они уже есть. Если diff большой (>50KB) — передаём только summary + файлы, к которым есть вопрос.
+
+**При наличии `agentSessionId`** (режим `--resume`): агент уже имеет историю выполнения задачи в памяти сессии. Git diff в промпт **всё равно включается** — как явный anchor, чтобы агент не опирался только на своё «воспоминание» об изменениях.
 
 ---
 
 ## 3. Базовый промпт агента (ask-mode)
 
-Два файла шаблонов: `ask-prompt-template.en.md` и `ask-prompt-template.ru.md`.
-Язык выбирается по настройке `runtime.prompt_language` (как для обычных промптов).
-
-### Английская версия
-
 ```
-## ASK MODE
-You are answering questions about the coding task you just completed.
-You have full access to the project files for reference.
+## ROLE
+You are a software development assistant in READ-ONLY consultation mode.
+You have just completed a coding task as part of an automated workflow.
+A human reviewer is asking you questions about the changes you made.
+
+STRICT CONSTRAINTS:
+- You MUST NOT modify any files.
+- You MUST NOT run any shell commands.
+- You MUST NOT use any tools that write to disk or execute code.
+- You can ONLY answer questions by producing plain text.
 
 ## TASK THAT WAS EXECUTED
-{NODE_INSTRUCTION}
+{node_instruction}
+
+## WORKFLOW CONTEXT (previous steps)
+{workflow_progress}
+
+## CHANGES MADE (git diff)
+{git_diff}
+
+{selected_diff_block}
 
 ## CONVERSATION SO FAR
-{CHAT_HISTORY}
+{chat_history}
 
 ## CURRENT QUESTION
-{QUESTION}
+{user_question}
 
-{SELECTED_DIFF_SECTION}
-
-Answer concisely. Quote specific code fragments when relevant.
+Answer concisely. If the question refers to a specific code fragment, quote it.
+Do not suggest further changes unless explicitly asked.
 ```
 
-### Русская версия
-
+Блок `{selected_diff_block}` добавляется только если пользователь выделил фрагмент:
 ```
-## РЕЖИМ ВОПРОС
-Ты отвечаешь на вопросы о задаче, которую только что выполнил.
-У тебя есть полный доступ к файлам проекта для справки.
-
-## ВЫПОЛНЕННАЯ ЗАДАЧА
-{NODE_INSTRUCTION}
-
-## ИСТОРИЯ ДИАЛОГА
-{CHAT_HISTORY}
-
-## ТЕКУЩИЙ ВОПРОС
-{QUESTION}
-
-{SELECTED_DIFF_SECTION}
-
-Отвечай кратко. Цитируй конкретные фрагменты кода когда это уместно.
-```
-
-Блок `{SELECTED_DIFF_SECTION}` добавляется только если пользователь выделил фрагмент:
-
-**EN:**
-```
-## SELECTED CODE FRAGMENT (user is asking about this specifically)
-{SELECTED_DIFF}
-```
-
-**RU:**
-```
-## ВЫДЕЛЕННЫЙ ФРАГМЕНТ (пользователь спрашивает именно об этом)
-{SELECTED_DIFF}
+## SELECTED FRAGMENT (user is asking about this specifically)
+{selected_diff}
 ```
 
 ---
 
-## 4. CLI-команда запуска
+## 4. Защита от изменений файлов
 
-```
-claude --dangerously-skip-permissions --output-format text -p {{PROMPT_FILE}} --resume 'SESSION_ID'
-```
+Три слоя:
 
-Отличия от обычного запуска:
-- `--output-format text` вместо `stream-json` — ответ читается напрямую как plain text из stdout
-- `--resume 'SESSION_ID'` — продолжение той же сессии
-- Рабочая директория = `projectRoot` (агент может читать файлы)
-- Никакого `STEP_SUMMARY:` маркера не ожидается
+1. **Промпт**: явные инструкции NOT to use tools / NOT to write files (выше)
+2. **Нет рабочей директории**: агент в ask-режиме запускается **без** `--add-dir` / `--workspace` флагов — ему физически не передаётся путь к проекту. Всё содержимое идёт через промпт-файл. **Важно:** `--resume` возобновляет историю диалога, но не восстанавливает рабочую директорию — без `--add-dir` агенту некуда писать.
+3. **Парсинг ответа**: ответ агента читается как plain text. Никакого `STEP_SUMMARY:` маркера не ожидается и не обрабатывается — сервер не ищет его в stdout.
 
-Если `agentSessionId == null` — команда без `--resume`.
+Таким образом, даже если агент попытается вызвать file-write инструменты — ему некуда писать.
 
 ---
 
 ## 5. История для агента (контекст сессии)
 
-Поскольку агент запускается через `--resume`, история всего предыдущего диалога уже находится в памяти сессии Claude. Дополнительная история из `gate_chat_message` передаётся в промпте в блоке `{CHAT_HISTORY}` как plain text, чтобы агент видел именно вопросы пользователя в этом UI-чате.
+В каждый запрос к агенту передаётся полная история диалога:
 
-При первом вопросе (история пустая) блок `{CHAT_HISTORY}` опускается.
+```
+## CONVERSATION SO FAR
+
+User: Почему ты изменил импорт в строке 12?
+Agent: Старый импорт использовал устаревший API...
+
+User: А почему не использовал named import?
+Agent: ...
+```
+
+При росте диалога (>10 сообщений) — можно сжать старые сообщения до краткого резюме и передавать последние 6–8 полных сообщений. Сжатие опционально для первой версии.
+
+Контекст запуска (feature request, node instruction, git diff) передаётся **каждый раз** — он не меняется в рамках сессии.
 
 ---
 
@@ -192,52 +195,71 @@ Instant createdAt
 ### Новый сервис `GateAskService`
 
 ```java
-AskResult ask(UUID gateId, String question, @Nullable String selectedDiff) {
-    GateInstanceEntity gate = ...;
-    NodeExecutionEntity nodeExecution = ...;
-    RunEntity run = ...;
+AskAnswerResult ask(UUID gateId, String question, String selectedDiff, User user) {
+    GateInstance gate = ...;
+    List<ChatMessage> history = chatRepo.findByGateIdOrderByCreatedAt(gateId);
 
-    String sessionId = nodeExecution.getAgentSessionId();  // может быть null
-    List<GateChatMessageEntity> history = chatRepo.findByGateIdOrderByCreatedAtAsc(gateId);
+    String diff = buildDiffContext(gate);          // собрать git diff из changes API
+    String prompt = buildAskPrompt(gate, diff, selectedDiff, history, question);
 
-    String prompt = buildAskPrompt(nodeExecution, history, question, selectedDiff);
+    String answer = invokeAgentReadOnly(gate.getRunId(), prompt);  // без рабочей директории
 
-    // Записываем prompt-файл в .hgsdlc/ask/{gateId}/
-    // Запускаем claude --output-format text -p promptFile [--resume sessionId]
-    ProcessExecutionResult result = processPort.execute(...);
+    chatRepo.save(new GateChatMessage(gateId, "user", question));
+    chatRepo.save(new GateChatMessage(gateId, "agent", answer));
 
-    String answer = result.stdout().trim();
-
-    chatRepo.save(new GateChatMessageEntity(gateId, "user", question));
-    chatRepo.save(new GateChatMessageEntity(gateId, "agent", answer));
-
-    return new AskResult(answer);
+    return new AskAnswerResult(answer);
 }
 ```
 
 ### Новые эндпоинты
 
 ```
-GET  /api/gates/{gateId}/chat         → List<ChatMessageResponse>
+GET  /api/gates/{gateId}/chat         → List<ChatMessageDto>
 POST /api/gates/{gateId}/ask          → {question, selectedDiff?} → {answer}
 ```
 
-### Расположение файлов ask-сессии
+### Подключение к существующей сессии агента
 
-Prompt, stdout и stderr пишутся в:
+Ask-агент **подключается к той же Claude-сессии**, в которой выполнялась нода. Это даёт агенту полный контекст всего, что он делал — без необходимости пересылать git diff вручную.
+
+**Источник session ID:**
+- `GateInstance` → `nodeExecutionId` → `NodeExecutionEntity.agentSessionId`
+- Если у ноды `agentSessionId == null` (нода не запускала агент) — fallback на передачу diff в промпте, без `--resume`
+
+**CLI-команда:**
 ```
-{runWorkspaceRoot}/.hgsdlc/ask/{gateId}/{uuid}.prompt.md
-{runWorkspaceRoot}/.hgsdlc/ask/{gateId}/{uuid}.stdout.log
-{runWorkspaceRoot}/.hgsdlc/ask/{gateId}/{uuid}.stderr.log
+claude --dangerously-skip-permissions --output-format stream-json -p {{PROMPT}} --resume 'SESSION_ID'
 ```
+
+Флаг `--resume` (а не `--session-id`) означает продолжение существующей беседы с сохранённой историей.
+
+**Без рабочей директории:** запуск без `--add-dir` / `--workspace` — агенту физически не передаётся путь к проекту. Всё содержимое идёт через промпт-файл. Даже при возобновлённой сессии агент находится в read-only режиме благодаря инструкции в промпте и отсутствию рабочей директории.
+
+**В `GateAskService`:**
+```java
+String sessionId = nodeExecutionRepo
+    .findById(gate.getNodeExecutionId())
+    .map(NodeExecutionEntity::getAgentSessionId)
+    .orElse(null);
+
+// sessionId != null → --resume sessionId
+// sessionId == null → обычный запуск без сессии, diff идёт в промпте
+String answer = invokeAgentReadOnly(prompt, sessionId);
+```
+
+**В `ClaudeCodingAgentStrategy`** добавить метод `askAgent(String promptText, @Nullable String sessionId)`:
+- Строит команду из дефолтного launch command (без подстановки `{{PROJECT_ROOT}}`)
+- Если `sessionId != null` — дописывает `--resume 'sessionId'`
+- Не передаёт `--add-dir` / рабочую директорию
 
 ---
 
 ## 8. Открытые вопросы
 
-| Вопрос | Решение для v1 |
-|--------|----------------|
-| Таймаут ask-запроса | Тот же `ai_timeout_seconds` из настроек |
-| Параллельные вопросы | Не блокируем на бэкенде; UI блокирует поле пока агент отвечает |
-| Read-only после закрытия gate | Фронт проверяет `gate.status` и показывает чат как readonly |
-| Защита от записи файлов | Не реализуем в v1 |
+| Вопрос | Варианты |
+|--------|----------|
+| Таймаут ask-запроса | 30–60 сек (ответ на вопрос быстрее полного запуска ноды) |
+| Максимальный размер diff в промпте | 50KB — если больше, truncate + предупреждение |
+| Сжатие истории диалога | Для v1 — нет (передаём всё); для v2 — резюмировать старые сообщения |
+| Параллельные вопросы | Один вопрос за раз — UI блокирует поле пока агент отвечает |
+| Аудит | Вопросы не аудируются (как указано в требованиях), только ответы сохраняются в БД |
