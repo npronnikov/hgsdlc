@@ -1611,6 +1611,38 @@ export default function BenchmarkRun() {
         width={460}
         open={verdictOpen}
         onClose={() => setVerdictOpen(false)}
+        footer={isWaiting && canOpenVerdict ? (
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Text className="muted">Verdict</Text>
+            <Text type="secondary">{verdictPrompt}</Text>
+            <div className="benchmark-verdict-actions">
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={() => submitVerdict('SKILL_USEFUL')}
+                loading={submitting}
+                style={{ background: '#52c41a', borderColor: '#52c41a' }}
+              >
+                {verdictApproveLabel}
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => submitVerdict('SKILL_NOT_HELPFUL')}
+                loading={submitting}
+              >
+                {verdictRejectLabel}
+              </Button>
+              <Button
+                icon={<MinusCircleOutlined />}
+                onClick={() => submitVerdict('NEUTRAL')}
+                loading={submitting}
+              >
+                {verdictNeutralLabel}
+              </Button>
+            </div>
+          </Space>
+        ) : null}
       >
         {canOpenVerdict ? (
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -1727,40 +1759,6 @@ export default function BenchmarkRun() {
               </Text>
             )}
 
-            {isWaiting && (
-              <>
-                <Text className="muted">Verdict</Text>
-                <Text type="secondary">
-                  {verdictPrompt}
-                </Text>
-                <div className="benchmark-verdict-actions">
-                  <Button
-                    type="primary"
-                    icon={<CheckCircleOutlined />}
-                    onClick={() => submitVerdict('SKILL_USEFUL')}
-                    loading={submitting}
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                  >
-                    {verdictApproveLabel}
-                  </Button>
-                  <Button
-                    danger
-                    icon={<CloseCircleOutlined />}
-                    onClick={() => submitVerdict('SKILL_NOT_HELPFUL')}
-                    loading={submitting}
-                  >
-                    {verdictRejectLabel}
-                  </Button>
-                  <Button
-                    icon={<MinusCircleOutlined />}
-                    onClick={() => submitVerdict('NEUTRAL')}
-                    loading={submitting}
-                  >
-                    {verdictNeutralLabel}
-                  </Button>
-                </div>
-              </>
-            )}
 
             {isCompleted && (
               <>

@@ -2,6 +2,7 @@ package ru.hgd.sdlc.runtime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -25,6 +27,7 @@ import ru.hgd.sdlc.runtime.domain.GateStatus;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
+import ru.hgd.sdlc.runtime.infrastructure.NodeExecutionRepository;
 import ru.hgd.sdlc.runtime.support.RuntimeIntegrationTestBase;
 
 @SpringBootTest
@@ -32,6 +35,9 @@ import ru.hgd.sdlc.runtime.support.RuntimeIntegrationTestBase;
 @ActiveProfiles("test")
 @Import(RuntimeIntegrationTestConfig.class)
 class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
+    @Autowired
+    private NodeExecutionRepository nodeExecutionRepository;
+
     private String token;
     private Project project;
 
@@ -252,6 +258,103 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
         Assertions.assertEquals(1, completed.getPrNumber());
     }
 
+    @Test
+    void aiValidationFailureRetryCreatesNewAttempt() throws Exception {
+        var flow = createPublishedFlow(
+                "ai-validation-retry-flow",
+                aiValidationFailureFlowYaml("ai-validation-retry-flow"),
+                "ai-start"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Retry validation failure");
+        RunEntity failed = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+
+        Assertions.assertEquals(RunStatus.FAILED, failed.getStatus());
+        Assertions.assertEquals("NODE_VALIDATION_FAILED", failed.getErrorCode());
+
+        // Verify exactly one AI execution with attempt_no=1 failed
+        List<ru.hgd.sdlc.runtime.domain.NodeExecutionEntity> nodesBefore =
+                nodeExecutionRepository.findByRunIdOrderByStartedAtAsc(runId);
+        Assertions.assertEquals(1, nodesBefore.size());
+        Assertions.assertEquals(1, nodesBefore.get(0).getAttemptNo());
+        Assertions.assertEquals("ai", nodesBefore.get(0).getNodeKind());
+        Assertions.assertEquals("failed", nodesBefore.get(0).getStatus().name().toLowerCase());
+
+        // Retry
+        mockMvc.perform(post("/api/runs/{runId}/retry", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("running"));
+
+        // Wait for second attempt to fail (same cause — stub won't change README.md)
+        RunEntity failedAgain = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+        Assertions.assertEquals(RunStatus.FAILED, failedAgain.getStatus());
+        Assertions.assertEquals("NODE_VALIDATION_FAILED", failedAgain.getErrorCode());
+
+        // Verify second attempt has attempt_no=2
+        List<ru.hgd.sdlc.runtime.domain.NodeExecutionEntity> nodesAfter =
+                nodeExecutionRepository.findByRunIdOrderByStartedAtAsc(runId);
+        Assertions.assertEquals(2, nodesAfter.size());
+        Assertions.assertEquals(1, nodesAfter.get(0).getAttemptNo());
+        Assertions.assertEquals(2, nodesAfter.get(1).getAttemptNo());
+        Assertions.assertEquals("ai", nodesAfter.get(1).getNodeKind());
+        Assertions.assertEquals("ai-start", nodesAfter.get(1).getNodeId());
+
+        // Verify audit event run_retry_requested present
+        MvcResult auditResult = mockMvc.perform(get("/api/runs/{runId}/audit", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode events = parseJson(readBody(auditResult));
+        boolean hasRetryAudit = false;
+        for (JsonNode event : events) {
+            if ("run_retry_requested".equals(event.path("event_type").asText())) {
+                hasRetryAudit = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(hasRetryAudit, "Expected run_retry_requested audit event");
+    }
+
+    @Test
+    void aiValidationFailureGiveUpCompletesViaOnFailurePath() throws Exception {
+        var flow = createPublishedFlow(
+                "ai-validation-give-up-flow",
+                aiValidationFailureFlowYaml("ai-validation-give-up-flow"),
+                "ai-start"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Give up validation failure");
+        RunEntity failed = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+
+        Assertions.assertEquals(RunStatus.FAILED, failed.getStatus());
+        Assertions.assertEquals("NODE_VALIDATION_FAILED", failed.getErrorCode());
+
+        // Give up — flow should transition to terminal-fail and complete
+        mockMvc.perform(post("/api/runs/{runId}/give-up", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("running"));
+
+        RunEntity completed = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.COMPLETED);
+        Assertions.assertEquals(RunStatus.COMPLETED, completed.getStatus());
+
+        // Verify audit event run_give_up_requested present
+        MvcResult auditResult = mockMvc.perform(get("/api/runs/{runId}/audit", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode events = parseJson(readBody(auditResult));
+        boolean hasGiveUpAudit = false;
+        for (JsonNode event : events) {
+            if ("run_give_up_requested".equals(event.path("event_type").asText())) {
+                hasGiveUpAudit = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(hasGiveUpAudit, "Expected run_give_up_requested audit event");
+    }
+
     private GateInstanceEntity waitForDifferentGate(UUID runId, UUID previousGateId, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
@@ -448,6 +551,53 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
                 nodes:
                   - id: complete
                     title: Terminal
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+                """.formatted(flowId, flowId);
+    }
+
+    private String aiValidationFailureFlowYaml(String flowId) {
+        return """
+                id: %s
+                version: "1.0"
+                canonical_name: %s@1.0
+                title: AI Validation Failure Flow
+                description: AI node fails because required expected_mutation is not produced by stub
+                status: published
+                start_node_id: ai-start
+                rule_refs: []
+                fail_on_missing_declared_output: true
+                fail_on_missing_expected_mutation: true
+
+                nodes:
+                  - id: ai-start
+                    title: AI Start
+                    type: ai
+                    checkpoint_before_run: false
+                    execution_context: []
+                    instruction: |
+                      Write summary (no mutation will be produced by stub)
+                    skill_refs: []
+                    produced_artifacts: []
+                    expected_mutations:
+                      - scope: project
+                        path: README.md
+                        required: true
+                    on_success: terminal
+                    on_failure: terminal-fail
+                    allow_retry: true
+
+                  - id: terminal
+                    title: Terminal
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+
+                  - id: terminal-fail
+                    title: Terminal Failure
                     type: terminal
                     execution_context: []
                     produced_artifacts: []

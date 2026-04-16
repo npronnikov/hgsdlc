@@ -46,6 +46,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: User answers clarifying questions ───────────────────────────────
   - id: human-answer-questions
@@ -106,6 +107,7 @@ nodes:
     expected_mutations: []
     on_success: approve-requirements
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Review and approve requirements ─────────────────────────────────
   - id: approve-requirements

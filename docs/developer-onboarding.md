@@ -607,11 +607,14 @@ stateDiagram-v2
     RUNNING --> WAITING_PUBLISH : terminal-нода (success-ветка)
     WAITING_PUBLISH --> COMPLETED : publish succeeded
     WAITING_PUBLISH --> PUBLISH_FAILED : publish error
-    PUBLISH_FAILED --> WAITING_PUBLISH : retry
+    PUBLISH_FAILED --> WAITING_PUBLISH : POST /api/runs/{runId}/publish/retry
     RUNNING --> FAILED : terminal (failure-ветка)\nили unrecoverable error
+    FAILED --> RUNNING : POST /api/runs/{runId}/retry\nnote: only when error_code == NODE_VALIDATION_FAILED\nand failed node is AI
     RUNNING --> CANCELLED : user cancel
     WAITING_GATE --> CANCELLED : user cancel
 ```
+
+> **Retry AI node validation** (`POST /api/runs/{runId}/retry`): доступен только когда `run.status=FAILED` и `run.error_code=NODE_VALIDATION_FAILED` и последняя failed нода имеет `node_kind=ai`. Создаёт новый `node_execution` с `attempt_no = previous + 1`. `run_id` не меняется.
 
 **Ключевые поля RunEntity:**
 

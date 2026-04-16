@@ -225,6 +225,146 @@ class RuntimeApiContractTest extends RuntimeIntegrationTestBase {
                 .andExpect(jsonPath("$.current_gate.payload.rework_discard_unavailable_reason").value("target_checkpoint_not_found"));
     }
 
+    @Test
+    void retryAiValidationReturnsRunningOnValidState() throws Exception {
+        var flow = createPublishedFlow(
+                "retry-contract-flow",
+                aiValidationFailureFlowYaml("retry-contract-flow"),
+                "ai-start"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Retry contract");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+
+        mockMvc.perform(post("/api/runs/{runId}/retry", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.run_id").isString())
+                .andExpect(jsonPath("$.status").value("running"))
+                .andExpect(jsonPath("$.resource_version").isNumber());
+    }
+
+    @Test
+    void giveUpAiValidationReturnsRunningOnValidState() throws Exception {
+        var flow = createPublishedFlow(
+                "give-up-contract-flow",
+                aiValidationFailureFlowYaml("give-up-contract-flow"),
+                "ai-start"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Give up contract");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+
+        mockMvc.perform(post("/api/runs/{runId}/give-up", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.run_id").isString())
+                .andExpect(jsonPath("$.status").value("running"))
+                .andExpect(jsonPath("$.resource_version").isNumber());
+    }
+
+    @Test
+    void giveUpAiValidationReturns409WhenRunNotFailed() throws Exception {
+        var flow = createPublishedFlow(
+                "give-up-reject-flow",
+                terminalOnlyFlowYaml("give-up-reject-flow"),
+                "complete"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Give up reject contract");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.COMPLETED);
+
+        mockMvc.perform(post("/api/runs/{runId}/give-up", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void retryAiValidationReturns409WhenRunNotFailed() throws Exception {
+        var flow = createPublishedFlow(
+                "retry-reject-flow",
+                terminalOnlyFlowYaml("retry-reject-flow"),
+                "complete"
+        );
+
+        UUID runId = createRunViaApi(token, project.getId(), flow.getCanonicalName(), "Retry reject contract");
+        waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.COMPLETED);
+
+        mockMvc.perform(post("/api/runs/{runId}/retry", runId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+    }
+
+    private String aiValidationFailureFlowYaml(String flowId) {
+        return """
+                id: %s
+                version: "1.0"
+                canonical_name: %s@1.0
+                title: AI Validation Failure Flow
+                description: AI node fails because required expected_mutation is not produced by stub
+                status: published
+                start_node_id: ai-start
+                rule_refs: []
+                fail_on_missing_declared_output: true
+                fail_on_missing_expected_mutation: true
+
+                nodes:
+                  - id: ai-start
+                    title: AI Start
+                    type: ai
+                    checkpoint_before_run: false
+                    execution_context: []
+                    instruction: |
+                      Write summary (no mutation will be produced by stub)
+                    skill_refs: []
+                    produced_artifacts: []
+                    expected_mutations:
+                      - scope: project
+                        path: README.md
+                        required: true
+                    on_success: terminal
+                    on_failure: terminal-fail
+                    allow_retry: true
+
+                  - id: terminal
+                    title: Terminal
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+
+                  - id: terminal-fail
+                    title: Terminal Failure
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+                """.formatted(flowId, flowId);
+    }
+
+    private String terminalOnlyFlowYaml(String flowId) {
+        return """
+                id: %s
+                version: "1.0"
+                canonical_name: %s@1.0
+                title: Terminal Flow
+                description: Runtime terminal-only flow
+                status: published
+                start_node_id: complete
+                rule_refs: []
+                fail_on_missing_declared_output: true
+                fail_on_missing_expected_mutation: true
+
+                nodes:
+                  - id: complete
+                    title: Terminal
+                    type: terminal
+                    execution_context: []
+                    produced_artifacts: []
+                    expected_mutations: []
+                """.formatted(flowId, flowId);
+    }
+
     private String contractFlowYaml(String flowId) {
         return """
                 id: %s

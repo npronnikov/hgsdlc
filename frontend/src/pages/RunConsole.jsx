@@ -8,6 +8,7 @@ import {
   Empty,
   Input,
   List,
+  Modal,
   Row,
   Select,
   Space,
@@ -1054,6 +1055,52 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
   };
 
+  const latestFailedAiNode = nodes
+    .filter((n) => n.status === 'failed' && n.node_kind === 'ai' && n.error_code === 'NODE_VALIDATION_FAILED')
+    .sort((a, b) => b.attempt_no - a.attempt_no)[0] || null;
+
+  const canRetryAiValidation = run != null
+    && run.status === 'failed'
+    && run.error_code === 'NODE_VALIDATION_FAILED'
+    && latestFailedAiNode !== null;
+
+  const retryAiValidation = () => {
+    Modal.confirm({
+      title: 'Retry AI node attempt?',
+      content: 'Runtime will start a new attempt on the same AI node with the same instruction and inputs.',
+      okText: 'Retry',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await apiRequest(`/runs/${runId}/retry`, { method: 'POST' });
+          message.success('Retry requested');
+          await load();
+        } catch (err) {
+          message.error(err.message || 'Failed to retry');
+        }
+      },
+    });
+  };
+
+  const giveUpAiValidation = () => {
+    Modal.confirm({
+      title: 'Give up and continue via on_failure path?',
+      content: 'Runtime will skip the AI node and continue the flow through the on_failure transition.',
+      okText: 'Give up',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await apiRequest(`/runs/${runId}/give-up`, { method: 'POST' });
+          message.success('Continuing via on_failure path');
+          await load();
+        } catch (err) {
+          message.error(err.message || 'Failed to give up');
+        }
+      },
+    });
+  };
+
   if (!run) {
     return <Card loading={loading} />;
   }
@@ -1094,6 +1141,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
           {run.status === 'publish_failed' && (
             <Button type="primary" onClick={retryPublish}>
               Retry publish
+            </Button>
+          )}
+          {canRetryAiValidation && (
+            <Button type="primary" onClick={retryAiValidation} icon={<ReloadOutlined />}>
+              Retry AI node
+            </Button>
+          )}
+          {canRetryAiValidation && (
+            <Button danger onClick={giveUpAiValidation}>
+              Give up
             </Button>
           )}
           <Button

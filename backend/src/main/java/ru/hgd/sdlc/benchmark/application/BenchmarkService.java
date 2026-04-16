@@ -533,6 +533,8 @@ public class BenchmarkService {
                 .instruction(instruction)
                 .skillRefs(skillRefs.isEmpty() ? null : skillRefs)
                 .onSuccess("approval_node")
+                .onFailure("end_node")
+                .allowRetry(true)
                 .build();
 
         NodeModel approvalNode = NodeModel.builder()

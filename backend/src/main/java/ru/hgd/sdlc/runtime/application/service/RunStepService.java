@@ -180,6 +180,10 @@ public class RunStepService {
                 return false;
             }
             if ("ai".equals(nodeKind) && node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
+                if (Boolean.TRUE.equals(node.getAllowRetry()) && "NODE_VALIDATION_FAILED".equals(ex.errorCode)) {
+                    failRun(run, ex.errorCode, ex.getMessage());
+                    return false;
+                }
                 applyTransition(run, execution, null, node.getOnFailure(), "on_failure");
                 return true;
             }

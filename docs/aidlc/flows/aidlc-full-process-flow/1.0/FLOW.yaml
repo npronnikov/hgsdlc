@@ -40,6 +40,7 @@ nodes:
     expected_mutations: []
     on_success: ai-reverse-engineering
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: ai-reverse-engineering
     title: Reverse-engineer existing codebase
@@ -74,6 +75,7 @@ nodes:
     expected_mutations: []
     on_success: approve-reverse-engineering
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-reverse-engineering
     title: Review and approve reverse-engineering artifacts
@@ -113,6 +115,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-requirement-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-requirement-questions
     title: Answer requirement clarification questions
@@ -162,6 +165,7 @@ nodes:
     expected_mutations: []
     on_success: approve-requirements
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-requirements
     title: Review and approve requirements
@@ -207,6 +211,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-story-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-story-questions
     title: Answer user story planning questions
@@ -267,6 +272,7 @@ nodes:
     expected_mutations: []
     on_success: approve-user-stories
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-user-stories
     title: Review and approve user stories
@@ -318,6 +324,7 @@ nodes:
     expected_mutations: []
     on_success: approve-workflow-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-workflow-plan
     title: Review and approve workflow execution plan
@@ -363,6 +370,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-design-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-design-questions
     title: Answer application design questions
@@ -412,6 +420,7 @@ nodes:
     expected_mutations: []
     on_success: approve-application-design
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-application-design
     title: Review and approve application design
@@ -457,6 +466,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-units-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-units-questions
     title: Answer units decomposition questions
@@ -522,6 +532,7 @@ nodes:
     expected_mutations: []
     on_success: approve-units
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-units
     title: Review and approve units decomposition
@@ -584,6 +595,7 @@ nodes:
     expected_mutations: []
     on_success: approve-functional-design
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-functional-design
     title: Review and approve functional design
@@ -634,6 +646,7 @@ nodes:
     expected_mutations: []
     on_success: approve-nfr
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-nfr
     title: Review and approve NFR requirements
@@ -686,6 +699,7 @@ nodes:
     expected_mutations: []
     on_success: approve-code-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-code-plan
     title: Review and approve code generation plan
@@ -725,6 +739,7 @@ nodes:
     expected_mutations: []
     on_success: approve-code
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-code
     title: Review and approve implementation
@@ -767,6 +782,7 @@ nodes:
     expected_mutations: []
     on_success: approve-build-and-test
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-build-and-test
     title: Review and approve build and test instructions

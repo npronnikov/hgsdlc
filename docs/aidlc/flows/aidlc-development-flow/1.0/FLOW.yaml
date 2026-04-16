@@ -41,6 +41,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-requirement-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Step 2: Human fills in answers ────────────────────────────────────────
   - id: human-answer-requirement-questions
@@ -98,6 +99,7 @@ nodes:
     expected_mutations: []
     on_success: approve-requirements
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve requirements ────────────────────────────────────────────
   - id: approve-requirements
@@ -146,6 +148,7 @@ nodes:
     expected_mutations: []
     on_success: approve-workflow-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve workflow plan ───────────────────────────────────────────
   - id: approve-workflow-plan
@@ -200,6 +203,7 @@ nodes:
     expected_mutations: []
     on_success: approve-functional-design
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve functional design ──────────────────────────────────────
   - id: approve-functional-design
@@ -253,6 +257,7 @@ nodes:
     expected_mutations: []
     on_success: approve-nfr
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve NFR requirements ────────────────────────────────────────
   - id: approve-nfr
@@ -301,6 +306,7 @@ nodes:
     expected_mutations: []
     on_success: approve-code-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve code generation plan ────────────────────────────────────
   - id: approve-code-plan
@@ -346,6 +352,7 @@ nodes:
     expected_mutations: []
     on_success: approve-code
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve implemented code ────────────────────────────────────────
   - id: approve-code
@@ -388,6 +395,7 @@ nodes:
     expected_mutations: []
     on_success: approve-build-and-test
     on_failure: terminal-complete
+    allow_retry: true
 
   # ── Gate: Approve build and test ──────────────────────────────────────────
   - id: approve-build-and-test
