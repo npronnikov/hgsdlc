@@ -897,6 +897,11 @@ body {
   overflow: hidden;
 }
 
+.flow-canvas-card-shell {
+  height: 100%;
+  min-height: 0;
+}
+
 .flow-canvas-card {
   height: 100%;
   min-height: 0;
@@ -925,6 +930,22 @@ body {
   overflow: hidden;
   background: #f8fafc;
   position: relative;
+}
+
+.flow-canvas-card-shell:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+.flow-canvas-card-shell:fullscreen .flow-canvas-card {
+  height: 100%;
+  border-radius: 0;
+}
+
+.flow-canvas-card-shell:fullscreen .flow-canvas-card .ant-card-body {
+  height: 100%;
 }
 
 .flow-right-panel {
@@ -5404,6 +5425,18 @@ body {
 
 .benchmark-comments-collapse .ant-collapse-header {
   align-items: center !important;
+}
+
+.benchmark-verdict-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.benchmark-verdict-actions .ant-btn {
+  flex: 1 1 0;
+  min-width: 110px;
 }
 
 .benchmark-line-comment-draft {
