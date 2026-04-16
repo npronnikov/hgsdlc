@@ -737,6 +737,9 @@ public class RunStepService {
     }
 
     private RunStatus resolveTerminalStatus(UUID runId) {
+        if (auditEventRepository.existsByRunIdAndEventType(runId, "run_give_up_requested")) {
+            return RunStatus.FAILED;
+        }
         return auditEventRepository.findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(runId, "transition_applied")
                 .map(event -> {
                     try {

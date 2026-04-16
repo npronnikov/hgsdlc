@@ -21,6 +21,8 @@ public interface AuditEventRepository extends JpaRepository<AuditEventEntity, UU
 
     Optional<AuditEventEntity> findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(UUID runId, String eventType);
 
+    boolean existsByRunIdAndEventType(UUID runId, String eventType);
+
     @Query("SELECT e FROM AuditEventEntity e WHERE e.runId = :runId"
             + " AND (:nodeExecutionId IS NULL OR e.nodeExecutionId = :nodeExecutionId)"
             + " AND (:eventType IS NULL OR e.eventType = :eventType)"

@@ -330,14 +330,14 @@ class RuntimeRegressionFlowTest extends RuntimeIntegrationTestBase {
         Assertions.assertEquals(RunStatus.FAILED, failed.getStatus());
         Assertions.assertEquals("NODE_VALIDATION_FAILED", failed.getErrorCode());
 
-        // Give up — flow should transition to terminal-fail and complete
+        // Give up — flow should transition to terminal-fail and end as FAILED
         mockMvc.perform(post("/api/runs/{runId}/give-up", runId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("running"));
 
-        RunEntity completed = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.COMPLETED);
-        Assertions.assertEquals(RunStatus.COMPLETED, completed.getStatus());
+        RunEntity completed = waitForRunStatus(runId, Duration.ofSeconds(10), RunStatus.FAILED);
+        Assertions.assertEquals(RunStatus.FAILED, completed.getStatus());
 
         // Verify audit event run_give_up_requested present
         MvcResult auditResult = mockMvc.perform(get("/api/runs/{runId}/audit", runId)

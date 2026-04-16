@@ -60,7 +60,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-user-stories-questions
         path: aidlc-docs/inception/plans/story-questions.md
-        scope: run
+        scope: project
         required: true
         modifiable: true
         transfer_mode: by_ref
@@ -84,7 +84,7 @@ nodes:
       - type: artifact_ref
         node_id: human-answer-story-questions
         path: aidlc-docs/inception/plans/story-questions.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -190,7 +190,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-application-design-questions
         path: aidlc-docs/inception/plans/design-questions.md
-        scope: run
+        scope: project
         required: true
         modifiable: true
         transfer_mode: by_ref
@@ -213,7 +213,7 @@ nodes:
       - type: artifact_ref
         node_id: human-answer-design-questions
         path: aidlc-docs/inception/plans/design-questions.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -315,7 +315,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-units-decomposition-questions
         path: aidlc-docs/inception/plans/units-questions.md
-        scope: run
+        scope: project
         required: true
         modifiable: true
         transfer_mode: by_ref
@@ -339,7 +339,7 @@ nodes:
       - type: artifact_ref
         node_id: human-answer-units-questions
         path: aidlc-docs/inception/plans/units-questions.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
       - type: artifact_ref

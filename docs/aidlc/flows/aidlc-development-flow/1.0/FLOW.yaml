@@ -51,7 +51,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-requirements-clarification
         path: aidlc-docs/inception/requirements/requirement-questions.md
-        scope: run
+        scope: project
         required: true
         modifiable: true
         transfer_mode: by_ref
@@ -77,7 +77,7 @@ nodes:
       - type: artifact_ref
         node_id: human-answer-requirement-questions
         path: aidlc-docs/inception/requirements/requirement-questions.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -126,7 +126,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -175,7 +175,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -230,7 +230,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -284,7 +284,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -333,7 +333,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-code-generation-plan
         path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |

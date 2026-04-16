@@ -964,6 +964,15 @@ public class RuntimeStepTxService {
                 trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
                 mapOf("failed_node_id", failedNodeId, "on_failure_target", onFailureNodeId)
         );
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "transition_applied",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                mapOf("transition", "on_failure", "target_node_id", onFailureNodeId)
+        );
         return run;
     }
 

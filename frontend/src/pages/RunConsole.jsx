@@ -1106,6 +1106,8 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
   }
 
   const publishPhaseVisible = isPublishPhaseVisible(run);
+  const isBenchmarkRun = String(run.flow_canonical_name || '').startsWith('benchmark:');
+  const benchmarkGateBlocked = isBenchmarkRun && Boolean(run.current_gate);
   const publishStages = [
     {
       key: 'publish',
@@ -1456,6 +1458,11 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                 <Text>
                   You are in <Text strong>{run.current_gate.gate_kind}</Text>
                 </Text>
+                {benchmarkGateBlocked && (
+                  <Text type="secondary">
+                    Gate completion is blocked for benchmark runs. Run will be completed after verdict submission in Benchmark.
+                  </Text>
+                )}
                 <Text className="muted">Instruction</Text>
                 <pre className="code-block" style={{ maxHeight: 200, overflow: 'auto' }}>
                   {run.current_gate.payload?.user_instructions || '—'}
@@ -1463,6 +1470,7 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
                   <Button
                     type="default"
+                    disabled={benchmarkGateBlocked}
                     onClick={() => navigate(`/human-gate?runId=${runId}&gateId=${run.current_gate.gate_id}&gateKind=${run.current_gate.gate_kind}`)}
                   >
                     Go to Gate
