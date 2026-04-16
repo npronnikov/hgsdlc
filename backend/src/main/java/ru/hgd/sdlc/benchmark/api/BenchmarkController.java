@@ -126,7 +126,8 @@ public class BenchmarkController {
                 request.verdict(),
                 actor,
                 request.reviewComment(),
-                request.lineCommentsJson()
+                request.lineCommentsJson(),
+                request.decisionScoresJson()
         ));
     }
 
@@ -164,7 +165,8 @@ public class BenchmarkController {
     public record VerdictRequest(
             @JsonProperty("verdict") String verdict,
             @JsonProperty("review_comment") String reviewComment,
-            @JsonProperty("line_comments_json") String lineCommentsJson
+            @JsonProperty("line_comments_json") String lineCommentsJson,
+            @JsonProperty("decision_scores_json") String decisionScoresJson
     ) {}
 
     public record FileComparisonResponse(
@@ -241,6 +243,7 @@ public class BenchmarkController {
             @JsonProperty("human_verdict") String humanVerdict,
             @JsonProperty("review_comment") String reviewComment,
             @JsonProperty("line_comments_json") String lineCommentsJson,
+            @JsonProperty("decision_scores_json") String decisionScoresJson,
             @JsonProperty("diff_a") String diffA,
             @JsonProperty("diff_b") String diffB,
             @JsonProperty("diff_of_diffs") String diffOfDiffs,
@@ -266,6 +269,7 @@ public class BenchmarkController {
                     e.getHumanVerdict() != null ? e.getHumanVerdict().name() : null,
                     e.getReviewComment(),
                     e.getLineCommentsJson(),
+                    e.getDecisionScoresJson(),
                     e.getDiffA(),
                     e.getDiffB(),
                     e.getDiffOfDiffs(),

@@ -363,7 +363,8 @@ public class BenchmarkService {
             String verdictStr,
             String actorUsername,
             String reviewComment,
-            String lineCommentsJson
+            String lineCommentsJson,
+            String decisionScoresJson
     ) {
         BenchmarkRunEntity br = runRepository.findById(benchmarkRunId)
                 .orElseThrow(() -> new NotFoundException("BenchmarkRun not found: " + benchmarkRunId));
@@ -381,6 +382,7 @@ public class BenchmarkService {
         br.setHumanVerdict(verdict);
         br.setReviewComment(normalizeOptional(reviewComment));
         br.setLineCommentsJson(normalizeOptional(lineCommentsJson));
+        br.setDecisionScoresJson(normalizeOptional(decisionScoresJson));
         br.setStatus(BenchmarkStatus.COMPLETED);
         br.setCompletedAt(Instant.now());
         return runRepository.save(br);
