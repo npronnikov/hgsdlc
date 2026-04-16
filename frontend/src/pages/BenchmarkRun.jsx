@@ -8,6 +8,7 @@ import {
   Drawer,
   Empty,
   Input,
+  InputNumber,
   List,
   Modal,
   Row,
@@ -41,6 +42,13 @@ const FILE_FILTER_OPTIONS = [
   { label: 'Different', value: 'different' },
   { label: 'All', value: 'all' },
   { label: 'Same', value: 'same' },
+];
+
+const SCORE_FIELD_DEFS = [
+  { key: 'correctness', label: 'Correctness' },
+  { key: 'instruction_fit', label: 'Instruction fit' },
+  { key: 'code_quality', label: 'Code quality' },
+  { key: 'risk', label: 'Risk (higher is safer)' },
 ];
 
 function formatWithoutArtifactLabel(artifactType) {
@@ -225,6 +233,50 @@ function toLineCommentsJson(comments) {
   return JSON.stringify(normalizeLineComments(comments));
 }
 
+function emptyDecisionScores() {
+  return {
+    correctness: { a: null, b: null },
+    instruction_fit: { a: null, b: null },
+    code_quality: { a: null, b: null },
+    risk: { a: null, b: null },
+  };
+}
+
+function normalizeScoreValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return clampScore(num);
+}
+
+function normalizeDecisionScores(raw) {
+  const base = emptyDecisionScores();
+  if (!raw || typeof raw !== 'object') return base;
+  SCORE_FIELD_DEFS.forEach((field) => {
+    const item = raw[field.key];
+    base[field.key] = {
+      a: normalizeScoreValue(item?.a),
+      b: normalizeScoreValue(item?.b),
+    };
+  });
+  return base;
+}
+
+function parseDecisionScoresJson(raw) {
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return emptyDecisionScores();
+  }
+  try {
+    return normalizeDecisionScores(JSON.parse(raw));
+  } catch {
+    return emptyDecisionScores();
+  }
+}
+
+function toDecisionScoresJson(scores) {
+  return JSON.stringify(normalizeDecisionScores(scores));
+}
+
 function getDraftStorageKey(runId) {
   return `benchmark-run-comments:${runId}`;
 }
@@ -240,13 +292,14 @@ function loadDraft(runId) {
     return {
       reviewComment: String(parsed?.reviewComment || ''),
       lineComments: normalizeLineComments(parsed?.lineComments),
+      decisionScores: normalizeDecisionScores(parsed?.decisionScores),
     };
   } catch {
     return null;
   }
 }
 
-function saveDraft(runId, reviewComment, lineComments) {
+function saveDraft(runId, reviewComment, lineComments, decisionScores) {
   if (typeof window === 'undefined' || !window.localStorage || !runId) {
     return;
   }
@@ -254,6 +307,7 @@ function saveDraft(runId, reviewComment, lineComments) {
     window.localStorage.setItem(getDraftStorageKey(runId), JSON.stringify({
       reviewComment,
       lineComments: normalizeLineComments(lineComments),
+      decisionScores: normalizeDecisionScores(decisionScores),
       savedAt: new Date().toISOString(),
     }));
   } catch {
@@ -297,10 +351,10 @@ function resolveComparedLabel(artifactType, artifactId, fallbackLabel = 'control
   return `${type}:${artifactId}`;
 }
 
-function resolveDecisionVerdictLabel(verdict) {
-  if (verdict === 'SKILL_USEFUL') return 'A better';
-  if (verdict === 'SKILL_NOT_HELPFUL') return 'B better';
-  return 'tie';
+function resolveDecisionVerdict(verdict) {
+  if (verdict === 'SKILL_USEFUL') return { winner: 'A', label: 'A better' };
+  if (verdict === 'SKILL_NOT_HELPFUL') return { winner: 'B', label: 'B better' };
+  return { winner: 'tie', label: 'tie' };
 }
 
 function extractPrimaryReason(reviewComment) {
@@ -325,6 +379,167 @@ function stripFirstMarkdownHeading(markdown) {
   return lines.slice(start).join('\n');
 }
 
+function clampScore(value, min = 0, max = 100) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function classifyCommentSeverity(text) {
+  const normalized = String(text || '').toLowerCase();
+  if (!normalized) return 'minor';
+  const criticalPattern = /\b(critical|blocker|sev[\s-]?0|sev[\s-]?1|p0|p1|fatal|security|vulnerability|data loss|corrupt|crash|outage)\b/;
+  if (criticalPattern.test(normalized)) return 'critical';
+  const majorPattern = /\b(major|high|bug|error|incorrect|regression|broken|unsafe|leak|race)\b/;
+  if (majorPattern.test(normalized)) return 'major';
+  return 'minor';
+}
+
+function buildCommentMetrics(lineComments) {
+  const bySide = {
+    A: { total: 0, critical: 0, major: 0, minor: 0 },
+    B: { total: 0, critical: 0, major: 0, minor: 0 },
+  };
+  lineComments.forEach((item) => {
+    const side = item?.side === 'B' ? 'B' : 'A';
+    const severity = classifyCommentSeverity(item?.text);
+    bySide[side].total += 1;
+    bySide[side][severity] += 1;
+  });
+  const total = bySide.A.total + bySide.B.total;
+  const critical = bySide.A.critical + bySide.B.critical;
+  const major = bySide.A.major + bySide.B.major;
+  const minor = bySide.A.minor + bySide.B.minor;
+  return {
+    bySide,
+    total,
+    critical,
+    major,
+    minor,
+    criticalSharePct: total > 0 ? (critical / total) * 100 : 0,
+  };
+}
+
+function estimateLineDelta(contentA, contentB) {
+  const linesA = String(contentA || '').split('\n');
+  const linesB = String(contentB || '').split('\n');
+  const maxLen = Math.max(linesA.length, linesB.length);
+  let delta = 0;
+  for (let idx = 0; idx < maxLen; idx += 1) {
+    if ((linesA[idx] || '') !== (linesB[idx] || '')) {
+      delta += 1;
+    }
+  }
+  return delta;
+}
+
+function estimateFileChangeScore(file) {
+  if (!file) return 0;
+  const changedA = isFileChangedOnSide(file, 'a');
+  const changedB = isFileChangedOnSide(file, 'b');
+  if (!changedA && !changedB) return 0;
+
+  let score = 0;
+  if (changedA) score += 20;
+  if (changedB) score += 20;
+  if (isFileDifferent(file)) score += 30;
+
+  const existsA = Boolean(file.exists_a);
+  const existsB = Boolean(file.exists_b);
+  if (existsA !== existsB) {
+    score += 40;
+  }
+
+  const sizeDelta = Math.abs(Number(file.size_bytes_a || 0) - Number(file.size_bytes_b || 0));
+  score += Math.min(30, Math.round(sizeDelta / 256));
+
+  const binaryA = Boolean(file.binary_a);
+  const binaryB = Boolean(file.binary_b);
+  if (!binaryA && !binaryB && existsA && existsB) {
+    score += Math.min(50, estimateLineDelta(file.content_a, file.content_b));
+  }
+
+  return score;
+}
+
+function getTopChangedFiles(files, limit = 5) {
+  return files
+    .filter((file) => isFileChangedOnSide(file, 'a') || isFileChangedOnSide(file, 'b'))
+    .map((file) => ({
+      path: file.path,
+      statusA: file.status_a || 'unchanged',
+      statusB: file.status_b || 'unchanged',
+      sizeDelta: Math.abs(Number(file.size_bytes_a || 0) - Number(file.size_bytes_b || 0)),
+      lineDelta: estimateLineDelta(file.content_a, file.content_b),
+      score: estimateFileChangeScore(file),
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.path.localeCompare(b.path);
+    })
+    .slice(0, limit);
+}
+
+function calculateOverallScore(scores, side) {
+  const suffix = side === 'b' ? 'b' : 'a';
+  const correctness = scores.correctness?.[suffix];
+  const instructionFit = scores.instruction_fit?.[suffix];
+  const codeQuality = scores.code_quality?.[suffix];
+  const risk = scores.risk?.[suffix];
+  if (![correctness, instructionFit, codeQuality, risk].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  const overall = (correctness * 0.35) + (instructionFit * 0.25) + (codeQuality * 0.25) + (risk * 0.15);
+  return Math.round(overall * 10) / 10;
+}
+
+function isDecisionScoresComplete(scores) {
+  return SCORE_FIELD_DEFS.every((field) => (
+    Number.isFinite(scores?.[field.key]?.a) && Number.isFinite(scores?.[field.key]?.b)
+  ));
+}
+
+function formatScoreForReport(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(1) : '—';
+}
+
+function buildDecisionConfidence(decisionWinner, overallA, overallB, summary, commentMetrics) {
+  if (!Number.isFinite(overallA) || !Number.isFinite(overallB)) {
+    return null;
+  }
+  const scoreGap = Math.abs(overallA - overallB);
+  let confidence = 45;
+  confidence += Math.min(20, summary.total * 2);
+  confidence += Math.min(15, summary.different * 3);
+  confidence += Math.min(10, commentMetrics.total * 2);
+  confidence += Math.min(15, Math.round(scoreGap * 1.5));
+  if (decisionWinner === 'tie') confidence -= 12;
+  if (scoreGap < 4) confidence -= 8;
+  if (summary.total === 0) confidence -= 20;
+  return Math.round(clampScore(confidence));
+}
+
+function buildDecisionRationale(decision, overallA, overallB, commentMetrics, primaryReason) {
+  const criticalA = commentMetrics.bySide.A.critical;
+  const criticalB = commentMetrics.bySide.B.critical;
+  let text;
+  if (Number.isFinite(overallA) && Number.isFinite(overallB)) {
+    const scoreGap = Math.abs(overallA - overallB).toFixed(1);
+    if (decision.winner === 'A') {
+      text = `Run A has a higher weighted score (${overallA.toFixed(1)} vs ${overallB.toFixed(1)}) and fewer critical findings (${criticalA} vs ${criticalB}).`;
+    } else if (decision.winner === 'B') {
+      text = `Run B has a higher weighted score (${overallB.toFixed(1)} vs ${overallA.toFixed(1)}) and fewer critical findings (${criticalB} vs ${criticalA}).`;
+    } else {
+      text = `Scores are close (gap ${scoreGap}) and risk signals are balanced (${criticalA} critical findings on A, ${criticalB} on B).`;
+    }
+  } else {
+    text = `Manual scores are incomplete; rationale is based on review comments and line-level findings (${criticalA} critical on A, ${criticalB} critical on B).`;
+  }
+  if (primaryReason) {
+    return `${text} Reviewer note: ${primaryReason}`;
+  }
+  return text;
+}
+
 export default function BenchmarkRun() {
   const navigate = useNavigate();
   const { runId } = useParams();
@@ -344,6 +559,7 @@ export default function BenchmarkRun() {
   const [fileFilter, setFileFilter] = useState('different');
   const [reviewComment, setReviewComment] = useState('');
   const [lineComments, setLineComments] = useState([]);
+  const [decisionScores, setDecisionScores] = useState(emptyDecisionScores());
   const [lineCommentDraft, setLineCommentDraft] = useState(null);
   const [draftInitialized, setDraftInitialized] = useState(false);
   const [contextMenuState, setContextMenuState] = useState({
@@ -426,6 +642,7 @@ export default function BenchmarkRun() {
     setDraftInitialized(false);
     setReviewComment('');
     setLineComments([]);
+    setDecisionScores(emptyDecisionScores());
     setLineCommentDraft(null);
     setBenchmarkCase(null);
     setProjectNameById({});
@@ -474,6 +691,7 @@ export default function BenchmarkRun() {
     if (run.status === 'COMPLETED') {
       setReviewComment(run.review_comment || '');
       setLineComments(parseLineCommentsJson(run.line_comments_json));
+      setDecisionScores(parseDecisionScoresJson(run.decision_scores_json));
       setLineCommentDraft(null);
       setDraftInitialized(true);
       clearDraft(runId);
@@ -485,9 +703,11 @@ export default function BenchmarkRun() {
       if (draft) {
         setReviewComment(draft.reviewComment);
         setLineComments(draft.lineComments);
+        setDecisionScores(draft.decisionScores);
       } else {
         setReviewComment(run.review_comment || '');
         setLineComments(parseLineCommentsJson(run.line_comments_json));
+        setDecisionScores(parseDecisionScoresJson(run.decision_scores_json));
       }
       setDraftInitialized(true);
     }
@@ -496,8 +716,8 @@ export default function BenchmarkRun() {
   useEffect(() => {
     if (!run || !draftInitialized) return;
     if (run.status === 'COMPLETED') return;
-    saveDraft(runId, reviewComment, lineComments);
-  }, [run, runId, draftInitialized, reviewComment, lineComments]);
+    saveDraft(runId, reviewComment, lineComments, decisionScores);
+  }, [run, runId, draftInitialized, reviewComment, lineComments, decisionScores]);
 
   const filesWithMeta = useMemo(
     () => fileComparison.map((file) => ({ ...file, __different: isFileDifferent(file) })),
@@ -572,11 +792,11 @@ export default function BenchmarkRun() {
     : `Did the ${run?.artifact_type?.toLowerCase()} improve the result?`;
   const verdictApproveLabel = hasArtifactB
     ? `Run A better (${run?.artifact_id || 'A'})`
-    : (run?.artifact_type === 'SKILL' ? 'Skill was useful' : 'Rule was useful');
+    : 'Useful';
   const verdictRejectLabel = hasArtifactB
     ? `Run B better (${run?.artifact_id_b || 'B'})`
-    : (run?.artifact_type === 'SKILL' ? 'Skill did not help' : 'Rule did not help');
-  const verdictNeutralLabel = hasArtifactB ? 'Tie / Skip' : 'Neutral / Skip';
+    : 'Not useful';
+  const verdictNeutralLabel = hasArtifactB ? 'Tie / Skip' : 'Neutral';
   const runIdBySide = useMemo(() => ({
     A: run?.run_a_id ? String(run.run_a_id) : null,
     B: run?.run_b_id ? String(run.run_b_id) : null,
@@ -588,6 +808,23 @@ export default function BenchmarkRun() {
     if (a.side !== b.side) return a.side.localeCompare(b.side);
     return a.line - b.line;
   }), [lineComments]);
+
+  const normalizedDecisionScores = useMemo(
+    () => normalizeDecisionScores(decisionScores),
+    [decisionScores],
+  );
+  const decisionOverallA = useMemo(
+    () => calculateOverallScore(normalizedDecisionScores, 'a'),
+    [normalizedDecisionScores],
+  );
+  const decisionOverallB = useMemo(
+    () => calculateOverallScore(normalizedDecisionScores, 'b'),
+    [normalizedDecisionScores],
+  );
+  const decisionScoresComplete = useMemo(
+    () => isDecisionScoresComplete(normalizedDecisionScores),
+    [normalizedDecisionScores],
+  );
 
   const reportMarkdown = useMemo(() => {
     if (!run) return '';
@@ -611,15 +848,29 @@ export default function BenchmarkRun() {
         `- [${item.side}] ${item.path}:${item.line} — ${normalizeInlineText(item.text, '')}`
       )).join('\n')
       : '- none';
-    const decisionVerdict = resolveDecisionVerdictLabel(run?.human_verdict);
+    const decision = resolveDecisionVerdict(run?.human_verdict);
+    const commentMetrics = buildCommentMetrics(lineCommentsSorted);
+    const decisionConfidence = buildDecisionConfidence(
+      decision.winner,
+      decisionOverallA,
+      decisionOverallB,
+      summary,
+      commentMetrics,
+    );
     const reasonFromComment = extractPrimaryReason(reviewComment);
-    const reasons = [
-      reasonFromComment || `Manual verdict: ${formatVerdictLabel(run?.human_verdict, run)}.`,
-      `File deltas: changed A ${summary.changedA} / B ${summary.changedB}, different ${summary.different}, same ${summary.same}.`,
-      lineCommentsSorted.length > 0
-        ? `Risks: ${lineCommentsSorted.length} line comment(s) were recorded and should be reviewed before rollout.`
-        : 'Risks/tradeoffs: no line-level risks were explicitly recorded.',
-    ];
+    const decisionRationale = buildDecisionRationale(
+      decision,
+      decisionOverallA,
+      decisionOverallB,
+      commentMetrics,
+      reasonFromComment,
+    );
+    const topChangedFiles = getTopChangedFiles(fileComparison, 5);
+    const topChangedFilesBlock = topChangedFiles.length > 0
+      ? topChangedFiles.map((item) => (
+        `- ${item.path} — score ${item.score}, status A/B: ${item.statusA}/${item.statusB}, line delta: ${item.lineDelta}, size delta: ${formatBytes(item.sizeDelta)}`
+      )).join('\n')
+      : '- none';
     const generalComment = String(reviewComment || '').trim() || 'No general comment.';
 
     return [
@@ -645,6 +896,11 @@ export default function BenchmarkRun() {
       `- Files changed: A ${summary.changedA} / B ${summary.changedB}`,
       `- Files different: ${summary.different}`,
       `- Files same: ${summary.same}`,
+      `- Critical comments: ${commentMetrics.critical}/${commentMetrics.total} (${commentMetrics.criticalSharePct.toFixed(1)}%)`,
+      `- Critical comments by side: A ${commentMetrics.bySide.A.critical}, B ${commentMetrics.bySide.B.critical}`,
+      '',
+      '### Top changed files',
+      topChangedFilesBlock,
       '',
       '## Review Notes',
       '### Line comments',
@@ -654,14 +910,33 @@ export default function BenchmarkRun() {
       generalComment,
       '',
       '## Decision',
-      `- Verdict: ${decisionVerdict}`,
-      '- Why:',
-      `  1. ${reasons[0]}`,
-      `  2. ${reasons[1]}`,
-      `  3. ${reasons[2]}`,
+      `- Verdict: ${decision.label}`,
+      `- Confidence: ${decisionConfidence == null ? '—' : `${decisionConfidence}%`}`,
+      `- Decision rationale: ${decisionRationale}`,
+      '',
+      '### Criteria scores (0-100)',
+      '| Criterion | Run A | Run B |',
+      '| --- | ---: | ---: |',
+      `| Correctness | ${formatScoreForReport(normalizedDecisionScores.correctness.a)} | ${formatScoreForReport(normalizedDecisionScores.correctness.b)} |`,
+      `| Instruction fit | ${formatScoreForReport(normalizedDecisionScores.instruction_fit.a)} | ${formatScoreForReport(normalizedDecisionScores.instruction_fit.b)} |`,
+      `| Code quality | ${formatScoreForReport(normalizedDecisionScores.code_quality.a)} | ${formatScoreForReport(normalizedDecisionScores.code_quality.b)} |`,
+      `| Risk (higher is safer) | ${formatScoreForReport(normalizedDecisionScores.risk.a)} | ${formatScoreForReport(normalizedDecisionScores.risk.b)} |`,
+      `| Overall weighted score | ${formatScoreForReport(decisionOverallA)} | ${formatScoreForReport(decisionOverallB)} |`,
       '',
     ].join('\n');
-  }, [benchmarkCase, lineCommentsSorted, projectNameById, reviewComment, run, summary, user]);
+  }, [
+    benchmarkCase,
+    decisionOverallA,
+    decisionOverallB,
+    fileComparison,
+    lineCommentsSorted,
+    normalizedDecisionScores,
+    projectNameById,
+    reviewComment,
+    run,
+    summary,
+    user,
+  ]);
 
   const reportPreviewTitle = useMemo(
     () => `Benchmark Report: ${normalizeInlineText(benchmarkCase?.name || 'Untitled')}`,
@@ -843,7 +1118,27 @@ export default function BenchmarkRun() {
     }
   }, []);
 
+  const updateDecisionScore = useCallback((key, side, value) => {
+    setDecisionScores((prev) => {
+      const next = normalizeDecisionScores(prev);
+      if (!next[key]) {
+        return next;
+      }
+      const normalized = normalizeScoreValue(value);
+      if (side === 'b') {
+        next[key] = { ...next[key], b: normalized };
+      } else {
+        next[key] = { ...next[key], a: normalized };
+      }
+      return next;
+    });
+  }, []);
+
   const submitVerdict = async (verdict) => {
+    if (!decisionScoresComplete) {
+      message.error('Fill all manual score fields before submitting verdict');
+      return;
+    }
     setSubmitting(true);
     try {
       const data = await apiRequest(`/benchmark/runs/${runId}/verdict`, {
@@ -852,6 +1147,7 @@ export default function BenchmarkRun() {
           verdict,
           review_comment: reviewComment.trim() || null,
           line_comments_json: toLineCommentsJson(lineComments),
+          decision_scores_json: toDecisionScoresJson(normalizedDecisionScores),
         }),
       });
       setRun(data);
@@ -1315,6 +1611,38 @@ export default function BenchmarkRun() {
         width={460}
         open={verdictOpen}
         onClose={() => setVerdictOpen(false)}
+        footer={isWaiting && canOpenVerdict ? (
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Text className="muted">Verdict</Text>
+            <Text type="secondary">{verdictPrompt}</Text>
+            <div className="benchmark-verdict-actions">
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={() => submitVerdict('SKILL_USEFUL')}
+                loading={submitting}
+                style={{ background: '#52c41a', borderColor: '#52c41a' }}
+              >
+                {verdictApproveLabel}
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => submitVerdict('SKILL_NOT_HELPFUL')}
+                loading={submitting}
+              >
+                {verdictRejectLabel}
+              </Button>
+              <Button
+                icon={<MinusCircleOutlined />}
+                onClick={() => submitVerdict('NEUTRAL')}
+                loading={submitting}
+              >
+                {verdictNeutralLabel}
+              </Button>
+            </div>
+          </Space>
+        ) : null}
       >
         {canOpenVerdict ? (
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -1390,43 +1718,47 @@ export default function BenchmarkRun() {
               disabled={!canEditComments}
             />
 
-            {isWaiting && (
-              <>
-                <Text className="muted">Verdict</Text>
-                <Text type="secondary">
-                  {verdictPrompt}
-                </Text>
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                  <Button
-                    type="primary"
-                    icon={<CheckCircleOutlined />}
-                    onClick={() => submitVerdict('SKILL_USEFUL')}
-                    loading={submitting}
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                    block
-                  >
-                    {verdictApproveLabel}
-                  </Button>
-                  <Button
-                    danger
-                    icon={<CloseCircleOutlined />}
-                    onClick={() => submitVerdict('SKILL_NOT_HELPFUL')}
-                    loading={submitting}
-                    block
-                  >
-                    {verdictRejectLabel}
-                  </Button>
-                  <Button
-                    icon={<MinusCircleOutlined />}
-                    onClick={() => submitVerdict('NEUTRAL')}
-                    loading={submitting}
-                    block
-                  >
-                    {verdictNeutralLabel}
-                  </Button>
-                </Space>
-              </>
+            <Text className="muted">Manual scorecard (0-100)</Text>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 84px 84px',
+              gap: 8,
+              alignItems: 'center',
+            }}
+            >
+              <Text type="secondary">Criterion</Text>
+              <Text type="secondary">Run A</Text>
+              <Text type="secondary">Run B</Text>
+              {SCORE_FIELD_DEFS.map((field) => (
+                <React.Fragment key={field.key}>
+                  <Text>{field.label}</Text>
+                  <InputNumber
+                    min={0}
+                    max={100}
+                    precision={1}
+                    style={{ width: '100%' }}
+                    value={normalizedDecisionScores[field.key].a}
+                    onChange={(value) => updateDecisionScore(field.key, 'a', value)}
+                    disabled={!canEditComments}
+                  />
+                  <InputNumber
+                    min={0}
+                    max={100}
+                    precision={1}
+                    style={{ width: '100%' }}
+                    value={normalizedDecisionScores[field.key].b}
+                    onChange={(value) => updateDecisionScore(field.key, 'b', value)}
+                    disabled={!canEditComments}
+                  />
+                </React.Fragment>
+              ))}
+            </div>
+            {!decisionScoresComplete && canEditComments && (
+              <Text type="secondary">
+                Fill all score fields before submitting verdict.
+              </Text>
             )}
+
 
             {isCompleted && (
               <>
@@ -1454,7 +1786,7 @@ export default function BenchmarkRun() {
       </Drawer>
 
       <Modal
-        title="Descision Report"
+        title="Decision Report"
         open={reportPreviewOpen}
         width={900}
         onCancel={() => setReportPreviewOpen(false)}

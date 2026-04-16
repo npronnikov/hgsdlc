@@ -165,6 +165,22 @@ public class RuntimeController {
         return RunResponse.from(run, currentGate);
     }
 
+    @PostMapping("/runs/{runId}/retry")
+    public RunResponse retryRun(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
+        RunEntity run = runtimeCommandService.retryRun(runId, user);
+        runtimeCommandService.dispatchProcessRunStep(runId);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        return RunResponse.from(run, currentGate);
+    }
+
+    @PostMapping("/runs/{runId}/give-up")
+    public RunResponse giveUpRun(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
+        RunEntity run = runtimeCommandService.giveUpRun(runId, user);
+        runtimeCommandService.dispatchProcessRunStep(runId);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        return RunResponse.from(run, currentGate);
+    }
+
     @PostMapping("/runs/{runId}/publish/retry")
     public RunResponse retryPublish(@PathVariable UUID runId, @AuthenticationPrincipal User user) {
         RunEntity run = runtimeCommandService.retryPublish(runId, user);

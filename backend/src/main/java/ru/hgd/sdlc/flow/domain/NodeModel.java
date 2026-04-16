@@ -86,6 +86,9 @@ public class NodeModel {
     @JsonProperty("checkpoint_before_run")
     private Boolean checkpointBeforeRun;
 
+    @JsonProperty("allow_retry")
+    private Boolean allowRetry;
+
     @JsonProperty("on_success")
     private String onSuccess;
 

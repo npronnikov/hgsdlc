@@ -54,7 +54,7 @@ Default rule: **when in doubt, ask** — incomplete requirements lead to poor im
 
 ## Output Format
 
-Save as `aidlc-docs/inception/requirements/requirement-questions.md`:
+Save as `requirement-questions.md`:
 
 ```markdown
 # Requirements Clarification Questions

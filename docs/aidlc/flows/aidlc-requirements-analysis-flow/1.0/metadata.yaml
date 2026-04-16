@@ -1,0 +1,23 @@
+entity_type: flow
+id: aidlc-requirements-analysis-flow
+version: "1.0"
+canonical_name: aidlc-requirements-analysis-flow@1.0
+display_name: "AIDLC: Requirements Analysis"
+description: >
+  Analyses user request, loads RE context if available, generates clarifying
+  questions, waits for answers, and produces a structured requirements document
+  covering FR, API, DM, AUTH, and TEST sections.
+coding_agent: qwen
+team_code: AIDLC
+platform_code: BACK
+tags:
+  - aidlc
+  - inception
+  - requirements
+flow_kind: analysis
+risk_level: low
+scope: organization
+approval_status: published
+lifecycle_status: active
+source_ref: main
+source_path: "docs/aidlc/flows/aidlc-requirements-analysis-flow/1.0"

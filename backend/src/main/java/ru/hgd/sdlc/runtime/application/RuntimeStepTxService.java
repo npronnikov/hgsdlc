@@ -924,6 +924,61 @@ public class RuntimeStepTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity resetRunForValidationRetry(UUID runId, String nodeId, String actorId, int previousAttemptNo) {
+        RunEntity run = getRun(runId);
+        run.setStatus(RunStatus.RUNNING);
+        run.setCurrentNodeId(nodeId);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "run_retry_requested",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                mapOf(
+                        "reason", "node_validation_failed",
+                        "node_id", nodeId,
+                        "previous_attempt_no", previousAttemptNo
+                )
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RunEntity giveUpRun(UUID runId, String onFailureNodeId, String failedNodeId, String actorId) {
+        RunEntity run = getRun(runId);
+        run.setStatus(RunStatus.RUNNING);
+        run.setCurrentNodeId(onFailureNodeId);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "run_give_up_requested",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                mapOf("failed_node_id", failedNodeId, "on_failure_target", onFailureNodeId)
+        );
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "transition_applied",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                mapOf("transition", "on_failure", "target_node_id", onFailureNodeId)
+        );
+        return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RunEntity resetPublishForRetry(UUID runId, String actorId) {
         RunEntity run = getRun(runId);
         if (run.getStatus() != RunStatus.PUBLISH_FAILED && run.getStatus() != RunStatus.WAITING_PUBLISH) {

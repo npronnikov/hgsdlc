@@ -91,6 +91,14 @@ public class RuntimeCommandService {
         runStepService.processRunStep(runId);
     }
 
+    public RunEntity retryRun(UUID runId, User user) {
+        return runLifecycleService.retryRun(runId, user);
+    }
+
+    public RunEntity giveUpRun(UUID runId, User user) {
+        return runLifecycleService.giveUpRun(runId, user);
+    }
+
     public RunEntity retryPublish(UUID runId, User user) {
         return runPublishService.retryPublish(runId, user == null ? "system" : user.getUsername());
     }

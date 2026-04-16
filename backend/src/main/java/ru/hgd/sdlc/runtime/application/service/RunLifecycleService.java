@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.hgd.sdlc.auth.domain.Role;
 import ru.hgd.sdlc.auth.domain.User;
 import ru.hgd.sdlc.common.ConflictException;
+import ru.hgd.sdlc.flow.domain.NodeModel;
 import ru.hgd.sdlc.common.NotFoundException;
 import ru.hgd.sdlc.common.ValidationException;
 import ru.hgd.sdlc.flow.application.FlowYamlParser;
@@ -40,11 +41,14 @@ import ru.hgd.sdlc.runtime.application.port.ProcessExecutionPort;
 import ru.hgd.sdlc.runtime.application.port.WorkspacePort;
 import ru.hgd.sdlc.runtime.domain.AiSessionMode;
 import ru.hgd.sdlc.runtime.domain.ActorType;
+import ru.hgd.sdlc.runtime.domain.NodeExecutionEntity;
+import ru.hgd.sdlc.runtime.domain.NodeExecutionStatus;
 import ru.hgd.sdlc.runtime.domain.PrCommitStrategy;
 import ru.hgd.sdlc.runtime.domain.RunEntity;
 import ru.hgd.sdlc.runtime.domain.RunPublishMode;
 import ru.hgd.sdlc.runtime.domain.RunPublishStatus;
 import ru.hgd.sdlc.runtime.domain.RunStatus;
+import ru.hgd.sdlc.runtime.infrastructure.NodeExecutionRepository;
 import ru.hgd.sdlc.runtime.infrastructure.RunRepository;
 import ru.hgd.sdlc.settings.application.SettingsService;
 
@@ -60,6 +64,7 @@ public class RunLifecycleService {
     );
 
     private final RunRepository runRepository;
+    private final NodeExecutionRepository nodeExecutionRepository;
     private final ProjectRepository projectRepository;
     private final FlowVersionRepository flowVersionRepository;
     private final RuntimeStepTxService runtimeStepTxService;
@@ -76,6 +81,7 @@ public class RunLifecycleService {
 
     public RunLifecycleService(
             RunRepository runRepository,
+            NodeExecutionRepository nodeExecutionRepository,
             ProjectRepository projectRepository,
             FlowVersionRepository flowVersionRepository,
             RuntimeStepTxService runtimeStepTxService,
@@ -91,6 +97,7 @@ public class RunLifecycleService {
             RunPublishService runPublishService
     ) {
         this.runRepository = runRepository;
+        this.nodeExecutionRepository = nodeExecutionRepository;
         this.projectRepository = projectRepository;
         this.flowVersionRepository = flowVersionRepository;
         this.runtimeStepTxService = runtimeStepTxService;
@@ -238,6 +245,56 @@ public class RunLifecycleService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RunEntity cancelRun(UUID runId, User user) {
         return runtimeStepTxService.cancelRun(runId, identityPort.resolveActorId(user));
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity retryRun(UUID runId, User user) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() != RunStatus.FAILED || !"NODE_VALIDATION_FAILED".equals(run.getErrorCode())) {
+            throw new ConflictException("Retry is allowed only for failed AI node validation");
+        }
+        NodeExecutionEntity failedAi = nodeExecutionRepository
+                .findFirstByRunIdAndNodeIdAndNodeKindAndStatusAndErrorCodeOrderByAttemptNoDesc(
+                        run.getId(),
+                        run.getCurrentNodeId(),
+                        "ai",
+                        NodeExecutionStatus.FAILED,
+                        "NODE_VALIDATION_FAILED"
+                )
+                .orElseThrow(() -> new ConflictException("No failed AI validation execution found for retry"));
+
+        String actorId = identityPort.resolveActorId(user);
+        runtimeStepTxService.resetRunForValidationRetry(run.getId(), failedAi.getNodeId(), actorId, failedAi.getAttemptNo());
+        return getRunEntity(runId);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity giveUpRun(UUID runId, User user) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() != RunStatus.FAILED || !"NODE_VALIDATION_FAILED".equals(run.getErrorCode())) {
+            throw new ConflictException("Give up is allowed only for failed AI node validation");
+        }
+        FlowModel flowModel = parseFlowSnapshot(run);
+        NodeModel node = flowModel.getNodes() == null ? null
+                : flowModel.getNodes().stream()
+                        .filter(n -> run.getCurrentNodeId().equals(n.getId()))
+                        .findFirst()
+                        .orElse(null);
+        if (node == null || !Boolean.TRUE.equals(node.getAllowRetry())) {
+            throw new ConflictException("Current node does not support retry/give-up");
+        }
+        String onFailureTarget = node.getOnFailure();
+        if (onFailureTarget == null || onFailureTarget.isBlank()) {
+            throw new ConflictException("Current AI node has no on_failure transition defined");
+        }
+        boolean targetExists = flowModel.getNodes().stream()
+                .anyMatch(n -> onFailureTarget.equals(n.getId()));
+        if (!targetExists) {
+            throw new ConflictException("on_failure target node not found in flow: " + onFailureTarget);
+        }
+        String actorId = identityPort.resolveActorId(user);
+        runtimeStepTxService.giveUpRun(run.getId(), onFailureTarget, run.getCurrentNodeId(), actorId);
+        return getRunEntity(runId);
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -922,6 +979,18 @@ public class RunLifecycleService {
             return runtimeCodingAgent;
         }
         return "qwen";
+    }
+
+    private FlowModel parseFlowSnapshot(RunEntity run) {
+        String json = run.getFlowSnapshotJson();
+        if (json == null || json.isBlank()) {
+            throw new ConflictException("Run has no flow snapshot");
+        }
+        try {
+            return objectMapper.readValue(json, FlowModel.class);
+        } catch (JsonProcessingException ex) {
+            throw new ConflictException("Failed to parse flow snapshot: " + ex.getMessage());
+        }
     }
 
     private String toJson(Object value) {

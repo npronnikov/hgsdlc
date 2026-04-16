@@ -45,7 +45,7 @@ Evaluate ALL categories; generate questions for each with ambiguity:
 
 ## Output Format
 
-Save as `aidlc-docs/inception/plans/units-questions.md`:
+Save as `units-questions.md`:
 
 ```markdown
 # Units Decomposition Questions

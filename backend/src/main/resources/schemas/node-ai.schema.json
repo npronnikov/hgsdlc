@@ -36,7 +36,8 @@
       "items": { "$ref": "#/$defs/path_requirement" }
     },
     "on_success": { "type": "string" },
-    "on_failure": { "type": "string" }
+    "on_failure": { "type": "string" },
+    "allow_retry": { "type": "boolean" }
   },
   "$defs": {
     "execution_context_entry": {

@@ -365,7 +365,8 @@ public class BenchmarkService {
             String verdictStr,
             String actorUsername,
             String reviewComment,
-            String lineCommentsJson
+            String lineCommentsJson,
+            String decisionScoresJson
     ) {
         BenchmarkRunEntity br = runRepository.findById(benchmarkRunId)
                 .orElseThrow(() -> new NotFoundException("BenchmarkRun not found: " + benchmarkRunId));
@@ -383,6 +384,7 @@ public class BenchmarkService {
         br.setHumanVerdict(verdict);
         br.setReviewComment(normalizeOptional(reviewComment));
         br.setLineCommentsJson(normalizeOptional(lineCommentsJson));
+        br.setDecisionScoresJson(normalizeOptional(decisionScoresJson));
         br.setStatus(BenchmarkStatus.COMPLETED);
         br.setCompletedAt(Instant.now());
         return runRepository.save(br);
@@ -392,12 +394,34 @@ public class BenchmarkService {
         return caseRepository.findAllByOrderByCreatedAtDesc();
     }
 
+    @Transactional
     public List<BenchmarkRunEntity> listRunsByCase(UUID caseId) {
-        return runRepository.findByCaseIdOrderByCreatedAtDesc(caseId);
+        List<BenchmarkRunEntity> runs = runRepository.findByCaseIdOrderByCreatedAtDesc(caseId);
+        for (BenchmarkRunEntity run : runs) {
+            if (run.getStatus() == BenchmarkStatus.RUNNING) {
+                checkAndTransitionToWaitingComparison(run);
+            } else if ((run.getStatus() == BenchmarkStatus.WAITING_COMPARISON
+                    || run.getStatus() == BenchmarkStatus.COMPLETED)
+                    && isBlank(run.getDiffA()) && isBlank(run.getDiffB())) {
+                recomputeDiffs(run);
+            }
+        }
+        return runs;
     }
 
+    @Transactional
     public List<BenchmarkRunEntity> listAllRuns() {
-        return runRepository.findAllByOrderByCreatedAtDesc();
+        List<BenchmarkRunEntity> runs = runRepository.findAllByOrderByCreatedAtDesc();
+        for (BenchmarkRunEntity run : runs) {
+            if (run.getStatus() == BenchmarkStatus.RUNNING) {
+                checkAndTransitionToWaitingComparison(run);
+            } else if ((run.getStatus() == BenchmarkStatus.WAITING_COMPARISON
+                    || run.getStatus() == BenchmarkStatus.COMPLETED)
+                    && isBlank(run.getDiffA()) && isBlank(run.getDiffB())) {
+                recomputeDiffs(run);
+            }
+        }
+        return runs;
     }
 
     @Transactional(readOnly = true)
@@ -511,6 +535,8 @@ public class BenchmarkService {
                 .instruction(instruction)
                 .skillRefs(skillRefs.isEmpty() ? null : skillRefs)
                 .onSuccess("approval_node")
+                .onFailure("end_node")
+                .allowRetry(true)
                 .build();
 
         NodeModel approvalNode = NodeModel.builder()

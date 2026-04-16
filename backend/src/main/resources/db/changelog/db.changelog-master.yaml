@@ -85,3 +85,5 @@ databaseChangeLog:
       file: db/changelog/047-gate-chat-messages.sql
   - include:
       file: db/changelog/048-runtime-debug-mode.sql
+  - include:
+      file: db/changelog/048-benchmark-decision-scores.sql

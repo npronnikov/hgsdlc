@@ -74,6 +74,9 @@ public class BenchmarkRunEntity {
     @Column(name = "line_comments_json", columnDefinition = "TEXT")
     private String lineCommentsJson;
 
+    @Column(name = "decision_scores_json", columnDefinition = "TEXT")
+    private String decisionScoresJson;
+
     @Column(name = "judge_result", columnDefinition = "TEXT")
     private String judgeResult;
 

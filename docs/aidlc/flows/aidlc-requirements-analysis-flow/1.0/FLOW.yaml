@@ -1,0 +1,142 @@
+id: aidlc-requirements-analysis-flow
+version: "1.0"
+canonical_name: aidlc-requirements-analysis-flow@1.0
+title: AIDLC Requirements Analysis
+description: >
+  Analyses the user request, loads reverse-engineering context if available,
+  generates clarifying questions, waits for answers, then produces a structured
+  requirements document covering FR, API, DM, AUTH, and TEST sections.
+  A human approval gate ensures requirements are correct before proceeding.
+start_node_id: ai-analyze-and-questions
+fail_on_missing_declared_output: true
+fail_on_missing_expected_mutation: false
+
+nodes:
+
+  # ── Step 1: Analyse request and generate clarifying questions ─────────────
+  - id: ai-analyze-and-questions
+    title: Analyse request and generate clarifying questions
+    type: ai
+    checkpoint_before_run: false
+    execution_context:
+      - type: user_request
+        required: true
+    instruction: |
+      Analyse the user request and the existing codebase. Load reverse-engineering
+      context if available (brownfield project):
+        - aidlc-docs/inception/reverse-engineering/architecture.md
+        - aidlc-docs/inception/reverse-engineering/component-inventory.md
+        - aidlc-docs/inception/reverse-engineering/technology-stack.md
+
+      Follow the attached skill precisely to:
+        1. Classify the request (clarity, type, scope, complexity).
+        2. Identify ALL ambiguous areas across functional requirements,
+           NFRs, user scenarios, business context, technical context,
+           and quality attributes.
+        3. Generate comprehensive clarifying questions with [Answer]: tags.
+
+      Save as aidlc-docs/inception/requirements/requirement-questions.md.
+    skill_refs:
+      - aidlc-requirements-clarification@1.0
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: human-answer-questions
+    on_failure: terminal-complete
+    allow_retry: true
+
+  # ── Gate: User answers clarifying questions ───────────────────────────────
+  - id: human-answer-questions
+    title: Answer requirement clarification questions
+    type: human_input
+    execution_context:
+      - type: artifact_ref
+        node_id: ai-analyze-and-questions
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        scope: run
+        required: true
+        modifiable: true
+        transfer_mode: by_ref
+    instruction: |
+      Open aidlc-docs/inception/requirements/requirement-questions.md.
+      Fill in every [Answer]: tag — use the A/B/C letter options where provided,
+      or write a free-form answer for X) Other questions.
+      Answer ALL questions before clicking Submit.
+    produced_artifacts:
+      - scope: run
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        required: true
+    expected_mutations: []
+    on_submit: ai-generate-requirements
+
+  # ── Step 2: Generate requirements document ────────────────────────────────
+  - id: ai-generate-requirements
+    title: Generate requirements document
+    type: ai
+    checkpoint_before_run: true
+    execution_context:
+      - type: artifact_ref
+        node_id: human-answer-questions
+        path: aidlc-docs/inception/requirements/requirement-questions.md
+        scope: run
+        required: true
+        transfer_mode: by_value
+    instruction: |
+      Read the answered requirement-questions.md and produce a complete requirements
+      document following the attached skill.
+
+      Load reverse-engineering context (brownfield) to reference exact file/class names:
+        - aidlc-docs/inception/reverse-engineering/architecture.md
+        - aidlc-docs/inception/reverse-engineering/technology-stack.md
+        - aidlc-docs/inception/reverse-engineering/code-structure.md
+
+      Cover all sections: request classification, affected files, FR-*, API-*,
+      DM-*, AUTH-*, TEST-*, constraints, and acceptance criteria.
+
+      Save as aidlc-docs/inception/requirements/requirements.md.
+    skill_refs:
+      - aidlc-requirements-document@1.0
+    produced_artifacts:
+      - scope: project
+        path: aidlc-docs/inception/requirements/requirements.md
+        required: true
+        modifiable: false
+    expected_mutations: []
+    on_success: approve-requirements
+    on_failure: terminal-complete
+    allow_retry: true
+
+  # ── Gate: Review and approve requirements ─────────────────────────────────
+  - id: approve-requirements
+    title: Review and approve requirements
+    type: human_approval
+    execution_context: []
+    instruction: |
+      Review the requirements document at:
+        aidlc-docs/inception/requirements/requirements.md
+
+      Verify that:
+      - Request classification (type, scope, complexity) is accurate
+      - Affected files list is complete and correct
+      - Functional requirements (FR-*) are specific and verifiable
+      - API, data model, and authorization requirements are complete
+      - Testing requirements cover happy path and edge cases
+      - Acceptance criteria are measurable
+
+      Approve to complete this flow, or request rework with specific corrections.
+    produced_artifacts: []
+    expected_mutations: []
+    on_approve: terminal-complete
+    on_rework:
+      next_node: ai-generate-requirements
+
+  # ── Terminal ──────────────────────────────────────────────────────────────
+  - id: terminal-complete
+    title: Requirements analysis complete
+    type: terminal
+    execution_context: []
+    produced_artifacts: []
+    expected_mutations: []

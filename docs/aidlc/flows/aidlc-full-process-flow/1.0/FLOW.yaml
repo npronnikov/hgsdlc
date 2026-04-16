@@ -40,6 +40,7 @@ nodes:
     expected_mutations: []
     on_success: ai-reverse-engineering
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: ai-reverse-engineering
     title: Reverse-engineer existing codebase
@@ -63,17 +64,18 @@ nodes:
     skill_refs:
       - aidlc-reverse-engineering@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/reverse-engineering/business-overview.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/reverse-engineering/architecture.md
         required: false
         modifiable: false
     expected_mutations: []
     on_success: approve-reverse-engineering
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-reverse-engineering
     title: Review and approve reverse-engineering artifacts
@@ -113,6 +115,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-requirement-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-requirement-questions
     title: Answer requirement clarification questions
@@ -155,13 +158,14 @@ nodes:
     skill_refs:
       - aidlc-requirements-document@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/requirements/requirements.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-requirements
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-requirements
     title: Review and approve requirements
@@ -189,7 +193,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -207,6 +211,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-story-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-story-questions
     title: Answer user story planning questions
@@ -244,7 +249,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -256,17 +261,18 @@ nodes:
     skill_refs:
       - aidlc-user-stories-generate@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/user-stories/stories.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/user-stories/personas.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-user-stories
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-user-stories
     title: Review and approve user stories
@@ -294,13 +300,13 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
       - type: artifact_ref
         node_id: ai-user-stories-generate
         path: aidlc-docs/inception/user-stories/stories.md
-        scope: run
+        scope: project
         required: false
         transfer_mode: by_value
     instruction: |
@@ -311,13 +317,14 @@ nodes:
     skill_refs:
       - aidlc-workflow-planning@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/plans/execution-plan.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-workflow-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-workflow-plan
     title: Review and approve workflow execution plan
@@ -345,7 +352,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -363,6 +370,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-design-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-design-questions
     title: Answer application design questions
@@ -405,13 +413,14 @@ nodes:
     skill_refs:
       - aidlc-application-design-artifacts@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/application-design/application-design.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-application-design
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-application-design
     title: Review and approve application design
@@ -439,7 +448,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-application-design-artifacts
         path: aidlc-docs/inception/application-design/application-design.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -457,6 +466,7 @@ nodes:
     expected_mutations: []
     on_success: human-answer-units-questions
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: human-answer-units-questions
     title: Answer units decomposition questions
@@ -494,7 +504,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-application-design-artifacts
         path: aidlc-docs/inception/application-design/application-design.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -507,21 +517,22 @@ nodes:
     skill_refs:
       - aidlc-units-decomposition-artifacts@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/application-design/unit-of-work.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/application-design/unit-of-work-dependency.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/application-design/unit-of-work-story-map.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-units
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-units
     title: Review and approve units decomposition
@@ -550,13 +561,13 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
       - type: artifact_ref
         node_id: ai-units-decomposition-artifacts
         path: aidlc-docs/inception/application-design/unit-of-work.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -569,21 +580,22 @@ nodes:
     skill_refs:
       - aidlc-functional-design@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/functional-design/domain-entities.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/functional-design/business-rules.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/functional-design/data-flow.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-functional-design
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-functional-design
     title: Review and approve functional design
@@ -611,7 +623,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -623,17 +635,18 @@ nodes:
     skill_refs:
       - aidlc-nfr-requirements@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/nfr-requirements/nfr-requirements.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/nfr-requirements/tech-stack-decisions.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-nfr
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-nfr
     title: Review and approve NFR requirements
@@ -661,13 +674,13 @@ nodes:
       - type: artifact_ref
         node_id: ai-generate-requirements
         path: aidlc-docs/inception/requirements/requirements.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
       - type: artifact_ref
         node_id: ai-units-decomposition-artifacts
         path: aidlc-docs/inception/application-design/unit-of-work.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -679,13 +692,14 @@ nodes:
     skill_refs:
       - aidlc-code-generation-plan@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-code-plan
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-code-plan
     title: Review and approve code generation plan
@@ -709,7 +723,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-code-generation-plan
         path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
-        scope: run
+        scope: project
         required: true
         transfer_mode: by_value
     instruction: |
@@ -725,6 +739,7 @@ nodes:
     expected_mutations: []
     on_success: approve-code
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-code
     title: Review and approve implementation
@@ -760,13 +775,14 @@ nodes:
     skill_refs:
       - aidlc-build-and-test@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/build-and-test/build-and-test-summary.md
         required: true
         modifiable: false
     expected_mutations: []
     on_success: approve-build-and-test
     on_failure: terminal-complete
+    allow_retry: true
 
   - id: approve-build-and-test
     title: Review and approve build and test instructions

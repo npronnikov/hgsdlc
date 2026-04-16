@@ -181,6 +181,10 @@ public class RunStepService {
             }
             if (("ai".equals(nodeKind) || "command".equals(nodeKind))
                     && node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
+                if ("ai".equals(nodeKind) && Boolean.TRUE.equals(node.getAllowRetry()) && "NODE_VALIDATION_FAILED".equals(ex.errorCode)) {
+                    failRun(run, ex.errorCode, ex.getMessage());
+                    return false;
+                }
                 Integer maxTransitions = node.getMaxFailureTransitions();
                 if (maxTransitions != null) {
                     int failedCount = nodeExecutionRepository
@@ -746,6 +750,9 @@ public class RunStepService {
     }
 
     private RunStatus resolveTerminalStatus(UUID runId) {
+        if (auditEventRepository.existsByRunIdAndEventType(runId, "run_give_up_requested")) {
+            return RunStatus.FAILED;
+        }
         return auditEventRepository.findFirstByRunIdAndEventTypeOrderBySequenceNoDesc(runId, "transition_applied")
                 .map(event -> {
                     try {
