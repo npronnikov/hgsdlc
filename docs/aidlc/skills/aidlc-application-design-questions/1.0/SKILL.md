@@ -42,7 +42,7 @@ Evaluate ALL categories; generate questions for any with ambiguity:
 
 ## Output Format
 
-Save as `aidlc-docs/inception/plans/design-questions.md`:
+Save as `design-questions.md`:
 
 ```markdown
 # Application Design Questions

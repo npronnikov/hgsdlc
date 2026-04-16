@@ -51,7 +51,7 @@ nodes:
       - type: artifact_ref
         node_id: ai-requirements-clarification
         path: aidlc-docs/inception/requirements/requirement-questions.md
-        scope: project
+        scope: run
         required: true
         modifiable: true
         transfer_mode: by_ref
@@ -77,7 +77,7 @@ nodes:
       - type: artifact_ref
         node_id: human-answer-requirement-questions
         path: aidlc-docs/inception/requirements/requirement-questions.md
-        scope: project
+        scope: run
         required: true
         transfer_mode: by_value
     instruction: |
@@ -92,7 +92,7 @@ nodes:
     skill_refs:
       - aidlc-requirements-document@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/requirements/requirements.md
         required: true
         modifiable: false
@@ -141,7 +141,7 @@ nodes:
     skill_refs:
       - aidlc-workflow-planning@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/inception/plans/execution-plan.md
         required: true
         modifiable: false
@@ -192,11 +192,11 @@ nodes:
     skill_refs:
       - aidlc-functional-design@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/functional-design/domain-entities.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/functional-design/business-rules.md
         required: true
         modifiable: false
@@ -246,11 +246,11 @@ nodes:
     skill_refs:
       - aidlc-nfr-requirements@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/nfr-requirements/nfr-requirements.md
         required: true
         modifiable: false
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/main-unit/nfr-requirements/tech-stack-decisions.md
         required: true
         modifiable: false
@@ -299,7 +299,7 @@ nodes:
     skill_refs:
       - aidlc-code-generation-plan@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/plans/main-unit-code-generation-plan.md
         required: true
         modifiable: false
@@ -388,7 +388,7 @@ nodes:
     skill_refs:
       - aidlc-build-and-test@1.0
     produced_artifacts:
-      - scope: run
+      - scope: project
         path: aidlc-docs/construction/build-and-test/build-and-test-summary.md
         required: true
         modifiable: false

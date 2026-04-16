@@ -60,7 +60,7 @@ Evaluate ALL categories below and generate questions for each with any ambiguity
 
 ## Output Format
 
-Save as `aidlc-docs/inception/plans/story-questions.md`:
+Save as `story-questions.md`:
 
 ```markdown
 # User Stories Planning Questions
