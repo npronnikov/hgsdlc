@@ -768,18 +768,38 @@ public class RunStepService {
                 .orElse(RunStatus.COMPLETED);
     }
 
-    private CommandResult executeCommand(RunEntity run, NodeModel node, Path stdoutPath, Path stderrPath) {
+    private List<String> resolveCommandArgs(NodeModel node) {
+        var spec = node.getCommandSpec();
+        if (spec != null && spec.has("args") && spec.get("args").isArray()) {
+            String shell = spec.has("shell") ? spec.get("shell").asText("bash") : "bash";
+            var argsNode = spec.get("args");
+            List<String> command = new java.util.ArrayList<>();
+            command.add(shell);
+            for (var arg : argsNode) {
+                command.add(arg.asText());
+            }
+            return command;
+        }
         String instruction = trimToNull(node.getInstruction());
         if (instruction == null) {
+            return null;
+        }
+        return List.of("bash", "-lc", instruction);
+    }
+
+    private CommandResult executeCommand(RunEntity run, NodeModel node, Path stdoutPath, Path stderrPath) {
+        List<String> command = resolveCommandArgs(node);
+        if (command == null) {
             writeFile(stdoutPath, new byte[0]);
             writeFile(stderrPath, new byte[0]);
             return new CommandResult(0, "", "", stdoutPath.toString(), stderrPath.toString());
         }
+        String instruction = trimToNull(node.getInstruction());
         Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         try {
             CommandResult commandResult = runProcess(
                     run.getId(),
-                    List.of("bash", "-lc", instruction),
+                    command,
                     workingDirectory,
                     settingsService.getAiTimeoutSeconds(),
                     stdoutPath,
