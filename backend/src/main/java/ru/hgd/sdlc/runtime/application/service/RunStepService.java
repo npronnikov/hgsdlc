@@ -179,10 +179,22 @@ public class RunStepService {
             if (isRunCancelled(run.getId())) {
                 return false;
             }
-            if ("ai".equals(nodeKind) && node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
-                if (Boolean.TRUE.equals(node.getAllowRetry()) && "NODE_VALIDATION_FAILED".equals(ex.errorCode)) {
+            if (("ai".equals(nodeKind) || "command".equals(nodeKind))
+                    && node.getOnFailure() != null && !node.getOnFailure().isBlank()) {
+                if ("ai".equals(nodeKind) && Boolean.TRUE.equals(node.getAllowRetry()) && "NODE_VALIDATION_FAILED".equals(ex.errorCode)) {
                     failRun(run, ex.errorCode, ex.getMessage());
                     return false;
+                }
+                Integer maxTransitions = node.getMaxFailureTransitions();
+                if (maxTransitions != null) {
+                    int failedCount = nodeExecutionRepository
+                            .countByRunIdAndNodeIdAndStatus(run.getId(), node.getId(), NodeExecutionStatus.FAILED);
+                    if (failedCount >= maxTransitions) {
+                        failRun(run, ex.errorCode,
+                                "Max failure transitions (" + maxTransitions + ") exceeded for node " + node.getId()
+                                        + ": " + ex.getMessage());
+                        return false;
+                    }
                 }
                 applyTransition(run, execution, null, node.getOnFailure(), "on_failure");
                 return true;
