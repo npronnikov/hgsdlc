@@ -947,6 +947,30 @@ public class RuntimeStepTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void resetRunForAgentRetry(UUID runId, String nodeId, String actorId, int previousAttemptNo, String errorCode) {
+        RunEntity run = getRun(runId);
+        run.setStatus(RunStatus.RUNNING);
+        run.setCurrentNodeId(nodeId);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(
+                runId,
+                null,
+                null,
+                "run_retry_requested",
+                ActorType.HUMAN,
+                trimToNull(actorId) == null ? "runtime" : trimToNull(actorId),
+                mapOf(
+                        "reason", errorCode.toLowerCase(),
+                        "node_id", nodeId,
+                        "previous_attempt_no", previousAttemptNo
+                )
+        );
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RunEntity giveUpRun(UUID runId, String onFailureNodeId, String failedNodeId, String actorId) {
         RunEntity run = getRun(runId);
         run.setStatus(RunStatus.RUNNING);

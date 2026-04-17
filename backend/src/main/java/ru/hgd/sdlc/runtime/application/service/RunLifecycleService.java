@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -218,24 +219,41 @@ public class RunLifecycleService {
         return runtimeStepTxService.cancelRun(runId, identityPort.resolveActorId(user));
     }
 
+    private static final Set<String> RETRYABLE_AGENT_ERROR_CODES = Set.of(
+            "AGENT_EXECUTION_FAILED", "AGENT_SESSION_RESUME_FAILED"
+    );
+
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RunEntity retryRun(UUID runId, User user) {
         RunEntity run = getRunEntity(runId);
-        if (run.getStatus() != RunStatus.FAILED || !"NODE_VALIDATION_FAILED".equals(run.getErrorCode())) {
-            throw new ConflictException("Retry is allowed only for failed AI node validation");
+        if (run.getStatus() != RunStatus.FAILED) {
+            throw new ConflictException("Retry is allowed only for failed runs");
         }
-        NodeExecutionEntity failedAi = nodeExecutionRepository
-                .findFirstByRunIdAndNodeIdAndNodeKindAndStatusAndErrorCodeOrderByAttemptNoDesc(
-                        run.getId(),
-                        run.getCurrentNodeId(),
-                        "ai",
-                        NodeExecutionStatus.FAILED,
-                        "NODE_VALIDATION_FAILED"
-                )
-                .orElseThrow(() -> new ConflictException("No failed AI validation execution found for retry"));
-
         String actorId = identityPort.resolveActorId(user);
-        runtimeStepTxService.resetRunForValidationRetry(run.getId(), failedAi.getNodeId(), actorId, failedAi.getAttemptNo());
+        if ("NODE_VALIDATION_FAILED".equals(run.getErrorCode())) {
+            NodeExecutionEntity failedAi = nodeExecutionRepository
+                    .findFirstByRunIdAndNodeIdAndNodeKindAndStatusAndErrorCodeOrderByAttemptNoDesc(
+                            run.getId(),
+                            run.getCurrentNodeId(),
+                            "ai",
+                            NodeExecutionStatus.FAILED,
+                            "NODE_VALIDATION_FAILED"
+                    )
+                    .orElseThrow(() -> new ConflictException("No failed AI validation execution found for retry"));
+            runtimeStepTxService.resetRunForValidationRetry(run.getId(), failedAi.getNodeId(), actorId, failedAi.getAttemptNo());
+        } else if (RETRYABLE_AGENT_ERROR_CODES.contains(run.getErrorCode())) {
+            NodeExecutionEntity failedExecution = nodeExecutionRepository
+                    .findFirstByRunIdAndNodeIdAndStatusOrderByAttemptNoDesc(
+                            run.getId(),
+                            run.getCurrentNodeId(),
+                            NodeExecutionStatus.FAILED
+                    )
+                    .orElseThrow(() -> new ConflictException("No failed execution found for retry"));
+            runtimeStepTxService.resetRunForAgentRetry(run.getId(), failedExecution.getNodeId(), actorId,
+                    failedExecution.getAttemptNo(), run.getErrorCode());
+        } else {
+            throw new ConflictException("Retry is not supported for error code: " + run.getErrorCode());
+        }
         return getRunEntity(runId);
     }
 
