@@ -61,6 +61,7 @@ const routeMeta = {
   '/product-pipeline': { title: 'Idea to Dev', menuKey: '/product-pipeline' },
   '/run-launch': { title: 'Run Launch', menuKey: '/run-launch' },
   '/run-console': { title: 'Run Console', menuKey: '/run-console' },
+  '/run-workspace': { title: 'Debug Run', menuKey: '/run-console' },
   '/settings': { title: 'Runtime Settings', menuKey: '/settings' },
   '/gates-inbox': { title: 'Gates Inbox', menuKey: '/run-console' },
   '/human-gate': { title: 'Human Gate', menuKey: '/run-console' },
@@ -290,11 +291,14 @@ export default function AppShell() {
                     onClick={() => navigate(
                       isProductOwnerOnly
                         ? `/product-pipeline?runId=${encodeURIComponent(runId)}`
-                        : `/run-console?runId=${encodeURIComponent(runId)}`
+                        : run.debug_mode
+                          ? `/run-workspace?runId=${encodeURIComponent(runId)}`
+                          : `/run-console?runId=${encodeURIComponent(runId)}`
                     )}
                   >
                     <span className="pipeline-run-main">
                       <span className="pipeline-run-title" title={projectTitle}>{projectTitle}</span>
+                      {run.debug_mode && <span className="pipeline-run-debug-badge">D</span>}
                       <span className="pipeline-run-flow mono" title={flowTitle}>{flowTitle}</span>
                       <span className="pipeline-run-meta">{statusLabel} · {startedTime}</span>
                     </span>

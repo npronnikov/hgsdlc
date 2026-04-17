@@ -97,7 +97,8 @@ public class RuntimeController {
                                     request.aiSessionMode(),
                                     request.publishMode(),
                                     request.workBranch(),
-                                    request.prCommitStrategy()
+                                    request.prCommitStrategy(),
+                                    request.debugMode()
                             ),
                             user
                     );
@@ -130,7 +131,7 @@ public class RuntimeController {
     public RunResponse getRun(@PathVariable UUID runId) {
         RunEntity run = runtimeQueryService.findRun(runId);
         GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
-        return RunResponse.from(run, currentGate);
+        return RunResponse.from(run, currentGate, parseJson(run.getFlowSnapshotJson()));
     }
 
     @GetMapping("/runs")
@@ -146,6 +147,13 @@ public class RuntimeController {
     @PostMapping("/runs/{runId}/resume")
     public RunResponse resumeRun(@PathVariable UUID runId) {
         RunEntity run = runtimeCommandService.resumeRun(runId);
+        GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
+        return RunResponse.from(run, currentGate);
+    }
+
+    @PostMapping("/runs/{runId}/refresh-flow")
+    public RunResponse refreshFlowAndResume(@PathVariable UUID runId) {
+        RunEntity run = runtimeCommandService.refreshFlowAndResume(runId);
         GateSummaryResponse currentGate = runtimeQueryService.findCurrentGate(runId).map(this::toGateSummary).orElse(null);
         return RunResponse.from(run, currentGate);
     }
@@ -210,6 +218,12 @@ public class RuntimeController {
         return runtimeQueryService.findCurrentGate(runId)
                 .map(this::toGateSummary)
                 .orElse(null);
+    }
+
+    @GetMapping("/runs/{runId}/gates")
+    public List<GateSummaryResponse> listGates(@PathVariable UUID runId) {
+        return runtimeQueryService.findGatesByRunId(runId).stream()
+                .map(this::toGateSummary).toList();
     }
 
     @GetMapping("/gates/inbox")
@@ -459,7 +473,8 @@ public class RuntimeController {
             @JsonProperty("publish_mode") String publishMode,
             @JsonProperty("work_branch") String workBranch,
             @JsonProperty("pr_commit_strategy") String prCommitStrategy,
-            @JsonProperty("idempotency_key") String idempotencyKey
+            @JsonProperty("idempotency_key") String idempotencyKey,
+            @JsonProperty("debug_mode") Boolean debugMode
     ) {}
 
     public record RunCreateResponse(
@@ -499,9 +514,15 @@ public class RuntimeController {
             @JsonProperty("started_at") Instant startedAt,
             @JsonProperty("finished_at") Instant finishedAt,
             @JsonProperty("resource_version") long resourceVersion,
-            @JsonProperty("current_gate") GateSummaryResponse currentGate
+            @JsonProperty("current_gate") GateSummaryResponse currentGate,
+            @JsonProperty("flow_snapshot") Object flowSnapshot,
+            @JsonProperty("debug_mode") boolean debugMode
     ) {
         static RunResponse from(RunEntity run, GateSummaryResponse currentGate) {
+            return from(run, currentGate, null);
+        }
+
+        static RunResponse from(RunEntity run, GateSummaryResponse currentGate, Object flowSnapshot) {
             return new RunResponse(
                     run.getId(),
                     run.getProjectId(),
@@ -530,7 +551,9 @@ public class RuntimeController {
                     run.getStartedAt(),
                     run.getFinishedAt(),
                     run.getResourceVersion(),
-                    currentGate
+                    currentGate,
+                    flowSnapshot,
+                    run.isDebugMode()
             );
         }
     }

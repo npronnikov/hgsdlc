@@ -21,6 +21,7 @@ import {
 } from 'antd';
 import {
   BranchesOutlined,
+  BugOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloudUploadOutlined,
@@ -28,6 +29,7 @@ import {
   LinkOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
+  PlayCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
   SyncOutlined,
@@ -1055,6 +1057,16 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
     }
   };
 
+  const refreshFlowAndResume = async () => {
+    try {
+      await apiRequest(`/runs/${runId}/refresh-flow`, { method: 'POST' });
+      message.success('Flow refreshed, run resumed');
+      await load();
+    } catch (err) {
+      message.error(err.message || 'Failed to refresh flow and resume');
+    }
+  };
+
   const latestFailedAiNode = nodes
     .filter((n) => n.status === 'failed' && n.node_kind === 'ai' && n.error_code === 'NODE_VALIDATION_FAILED')
     .sort((a, b) => b.attempt_no - a.attempt_no)[0] || null;
@@ -1140,6 +1152,20 @@ function RunDetailView({ navigate, runId, searchParams, setSearchParams }) {
         </div>
         <Space wrap>
           <Button onClick={() => load()} loading={loading} icon={<ReloadOutlined />}>Refresh</Button>
+          {run.debug_mode && (
+            <Button
+              type="default"
+              icon={<BugOutlined />}
+              onClick={() => navigate(`/run-workspace?runId=${runId}`)}
+            >
+              Debug View
+            </Button>
+          )}
+          {run.status === 'failed' && (
+            <Button type="primary" icon={<PlayCircleOutlined />} onClick={refreshFlowAndResume}>
+              Refresh flow &amp; Resume
+            </Button>
+          )}
           {run.status === 'publish_failed' && (
             <Button type="primary" onClick={retryPublish}>
               Retry publish

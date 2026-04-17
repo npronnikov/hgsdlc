@@ -63,6 +63,10 @@ public class RuntimeCommandService {
         return runLifecycleService.resumeRun(runId);
     }
 
+    public RunEntity refreshFlowAndResume(UUID runId) {
+        return runLifecycleService.refreshFlowAndResume(runId);
+    }
+
     public RunEntity cancelRun(UUID runId, User user) {
         return runLifecycleService.cancelRun(runId, user);
     }

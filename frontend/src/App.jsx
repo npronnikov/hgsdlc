@@ -25,6 +25,7 @@ import Artifacts from './pages/Artifacts.jsx';
 import DeltaSummary from './pages/DeltaSummary.jsx';
 import Users from './pages/Users.jsx';
 import ProductPipelineMvp from './pages/ProductPipelineMvp.jsx';
+import RunWorkspace from './pages/RunWorkspace.jsx';
 import Benchmark from './pages/Benchmark.jsx';
 import BenchmarkRun from './pages/BenchmarkRun.jsx';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
@@ -114,6 +115,7 @@ export default function App() {
             <Route path="requests" element={<Requests />} />
             <Route path="run-launch" element={<RunLaunch />} />
             <Route path="run-console" element={<RunConsole />} />
+            <Route path="run-workspace" element={<RunWorkspace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="gates-inbox" element={<GatesInbox />} />
             <Route path="gate-input" element={<HumanGate />} />

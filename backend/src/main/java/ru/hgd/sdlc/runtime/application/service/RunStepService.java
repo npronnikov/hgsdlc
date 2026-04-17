@@ -342,6 +342,7 @@ public class RunStepService {
                             "stdout", truncate(agentResult.stdout(), 4000),
                             "stderr", truncate(agentResult.stderr(), 4000)));
         }
+        relocateMisplacedRunScopedAiArtifacts(run, node, execution);
         validateNodeOutputs(run, node, execution, beforeMutations);
 
         runtimeStepTxService.appendAudit(
@@ -768,18 +769,38 @@ public class RunStepService {
                 .orElse(RunStatus.COMPLETED);
     }
 
-    private CommandResult executeCommand(RunEntity run, NodeModel node, Path stdoutPath, Path stderrPath) {
+    private List<String> resolveCommandArgs(NodeModel node) {
+        var spec = node.getCommandSpec();
+        if (spec != null && spec.has("args") && spec.get("args").isArray()) {
+            String shell = spec.has("shell") ? spec.get("shell").asText("bash") : "bash";
+            var argsNode = spec.get("args");
+            List<String> command = new java.util.ArrayList<>();
+            command.add(shell);
+            for (var arg : argsNode) {
+                command.add(arg.asText());
+            }
+            return command;
+        }
         String instruction = trimToNull(node.getInstruction());
         if (instruction == null) {
+            return null;
+        }
+        return List.of("bash", "-lc", instruction);
+    }
+
+    private CommandResult executeCommand(RunEntity run, NodeModel node, Path stdoutPath, Path stderrPath) {
+        List<String> command = resolveCommandArgs(node);
+        if (command == null) {
             writeFile(stdoutPath, new byte[0]);
             writeFile(stderrPath, new byte[0]);
             return new CommandResult(0, "", "", stdoutPath.toString(), stderrPath.toString());
         }
+        String instruction = trimToNull(node.getInstruction());
         Path workingDirectory = resolveProjectScopeRoot(resolveRunWorkspaceRoot(run));
         try {
             CommandResult commandResult = runProcess(
                     run.getId(),
-                    List.of("bash", "-lc", instruction),
+                    command,
                     workingDirectory,
                     settingsService.getAiTimeoutSeconds(),
                     stdoutPath,
@@ -897,6 +918,55 @@ public class RunStepService {
             sb.append("```\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * Coding agents run with cwd = project workspace root but run-scoped produced_artifacts are validated under
+     * {@code .hgsdlc/nodes/<node>/attempt-<n>/}. If a required single-segment file exists at workspace root, move it
+     * into the expected node directory so validation and downstream artifact_ref resolution succeed.
+     */
+    private void relocateMisplacedRunScopedAiArtifacts(RunEntity run, NodeModel node, NodeExecutionEntity execution) {
+        List<PathRequirement> produced = node.getProducedArtifacts() == null ? List.of() : node.getProducedArtifacts();
+        Path projectRoot = resolveProjectRoot(run);
+        for (PathRequirement requirement : produced) {
+            if (requirement == null || !Boolean.TRUE.equals(requirement.getRequired())) {
+                continue;
+            }
+            if ("project".equals(defaultScope(requirement.getScope()))) {
+                continue;
+            }
+            String rel = trimToNull(requirement.getPath());
+            if (rel == null) {
+                continue;
+            }
+            Path relPath = Path.of(rel);
+            if (relPath.isAbsolute() || relPath.getNameCount() != 1) {
+                continue;
+            }
+            Path expected = resolveProducedArtifactPath(run, execution, requirement.getScope(), rel);
+            if (workspacePort.exists(expected)) {
+                continue;
+            }
+            Path misplaced = projectRoot.resolve(relPath).normalize();
+            if (!misplaced.startsWith(projectRoot) || misplaced.equals(expected)) {
+                continue;
+            }
+            if (!workspacePort.exists(misplaced) || workspacePort.isDirectory(misplaced)) {
+                continue;
+            }
+            try {
+                byte[] bytes = workspacePort.readAllBytes(misplaced);
+                writeFile(expected, bytes);
+                workspacePort.deleteIfExists(misplaced);
+                log.info(
+                        "Relocated run-scoped AI produced artifact for node {} from {} to {}",
+                        node.getId(),
+                        misplaced,
+                        expected);
+            } catch (IOException ex) {
+                throw new ValidationException("Failed to relocate produced artifact " + rel + ": " + ex.getMessage());
+            }
+        }
     }
 
     private void validateNodeOutputs(
@@ -1489,6 +1559,8 @@ public class RunStepService {
         NodeExecutionEntity sourceExecution = nodeExecutionRepository
                 .findFirstByRunIdAndNodeIdAndStatusOrderByAttemptNoDesc(
                         run.getId(), sourceNodeId, NodeExecutionStatus.SUCCEEDED)
+                .or(() -> nodeExecutionRepository
+                        .findFirstByRunIdAndNodeIdOrderByAttemptNoDesc(run.getId(), sourceNodeId))
                 .orElse(null);
         if (sourceExecution == null) {
             return null;

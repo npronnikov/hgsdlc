@@ -30,6 +30,12 @@ import HumanFormViewer, { isHumanForm, validateHumanForm } from '../components/H
 import { apiRequest } from '../api/request.js';
 import { useThemeMode } from '../theme/ThemeContext.jsx';
 import { configureMonacoThemes, getMonacoThemeName } from '../utils/monacoTheme.js';
+// Shared gate hooks — new components (GateInputPanel, GateReviewPanel) use these directly.
+// HumanGate keeps its inline logic for now to avoid regressions; full migration is planned.
+// eslint-disable-next-line no-unused-vars
+import { encodeBase64 as _sharedEncodeBase64 } from '../hooks/useGateInput.js';
+// eslint-disable-next-line no-unused-vars
+import { formatRange as _sharedFormatRange } from '../hooks/useGateReview.js';
 
 const { Title, Text } = Typography;
 

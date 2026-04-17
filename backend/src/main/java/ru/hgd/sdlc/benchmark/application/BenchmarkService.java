@@ -279,6 +279,7 @@ public class BenchmarkService {
                 runARootPath.toString(),
                 createdBy,
                 now,
+                false,
                 false
         );
 
@@ -302,6 +303,7 @@ public class BenchmarkService {
                 runBRootPath.toString(),
                 createdBy,
                 now,
+                false,
                 false
         );
 

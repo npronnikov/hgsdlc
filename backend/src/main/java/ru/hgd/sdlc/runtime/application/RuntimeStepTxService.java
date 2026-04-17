@@ -92,7 +92,8 @@ public class RuntimeStepTxService {
             String workspaceRoot,
             String createdBy,
             Instant createdAt,
-            boolean skipGates
+            boolean skipGates,
+            boolean debugMode
     ) {
         RunEntity entity = RunEntity.builder()
                 .id(runId)
@@ -116,6 +117,7 @@ public class RuntimeStepTxService {
                 .createdBy(createdBy)
                 .createdAt(createdAt)
                 .skipGates(skipGates)
+                .debugMode(debugMode)
                 .build();
         runRepository.save(entity);
         appendAuditInternal(
@@ -1006,6 +1008,23 @@ public class RuntimeStepTxService {
                 mapOf("failed_step", failedStep)
         );
         return run;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void refreshFlowSnapshotAndResume(UUID runId, String newSnapshotJson, String flowCanonicalName, Instant now) {
+        RunEntity run = getRun(runId);
+        if (run.getStatus() != RunStatus.FAILED) {
+            throw new ValidationException("Only failed runs can be refreshed");
+        }
+        run.setFlowSnapshotJson(newSnapshotJson);
+        run.setFlowCanonicalName(flowCanonicalName);
+        run.setStatus(RunStatus.RUNNING);
+        run.setErrorCode(null);
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        runRepository.save(run);
+        appendAuditInternal(runId, null, null, "flow_snapshot_refreshed", ActorType.SYSTEM, "runtime",
+                Map.of("flow_canonical_name", flowCanonicalName));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

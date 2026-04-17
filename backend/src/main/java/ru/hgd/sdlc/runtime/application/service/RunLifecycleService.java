@@ -123,8 +123,12 @@ public class RunLifecycleService {
         }
         FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(command.flowCanonicalName())
                 .orElseThrow(() -> new NotFoundException("Flow not found: " + command.flowCanonicalName()));
+        boolean debugMode = command.debugMode() != null && command.debugMode();
         if (flowVersion.getStatus() != FlowStatus.PUBLISHED) {
-            throw new ValidationException("Flow is not published: " + command.flowCanonicalName());
+            boolean draftDebugOk = debugMode && flowVersion.getStatus() == FlowStatus.DRAFT;
+            if (!draftDebugOk) {
+                throw new ValidationException("Flow is not published: " + command.flowCanonicalName());
+            }
         }
         if (flowVersion.getLifecycleStatus() != null && flowVersion.getLifecycleStatus() != FlowLifecycleStatus.ACTIVE) {
             throw new ValidationException("Flow is deprecated and cannot be launched: " + command.flowCanonicalName());
@@ -186,7 +190,8 @@ public class RunLifecycleService {
                 runWorkspaceRoot.toString(),
                 identityPort.resolveActorId(user),
                 clockPort.now(),
-                resolveSkipGates(user)
+                resolveSkipGates(user, debugMode),
+                debugMode
         );
     }
 
@@ -210,6 +215,30 @@ public class RunLifecycleService {
         } else if (run.getStatus() == RunStatus.WAITING_PUBLISH) {
             runPublishService.dispatchPublish(runId);
         }
+        return getRunEntity(runId);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RunEntity refreshFlowAndResume(UUID runId) {
+        RunEntity run = getRunEntity(runId);
+        if (run.getStatus() != RunStatus.FAILED) {
+            throw new ValidationException("Only failed runs can be refreshed and resumed");
+        }
+        FlowVersion flowVersion = flowVersionRepository.findFirstByCanonicalName(run.getFlowCanonicalName())
+                .orElseThrow(() -> new NotFoundException("Flow not found: " + run.getFlowCanonicalName()));
+        FlowModel flowModel = flowYamlParser.parse(catalogContentResolver.resolveFlowYaml(flowVersion));
+        if (flowModel.getNodes() == null || flowModel.getNodes().isEmpty()) {
+            throw new ValidationException("Flow has no nodes");
+        }
+        flowModel.setCodingAgent(flowVersion.getCodingAgent());
+        String newSnapshotJson = toJson(flowModel);
+
+        runtimeStepTxService.refreshFlowSnapshotAndResume(
+                runId,
+                newSnapshotJson,
+                flowVersion.getCanonicalName(),
+                clockPort.now());
+        startRun(runId);
         return getRunEntity(runId);
     }
 
@@ -873,7 +902,10 @@ public class RunLifecycleService {
         }
     }
 
-    private boolean resolveSkipGates(User user) {
+    private boolean resolveSkipGates(User user, boolean debugMode) {
+        if (debugMode) {
+            return false;
+        }
         if (user == null) {
             return false;
         }

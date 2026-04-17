@@ -688,6 +688,34 @@ export function useFlowEditor({ flowId, isCreateMode }) {
       if (nodeKind === 'ai' || nodeKind === 'command') {
         lines.push(`    checkpoint_before_run: ${!!data.checkpointBeforeRun}`);
       }
+      if (nodeKind === 'command') {
+        if (data.commandEngine) {
+          lines.push(`    command_engine: ${data.commandEngine}`);
+        }
+        if (data.commandSpec && typeof data.commandSpec === 'object') {
+          lines.push('    command_spec:');
+          if (data.commandSpec.shell) {
+            lines.push(`      shell: "${data.commandSpec.shell}"`);
+          }
+          if (Array.isArray(data.commandSpec.args)) {
+            lines.push('      args:');
+            data.commandSpec.args.forEach((arg) => {
+              if (arg.includes('\n')) {
+                lines.push('        - |');
+                arg.split('\n').forEach((line) => lines.push(`          ${line}`));
+              } else {
+                lines.push(`        - "${arg}"`);
+              }
+            });
+          }
+        }
+        if (data.successExitCodes && data.successExitCodes.length > 0) {
+          lines.push(`    success_exit_codes: [${data.successExitCodes.join(', ')}]`);
+        }
+        if (data.maxFailureTransitions != null) {
+          lines.push(`    max_failure_transitions: ${data.maxFailureTransitions}`);
+        }
+      }
       if (data.skillRefs && data.skillRefs.length > 0) {
         lines.push('    skill_refs:');
         data.skillRefs.forEach((ref) => lines.push(`      - ${ref}`));

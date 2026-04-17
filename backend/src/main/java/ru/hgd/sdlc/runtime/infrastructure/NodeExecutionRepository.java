@@ -37,6 +37,8 @@ public interface NodeExecutionRepository extends JpaRepository<NodeExecutionEnti
             NodeExecutionStatus status
     );
 
+    int countByRunIdAndNodeIdAndStatus(UUID runId, String nodeId, NodeExecutionStatus status);
+
     Optional<NodeExecutionEntity> findFirstByRunIdAndNodeIdAndNodeKindAndStatusAndErrorCodeOrderByAttemptNoDesc(
             UUID runId,
             String nodeId,

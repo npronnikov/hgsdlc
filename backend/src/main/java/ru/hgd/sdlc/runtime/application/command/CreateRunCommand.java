@@ -10,5 +10,6 @@ public record CreateRunCommand(
         String aiSessionMode,
         String publishMode,
         String workBranch,
-        String prCommitStrategy
+        String prCommitStrategy,
+        Boolean debugMode
 ) {}

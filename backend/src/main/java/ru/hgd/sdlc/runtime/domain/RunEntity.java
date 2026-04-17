@@ -121,6 +121,10 @@ public class RunEntity {
     @Builder.Default
     private boolean skipGates = false;
 
+    @Column(name = "debug_mode", nullable = false)
+    @Builder.Default
+    private boolean debugMode = false;
+
     @Column(name = "created_by", nullable = false, length = 128)
     private String createdBy;
 

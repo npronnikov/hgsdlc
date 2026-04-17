@@ -81,6 +81,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "isolated_attempt_sessions",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -103,6 +104,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "isolated_attempt_sessions",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -124,6 +126,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "isolated_attempt_sessions",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -139,6 +142,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "Recover waiting gate run",
                         "isolated_attempt_sessions",
                         "local",
+                        null,
                         null,
                         null
                 ),
@@ -205,6 +209,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                         "isolated_attempt_sessions",
                         "local",
                         null,
+                        null,
                         null
                 ),
                 null
@@ -220,6 +225,7 @@ class RuntimeLifecycleMigrationTest extends RuntimeIntegrationTestBase {
                                 "Second active run",
                                 "isolated_attempt_sessions",
                                 "local",
+                                null,
                                 null,
                                 null
                         ),

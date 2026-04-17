@@ -42,11 +42,13 @@
     "status" : "awaiting_decision"
   },
   "current_node_id" : "review-change",
+  "debug_mode" : false,
   "error_code" : null,
   "error_message" : null,
   "feature_request" : "Snapshot baseline request",
   "finished_at" : null,
   "flow_canonical_name" : "baseline-flow@1.0",
+  "flow_snapshot" : null,
   "pr_commit_strategy" : null,
   "pr_number" : null,
   "pr_status" : "skipped",

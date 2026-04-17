@@ -1,24 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Button, Form, Input, Modal, Select, message } from 'antd';
+import { Button, Drawer, Form, Input, Radio, Select, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/request.js';
-import { v4 as uuidv4 } from 'uuid';
 
-/** @deprecated Use DebugRunDrawer instead. Will be removed in next iteration. */
-export function TestRunModal({ open, onClose, canonicalName }) {
-  useEffect(() => {
-    if (open) console.warn('[TestRunModal] Deprecated: use DebugRunDrawer instead');
-  }, [open]);
+export function DebugRunDrawer({ open, onClose, canonicalName }) {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
     apiRequest('/projects')
       .then((data) => {
         setProjects(data || []);
@@ -27,6 +20,7 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           form.setFieldsValue({
             project_id: first.id,
             target_branch: first.default_branch || 'main',
+            publish_mode: 'local',
           });
         }
       })
@@ -45,50 +39,39 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           flow_canonical_name: canonicalName,
           feature_request: values.feature_request,
           ai_session_mode: 'isolated_attempt_sessions',
-          publish_mode: 'local',
-          idempotency_key: uuidv4(),
+          publish_mode: values.publish_mode,
+          debug_mode: true,
+          idempotency_key: crypto.randomUUID(),
         }),
       });
-      message.success(`Test run started: ${response.run_id}`);
       onClose();
-      navigate(`/run-console?runId=${response.run_id}`);
+      navigate(`/run-workspace?runId=${response.run_id}`);
     } catch (err) {
-      if (err?.errorFields) {
-        return;
-      }
-      message.error(err.message || 'Failed to start test run');
+      if (err?.errorFields) return;
+      message.error(err.message || 'Failed to start debug run');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    form.resetFields();
-    onClose();
-  };
-
-  const projectOptions = projects.map((p) => ({ value: p.id, label: p.name }));
-
   return (
-    <Modal
-      title="Test Run (dry run)"
+    <Drawer
+      title="Debug Run"
+      placement="right"
+      width={360}
       open={open}
-      onCancel={handleCancel}
-      footer={[
-        <Button key="cancel" onClick={handleCancel}>
-          Cancel
-        </Button>,
+      onClose={onClose}
+      footer={
         <Button
-          key="launch"
           type="primary"
           icon={<PlayCircleOutlined />}
           loading={loading}
           onClick={handleLaunch}
+          block
         >
-          Launch
-        </Button>,
-      ]}
-      width={520}
+          Run Debug
+        </Button>
+      }
     >
       <Form layout="vertical" form={form}>
         <Form.Item
@@ -97,13 +80,11 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           rules={[{ required: true, message: 'Select a project' }]}
         >
           <Select
-            options={projectOptions}
+            options={projects.map((p) => ({ value: p.id, label: p.name }))}
             placeholder="Select project"
             onChange={(value) => {
               const project = projects.find((p) => p.id === value);
-              if (project) {
-                form.setFieldValue('target_branch', project.default_branch || 'main');
-              }
+              if (project) form.setFieldValue('target_branch', project.default_branch || 'main');
             }}
           />
         </Form.Item>
@@ -119,12 +100,19 @@ export function TestRunModal({ open, onClose, canonicalName }) {
           name="feature_request"
           rules={[{ required: true, message: 'Describe the feature request' }]}
         >
-          <Input.TextArea rows={4} placeholder="Describe the change to test" />
+          <Input.TextArea rows={4} placeholder="Describe the change to debug" />
+        </Form.Item>
+        <Form.Item label="Publish mode" name="publish_mode" initialValue="local">
+          <Radio.Group>
+            <Radio value="local">Local</Radio>
+            <Radio value="branch">Branch</Radio>
+            <Radio value="pr">PR</Radio>
+          </Radio.Group>
         </Form.Item>
       </Form>
       <div style={{ fontSize: 12, color: 'var(--color-text-tertiary, #999)', marginTop: 4 }}>
-        Flow: <code>{canonicalName}</code> &middot; publish_mode: <code>local</code> (no git push, no PR)
+        Flow: <code>{canonicalName}</code>
       </div>
-    </Modal>
+    </Drawer>
   );
 }

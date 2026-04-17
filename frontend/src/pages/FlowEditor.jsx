@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Background, Controls, ReactFlow } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button, Card, List, Modal, Select, Space, Typography } from 'antd';
-import { CompressOutlined, ExpandOutlined, PlayCircleOutlined } from '@ant-design/icons';
-import { useLocation, useParams } from 'react-router-dom';
+import { BugOutlined, CompressOutlined, ExpandOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { nodeTypes } from '../components/flow/FlowNode.jsx';
 import { FlowMetaPanel } from '../components/flow/FlowMetaPanel.jsx';
 import { NodeEditPanel } from '../components/flow/NodeEditPanel.jsx';
 import { ImportYamlModal } from '../components/flow/ImportYamlModal.jsx';
-import { TestRunModal } from '../components/flow/TestRunModal.jsx';
+import { DebugRunDrawer } from '../components/flow/DebugRunDrawer.jsx';
 import { useFlowEditor } from '../hooks/useFlowEditor.js';
 
 const { Title, Text } = Typography;
@@ -24,6 +24,7 @@ const NODE_TYPE_OPTIONS = [
 export default function FlowEditor() {
   const { flowId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const isCreateMode = flowId === 'create' || location.pathname.endsWith('/flows/create');
   const editor = useFlowEditor({ flowId, isCreateMode });
 
@@ -52,6 +53,7 @@ export default function FlowEditor() {
   } = editor;
 
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [debugDrawerOpen, setDebugDrawerOpen] = useState(false);
   const [testRunModalOpen, setTestRunModalOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const canvasCardRef = useRef(null);
@@ -97,10 +99,10 @@ export default function FlowEditor() {
                 {flowMeta.canonicalName && (
                   <Button
                     type="default"
-                    icon={<PlayCircleOutlined />}
-                    onClick={() => setTestRunModalOpen(true)}
+                    icon={<BugOutlined />}
+                    onClick={() => setDebugDrawerOpen(true)}
                   >
-                    Test Run
+                    Debug Run
                   </Button>
                 )}
                 {canDeleteDraft && (
@@ -124,6 +126,9 @@ export default function FlowEditor() {
                   const ok = await saveFlow({ publish: false });
                   if (ok) {
                     setIsEditing(false);
+                    if (isCreateMode && flowMeta.flowId) {
+                      navigate(`/flows/${flowMeta.flowId}`, { replace: true });
+                    }
                   }
                 }}
               >
@@ -390,9 +395,9 @@ export default function FlowEditor() {
         onClose={() => setImportModalOpen(false)}
         onImport={importFlowYaml}
       />
-      <TestRunModal
-        open={testRunModalOpen}
-        onClose={() => setTestRunModalOpen(false)}
+      <DebugRunDrawer
+        open={debugDrawerOpen}
+        onClose={() => setDebugDrawerOpen(false)}
         canonicalName={flowMeta.canonicalName}
       />
     </div>

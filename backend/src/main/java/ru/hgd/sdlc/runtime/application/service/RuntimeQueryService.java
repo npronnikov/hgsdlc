@@ -100,6 +100,12 @@ public class RuntimeQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<GateInstanceEntity> findGatesByRunId(UUID runId) {
+        getRunEntity(runId);
+        return gateInstanceRepository.findByRunIdOrderByOpenedAtDesc(runId);
+    }
+
+    @Transactional(readOnly = true)
     public List<GateInstanceEntity> findGateInbox(User user) {
         List<GateInstanceEntity> all = gateInstanceRepository.findByStatusInOrderByOpenedAtAsc(OPEN_GATE_STATUSES);
         if (user == null) {

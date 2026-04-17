@@ -71,6 +71,9 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    System.getProperty("runtime.snapshot.update")?.let {
+        systemProperty("runtime.snapshot.update", it)
+    }
 }
 
 tasks.withType<BootRun> {
