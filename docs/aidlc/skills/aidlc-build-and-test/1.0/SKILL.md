@@ -22,8 +22,8 @@ knowledge of the project.
 Read:
 - `aidlc-docs/construction/plans/` — all code generation plans (to understand what was built)
 - `aidlc-docs/construction/{unit-name}/nfr-requirements/nfr-requirements.md` (for each unit)
-- `aidlc-docs/inception/application-design/unit-of-work.md` (unit list)
-- `aidlc-docs/aidlc-state.md` (build system, workspace root)
+- `aidlc-docs/inception/application-design/unit-of-work.md` (unit list, if available)
+- Inspect the workspace root to determine build system and project structure
 
 Determine required test types:
 | Type | When to Include |

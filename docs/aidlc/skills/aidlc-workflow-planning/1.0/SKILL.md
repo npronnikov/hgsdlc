@@ -22,7 +22,6 @@ Load every artifact produced so far:
 - `aidlc-docs/inception/reverse-engineering/` (if brownfield)
 - `aidlc-docs/inception/requirements/requirements.md`
 - `aidlc-docs/inception/user-stories/stories.md` and `personas.md` (if available)
-- `aidlc-docs/aidlc-state.md`
 
 ---
 

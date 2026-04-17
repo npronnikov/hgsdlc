@@ -55,7 +55,6 @@ If verification fails, fix the issue before marking the step complete.
 
 Immediately after completing and verifying a step:
 - Change `[ ]` to `[x]` in `aidlc-docs/construction/plans/{unit-name}-code-generation-plan.md`
-- Update `aidlc-docs/aidlc-state.md` with current step number
 
 ---
 

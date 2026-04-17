@@ -19,14 +19,13 @@ write it, or in what order.
 ## Step 1 — Load All Unit Design Artifacts
 
 Read (all must exist before planning):
-- `aidlc-docs/inception/application-design/unit-of-work.md` (unit boundary)
-- `aidlc-docs/inception/application-design/unit-of-work-story-map.md` (stories)
+- `aidlc-docs/inception/application-design/unit-of-work.md` (unit boundary, if available)
+- `aidlc-docs/inception/application-design/unit-of-work-story-map.md` (stories, if available)
 - `aidlc-docs/construction/{unit-name}/functional-design/domain-entities.md`
 - `aidlc-docs/construction/{unit-name}/functional-design/business-rules.md`
 - `aidlc-docs/construction/{unit-name}/functional-design/data-flow.md`
 - `aidlc-docs/construction/{unit-name}/nfr-requirements/tech-stack-decisions.md`
 - `aidlc-docs/inception/requirements/requirements.md` (for DM-* and API-* sections)
-- `aidlc-docs/aidlc-state.md` (workspace root, project type)
 - Reverse engineering: `code-structure.md` (brownfield — existing file inventory)
 
 ---
@@ -72,7 +71,7 @@ Save as `aidlc-docs/construction/plans/{unit-name}-code-generation-plan.md`:
 ## Unit Context
 - **Stories covered**: US-001, US-002, FR-3
 - **Dependencies on other units**: [unit-x API contract / shared model]
-- **Workspace root**: [absolute path from aidlc-state.md]
+- **Workspace root**: [absolute path of the project workspace]
 - **Project type**: Brownfield / Greenfield
 
 ---
