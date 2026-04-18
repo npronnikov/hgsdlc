@@ -59,6 +59,9 @@ public class SkillVersion {
     @Column(name = "checksum", length = 128)
     private String checksum;
 
+    @Column(name = "embedding_vector", columnDefinition = "vector")
+    private float[] embeddingVector;
+
     @Column(name = "team_code", length = 128)
     private String teamCode;
 

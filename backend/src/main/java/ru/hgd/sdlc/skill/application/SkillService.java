@@ -50,6 +50,7 @@ public class SkillService {
     private final SkillTemplateService templateService;
     private final PublicationService publicationService;
     private final SkillPackageService skillPackageService;
+    private final SkillEmbeddingService skillEmbeddingService;
 
     public SkillService(
             SkillVersionRepository repository,
@@ -57,7 +58,8 @@ public class SkillService {
             TagRepository tagRepository,
             SkillTemplateService templateService,
             PublicationService publicationService,
-            SkillPackageService skillPackageService
+            SkillPackageService skillPackageService,
+            SkillEmbeddingService skillEmbeddingService
     ) {
         this.repository = repository;
         this.skillFileRepository = skillFileRepository;
@@ -66,6 +68,7 @@ public class SkillService {
         this.templateService = templateService;
         this.publicationService = publicationService;
         this.skillPackageService = skillPackageService;
+        this.skillEmbeddingService = skillEmbeddingService;
     }
 
     @Transactional(readOnly = true)
@@ -430,6 +433,8 @@ public class SkillService {
         if (requestPublish) {
             publicationService.upsertSkillRequest(saved, resolveSavedBy(user));
         }
+
+        skillEmbeddingService.generateEmbedding(saved.getId());
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);

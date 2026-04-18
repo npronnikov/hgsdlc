@@ -42,16 +42,19 @@ public class RuleService {
     private final MarkdownFrontmatterParser frontmatterParser;
     private final RuleTemplateService templateService;
     private final PublicationService publicationService;
+    private final RuleEmbeddingService ruleEmbeddingService;
 
     public RuleService(
             RuleVersionRepository repository,
             RuleTemplateService templateService,
-            PublicationService publicationService
+            PublicationService publicationService,
+            RuleEmbeddingService ruleEmbeddingService
     ) {
         this.repository = repository;
         this.frontmatterParser = new MarkdownFrontmatterParser();
         this.templateService = templateService;
         this.publicationService = publicationService;
+        this.ruleEmbeddingService = ruleEmbeddingService;
     }
 
     @Transactional(readOnly = true)
@@ -333,6 +336,8 @@ public class RuleService {
         if (requestPublish) {
             publicationService.upsertRuleRequest(saved, resolveSavedBy(user));
         }
+
+        ruleEmbeddingService.generateEmbedding(saved.getId());
 
         if (publishNow && existingDraft != null && !bumpDraftBeforeInsert) {
             bumpDraftVersion(existingDraft, version);

@@ -79,4 +79,36 @@ public interface SkillVersionRepository extends JpaRepository<SkillVersion, UUID
             @Param("cursorId") UUID cursorId,
             @Param("limit") int limit
     );
+
+    @Query(value = """
+        SELECT s.id, s.skill_id, s.version, s.name, s.description,
+               1 - (s.embedding_vector <=> CAST(:queryVector AS vector)) as similarity
+        FROM skills s
+        WHERE s.status = 'PUBLISHED'
+          AND s.id != :currentId
+          AND s.embedding_vector IS NOT NULL
+          AND 1 - (s.embedding_vector <=> CAST(:queryVector AS vector)) > :threshold
+        ORDER BY s.embedding_vector <=> CAST(:queryVector AS vector)
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<Object[]> findSimilarById(
+            @Param("currentId") UUID currentId,
+            @Param("queryVector") String queryVector,
+            @Param("threshold") float threshold,
+            @Param("limit") int limit);
+
+    @Query(value = """
+        SELECT s.id, s.skill_id, s.version, s.name, s.description,
+               1 - (s.embedding_vector <=> CAST(:queryVector AS vector)) as similarity
+        FROM skills s
+        WHERE s.status = 'PUBLISHED'
+          AND s.embedding_vector IS NOT NULL
+          AND 1 - (s.embedding_vector <=> CAST(:queryVector AS vector)) > :threshold
+        ORDER BY s.embedding_vector <=> CAST(:queryVector AS vector)
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<Object[]> findSimilarByText(
+            @Param("queryVector") String queryVector,
+            @Param("threshold") float threshold,
+            @Param("limit") int limit);
 }

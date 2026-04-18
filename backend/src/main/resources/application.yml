@@ -55,6 +55,23 @@ runtime:
   # Approximate budget for all execution_context artifact_ref entries with transfer_mode=by_value per node run.
   max-inline-artifact-tokens: 16384
 
+embedding:
+  provider: local
+  local:
+    model-name: all-MiniLM-L6-v2
+    dimension: 384
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    model: text-embedding-ada-002
+    dimension: 1536
+  similarity:
+    threshold: 0.6
+    max-results: 10
+  async:
+    core-pool-size: 4
+    max-pool-size: 8
+    queue-capacity: 100
+
 ---
 spring:
   config:

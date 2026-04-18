@@ -11,15 +11,15 @@
 ## Step 1 — Schema Migration (complexity: medium)
 **Goal**: Добавить поддержку векторов в таблицы skills и rules с использованием pgvector
 
-- [ ] **Create** `backend/src/main/resources/db/changelog/047-embeddings-support.sql`
+- [x] **Create** `backend/src/main/resources/db/changelog/048-embeddings-support.sql`
   - Установить расширение pgvector: `CREATE EXTENSION IF NOT EXISTS vector;`
   - Добавить колонку в таблицу skills: `ALTER TABLE skills ADD COLUMN embedding_vector vector(384);`
   - Добавить колонку в таблицу rules: `ALTER TABLE rules ADD COLUMN embedding_vector vector(384);`
   - Создать индекс для skills: `CREATE INDEX idx_skills_embedding_vector ON skills USING ivfflat (embedding_vector vector_cosine_ops) WITH (lists = 100);`
   - Создать индекс для rules: `CREATE INDEX idx_rules_embedding_vector ON rules USING ivfflat (embedding_vector vector_cosine_ops) WITH (lists = 100);`
 
-- [ ] **Modify** `backend/src/main/resources/db/changelog/db.changelog-master.yaml`
-  - Добавить include для `047-embeddings-support.sql`
+- [x] **Modify** `backend/src/main/resources/db/changelog/db.changelog-master.yaml`
+  - Добавить include для `048-embeddings-support.sql`
 
 **Verification**: Liquibase применяет миграцию без ошибок на чистой БД
 
@@ -28,23 +28,23 @@
 ## Step 2 — Domain Entities (complexity: low)
 **Goal**: Расширить существующие сущности для поддержки embedding vectors
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/domain/SkillVersion.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/domain/SkillVersion.java`
   - Добавить поле `private float[] embeddingVector;`
   - Добавить аннотацию `@Column(name = "embedding_vector", columnDefinition = "vector")`
   - Добавить getter и setter для `embeddingVector`
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/domain/RuleVersion.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/domain/RuleVersion.java`
   - Добавить поле `private float[] embeddingVector;`
   - Добавить аннотацию `@Column(name = "embedding_vector", columnDefinition = "vector")`
   - Добавить getter и setter для `embeddingVector`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/EntityType.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/EntityType.java`
   - Enum: `SKILL`, `RULE`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/EmbeddingProviderType.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/EmbeddingProviderType.java`
   - Enum: `LOCAL` (Sentence-BERT), `OPENAI`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/SimilarItem.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/domain/SimilarItem.java`
   - Record с полями: `id`, `itemId`, `version`, `name`, `description`, `similarityScore`, `tags`, `teamCode`, `scope`
 
 **Verification**: `./gradlew compileJava` выполняется успешно
@@ -54,7 +54,7 @@
 ## Step 3 — Repository Layer (complexity: medium)
 **Goal**: Добавить методы для векторного поиска в существующие репозитории
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/infrastructure/SkillVersionRepository.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/infrastructure/SkillVersionRepository.java`
   - Добавить метод для поиска похожих по ID (native SQL query с pgvector):
     ```java
     @Query(value = """
@@ -75,7 +75,7 @@
     ```
   - Добавить метод для поиска по произвольному тексту (аналогичный запрос)
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/infrastructure/RuleVersionRepository.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/infrastructure/RuleVersionRepository.java`
   - Добавить аналогичные методы для rules
 
 **Verification**: Компиляция проходит успешно
@@ -87,24 +87,24 @@
 
 ### 4.1 Embedding Provider Infrastructure
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingProvider.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingProvider.java`
   - Interface с методами: `float[] generateEmbedding(String text)`, `int getDimension()`, `String getProviderName()`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/LocalEmbeddingProvider.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/LocalEmbeddingProvider.java`
   - Реализация для Sentence-BERT (384-dim)
   - Использует DL4J или Python bridge для генерации
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/OpenAIEmbeddingProvider.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/OpenAIEmbeddingProvider.java`
   - Реализация для OpenAI API (1536-dim)
   - Вызов `text-embedding-ada-002`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingService.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingService.java`
   - Сервис с multi-provider стратегией и fallback
   - Метод: `float[] generateEmbedding(String text)` с retry логикой
 
 ### 4.2 Embedding Services for Skills
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/skill/application/SkillEmbeddingService.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/skill/application/SkillEmbeddingService.java`
   - Метод `@Async void generateEmbedding(UUID skillId)` - асинхронная генерация
   - Метод `List<SimilarItem> findSimilar(UUID skillId, float threshold, int limit)` - поиск похожих
   - Метод `List<SimilarItem> findSimilarByText(String text, float threshold, int limit)` - поиск по тексту
@@ -112,12 +112,12 @@
 
 ### 4.3 Embedding Services for Rules
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/rule/application/RuleEmbeddingService.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/rule/application/RuleEmbeddingService.java`
   - Аналогично SkillEmbeddingService, но для rules
 
 ### 4.4 Migration Service
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingMigrationService.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/application/EmbeddingMigrationService.java`
   - Метод `@PostConstruct void migratePublishedSkills()` - миграция skills
   - Метод `@PostConstruct void migratePublishedRules()` - миграция rules
   - Проверка флага завершения миграции через SystemSetting
@@ -126,11 +126,11 @@
 
 ### 4.5 Update Existing Services
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/application/SkillService.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/skill/application/SkillService.java`
   - Вызов `skillEmbeddingService.generateEmbeddingAsync(skillId)` после сохранения
   - Проверка изменения markdown перед регенерацией
 
-- [ ] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/application/RuleService.java`
+- [x] **Modify** `backend/src/main/java/ru/hgd/sdlc/rule/application/RuleService.java`
   - Аналогичные изменения для rules
 
 **Verification**: Компиляция проходит успешно
@@ -198,7 +198,7 @@
 ## Step 8 — Configuration (complexity: low)
 **Goal**: Настроить приложение для работы с embeddings
 
-- [ ] **Modify** `backend/src/main/resources/application.yml`
+- [x] **Modify** `backend/src/main/resources/application.yml`
   - Добавить секцию `embedding:` с настройками:
     ```yaml
     embedding:
@@ -219,14 +219,14 @@
         queue-capacity: 100
     ```
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/AsyncConfig.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/AsyncConfig.java`
   - Конфигурация `@EnableAsync`
   - Bean `embeddingTaskExecutor` с настройками из application.yml
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/EmbeddingConfig.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/EmbeddingConfig.java`
   - Конфигурация выбора провайдера через `@ConditionalOnProperty`
 
-- [ ] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/EmbeddingProviderHealthIndicator.java`
+- [x] **Create** `backend/src/main/java/ru/hgd/sdlc/common/embedding/infrastructure/EmbeddingProviderHealthIndicator.java`
   - Health check для Actuator
 
 **Verification**: `./gradlew bootRun` запускается успешно, конфигурация загружается
